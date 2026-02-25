@@ -29,9 +29,9 @@ struct MagikeysApp: App {
                 .environment(store)
                 .environment(hotkeyService)
                 .environment(loginItemManager)
-                .frame(minWidth: 640, minHeight: 480)
+                .frame(minWidth: 780, minHeight: 520)
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 780, height: 560)
+        .defaultSize(width: 960, height: 620)
     }
 }

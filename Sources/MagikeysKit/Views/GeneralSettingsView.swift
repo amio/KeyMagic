@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// General settings pane for the app (launch at login, accessibility, etc.).
+/// General settings pane for the app (launch at login, appearance, data, about).
 struct GeneralSettingsView: View {
     @Environment(HotkeyService.self) private var hotkeyService
     @Environment(LoginItemManager.self) private var loginItemManager
     @Environment(ShortcutStore.self) private var store
 
-    @State private var showExportDialog = false
-    @State private var showImportDialog = false
+    @AppStorage("showDockIcon") private var showDockIcon = false
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
 
     var body: some View {
         Form {
@@ -56,14 +56,21 @@ struct GeneralSettingsView: View {
                 Text("Status")
             }
 
-            // MARK: - Startup
+            // MARK: - Startup & Appearance
             Section {
                 Toggle("Launch at Login", isOn: Binding(
                     get: { loginItemManager.isEnabled },
                     set: { _ in loginItemManager.toggle() }
                 ))
+
+                Toggle("Show Dock Icon", isOn: $showDockIcon)
+                    .onChange(of: showDockIcon) { _, newValue in
+                        applyDockIconPolicy(visible: newValue)
+                    }
+
+                Toggle("Show Menu Bar Icon", isOn: $showMenuBarIcon)
             } header: {
-                Text("Startup")
+                Text("Startup & Appearance")
             }
 
             // MARK: - Data
@@ -88,16 +95,37 @@ struct GeneralSettingsView: View {
             // MARK: - About
             Section {
                 LabeledContent("Version") {
-                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0")
+                    Text(
+                        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                            as? String ?? "1.0.0")
                 }
                 LabeledContent("Build") {
-                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1")
+                    Text(
+                        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+                            ?? "1")
                 }
             } header: {
                 Text("About")
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            applyDockIconPolicy(visible: showDockIcon)
+        }
+    }
+
+    // MARK: - Dock Icon
+
+    private func applyDockIconPolicy(visible: Bool) {
+        if visible {
+            NSApp.setActivationPolicy(.regular)
+        } else {
+            NSApp.setActivationPolicy(.accessory)
+            // Ensure window stays visible after switching to accessory
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
     // MARK: - Export / Import
