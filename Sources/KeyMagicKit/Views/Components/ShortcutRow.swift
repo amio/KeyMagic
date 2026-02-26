@@ -27,17 +27,19 @@ struct ShortcutRow: View {
 
             Spacer()
 
-            // Key combo badge
-            Text(shortcut.keyCombo.displayString)
-                .font(.system(.body, design: .monospaced))
-                .fontWeight(.medium)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(.quaternary)
-                )
-                .foregroundStyle(shortcut.isEnabled ? .primary : .tertiary)
+            // Key combo badge (hidden when no hotkey is bound)
+            if let keyCombo = shortcut.keyCombo {
+                Text(keyCombo.displayString)
+                    .font(.system(.body, design: .monospaced))
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(.quaternary)
+                    )
+                    .foregroundStyle(shortcut.isEnabled ? .primary : .tertiary)
+            }
 
             // Enable/disable toggle
             Toggle("", isOn: Binding(

@@ -40,9 +40,11 @@ public struct MenuBarView: View {
                                     Text(shortcut.name)
                                         .lineLimit(1)
                                     Spacer()
-                                    Text(shortcut.keyCombo.displayString)
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundStyle(.secondary)
+                                    if let keyCombo = shortcut.keyCombo {
+                                        Text(keyCombo.displayString)
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                                 .contentShape(Rectangle())
                             }

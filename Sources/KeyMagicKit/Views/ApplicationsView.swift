@@ -299,7 +299,7 @@ private struct AppRow: View {
             .onDisappear { stopLocalMonitor() }
         } else if let shortcut {
             HStack(spacing: 4) {
-                Text(shortcut.keyCombo.displayString)
+                Text(shortcut.keyCombo?.displayString ?? "")
                     .font(.system(.callout))
                     .fontWeight(.bold)
                     .padding(.horizontal, 8)

@@ -4,7 +4,8 @@ import Foundation
 struct Shortcut: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var name: String
-    var keyCombo: KeyCombo
+    /// The key combination that triggers this shortcut. `nil` means no hotkey is bound yet.
+    var keyCombo: KeyCombo?
     var action: ShortcutAction
     var isEnabled: Bool
     var createdAt: Date
@@ -13,7 +14,7 @@ struct Shortcut: Identifiable, Codable, Hashable, Sendable {
     init(
         id: UUID = UUID(),
         name: String,
-        keyCombo: KeyCombo,
+        keyCombo: KeyCombo? = nil,
         action: ShortcutAction,
         isEnabled: Bool = true,
         createdAt: Date = Date(),

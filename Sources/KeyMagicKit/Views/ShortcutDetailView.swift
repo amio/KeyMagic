@@ -28,16 +28,18 @@ struct ShortcutDetailView: View {
 
                     Spacer()
 
-                    // Key combo display
-                    Text(shortcut.keyCombo.displayString)
-                        .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(.ultraThickMaterial)
-                                .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
-                        }
+                    // Key combo display (shown only when a hotkey is bound)
+                    if let keyCombo = shortcut.keyCombo {
+                        Text(keyCombo.displayString)
+                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(.ultraThickMaterial)
+                                    .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
+                            }
+                    }
                 }
 
                 Divider()

@@ -63,7 +63,9 @@ public final class ShortcutStore: @unchecked Sendable {
 
     func hasConflict(keyCombo: KeyCombo, excludingID: UUID? = nil) -> Bool {
         shortcuts.contains { shortcut in
-            shortcut.keyCombo == keyCombo && shortcut.id != excludingID
+            // Shortcuts with no bound hotkey never conflict.
+            guard let bound = shortcut.keyCombo else { return false }
+            return bound == keyCombo && shortcut.id != excludingID
         }
     }
 
