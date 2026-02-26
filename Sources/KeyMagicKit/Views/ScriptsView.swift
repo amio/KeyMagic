@@ -12,6 +12,7 @@ struct ScriptsView: View {
     @State private var runOutput: String?
     @State private var runningShortcutID: UUID?
     @State private var showingRunOutput = false
+    @State private var recordingShortcutID: UUID?
 
     /// Only script-type shortcuts (runScript / runScriptFile).
     private var scriptShortcuts: [Shortcut] {
@@ -97,7 +98,7 @@ struct ScriptsView: View {
                     Text("Name")
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("Hotkey")
-                        .frame(width: 80, alignment: .trailing)
+                        .frame(width: 120, alignment: .trailing)
                 }
 
                 ScrollView {
@@ -106,7 +107,21 @@ struct ScriptsView: View {
                             ScriptRow(
                                 shortcut: shortcut,
                                 isOdd: !index.isMultiple(of: 2),
-                                isSelected: selectedID == shortcut.id
+                                isSelected: selectedID == shortcut.id,
+                                isRecording: recordingShortcutID == shortcut.id,
+                                onStartRecording: {
+                                    recordingShortcutID = shortcut.id
+                                },
+                                onRecordKey: { combo in
+                                    bindHotkey(combo, to: shortcut)
+                                    recordingShortcutID = nil
+                                },
+                                onCancelRecording: {
+                                    recordingShortcutID = nil
+                                },
+                                onClearHotkey: {
+                                    clearHotkey(for: shortcut)
+                                }
                             )
                             .onTapGesture { selectedID = shortcut.id }
                         }
@@ -158,6 +173,20 @@ struct ScriptsView: View {
         store.add(newShortcut)
         hotkeyService.restart(store: store)
         selectedID = newShortcut.id
+    }
+
+    private func bindHotkey(_ combo: KeyCombo, to shortcut: Shortcut) {
+        var updated = shortcut
+        updated.keyCombo = combo
+        store.update(updated)
+        hotkeyService.restart(store: store)
+    }
+
+    private func clearHotkey(for shortcut: Shortcut) {
+        var updated = shortcut
+        updated.keyCombo = nil
+        store.update(updated)
+        hotkeyService.restart(store: store)
     }
 
     private func testRun(id: UUID, script: String, shell: ShortcutAction.ShellType) {
@@ -212,12 +241,17 @@ struct ScriptsView: View {
     }
 }
 
-// MARK: - Script Row (compact: name + hotkey only)
+// MARK: - Script Row (compact: name + hotkey cell with recording support)
 
 private struct ScriptRow: View {
     let shortcut: Shortcut
     let isOdd: Bool
     let isSelected: Bool
+    let isRecording: Bool
+    let onStartRecording: () -> Void
+    let onRecordKey: (KeyCombo) -> Void
+    let onCancelRecording: () -> Void
+    let onClearHotkey: () -> Void
 
     var body: some View {
         ListRowContainer(
@@ -237,30 +271,18 @@ private struct ScriptRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Hotkey badge
-            hotkeyBadge
-                .frame(width: 80, alignment: .trailing)
+            // Hotkey cell with recording / edit / delete
+            HotkeyCellView(
+                keyCombo: shortcut.keyCombo,
+                isRecording: isRecording,
+                onStartRecording: onStartRecording,
+                onRecordKey: onRecordKey,
+                onCancelRecording: onCancelRecording,
+                onClearHotkey: onClearHotkey
+            )
+            .frame(width: 120, alignment: .trailing)
         }
         .opacity(shortcut.isEnabled ? 1.0 : 0.6)
-    }
-
-    @ViewBuilder
-    private var hotkeyBadge: some View {
-        if let keyCombo = shortcut.keyCombo {
-            Text(keyCombo.displayString)
-                .font(.system(.caption2))
-                .fontWeight(.semibold)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(.quaternary)
-                )
-        } else {
-            Text("—")
-                .font(.caption2)
-                .foregroundStyle(.quaternary)
-        }
     }
 }
 

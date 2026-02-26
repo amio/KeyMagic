@@ -232,8 +232,6 @@ private struct AppRow: View {
     let onClearHotkey: () -> Void
     let onToggleEnabled: () -> Void
 
-    @State private var monitor: Any?
-
     var body: some View {
         ListRowContainer(
             isOdd: isOdd,
@@ -261,80 +259,19 @@ private struct AppRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             // Hotkey column
-            hotkeyCell
-                .frame(width: 120, alignment: .leading)
+            HotkeyCellView(
+                keyCombo: shortcut?.keyCombo,
+                isRecording: isRecording,
+                onStartRecording: onStartRecording,
+                onRecordKey: onRecordKey,
+                onCancelRecording: onCancelRecording,
+                onClearHotkey: onClearHotkey
+            )
+            .frame(width: 120, alignment: .leading)
 
             // Enabled toggle
             enabledCell
                 .frame(width: 70, alignment: .trailing)
-        }
-        .onDisappear {
-            if isRecording {
-                stopLocalMonitor()
-                onCancelRecording()
-            }
-        }
-    }
-
-    // MARK: - Hotkey Cell
-
-    @ViewBuilder
-    private var hotkeyCell: some View {
-        if isRecording {
-            HStack(spacing: 6) {
-                Image(systemName: "record.circle")
-                    .foregroundStyle(.red)
-                    .symbolEffect(.pulse)
-                Text("Press keys...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(.red.opacity(0.5), lineWidth: 1)
-            )
-            .onAppear { startLocalMonitor() }
-            .onDisappear { stopLocalMonitor() }
-        } else if let shortcut {
-            HStack(spacing: 4) {
-                Text(shortcut.keyCombo?.displayString ?? "")
-                    .font(.system(.callout))
-                    .fontWeight(.bold)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(.quaternary)
-                    )
-
-                Button {
-                    onStartRecording()
-                } label: {
-                    Image(systemName: "pencil.circle.fill")
-                        .font(.system(size: 16))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("Edit hotkey")
-
-                Button {
-                    onClearHotkey()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("Remove hotkey")
-            }
-        } else {
-            Button("Record Hotkey") {
-                onStartRecording()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
     }
 
@@ -355,38 +292,5 @@ private struct AppRow: View {
             Text("--")
                 .foregroundStyle(.quaternary)
         }
-    }
-
-    // MARK: - Key Recording (local monitor)
-
-    private func startLocalMonitor() {
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
-            if event.type == .flagsChanged {
-                return nil
-            }
-
-            let keyCode = UInt32(event.keyCode)
-            let modifiers = KeyCombo.Modifiers(
-                cgEventFlags: CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue)))
-
-            // Escape cancels recording
-            if keyCode == UInt32(0x35) && modifiers == [] {
-                stopLocalMonitor()
-                onCancelRecording()
-                return nil
-            }
-
-            let combo = KeyCombo(keyCode: keyCode, modifiers: modifiers)
-            stopLocalMonitor()
-            onRecordKey(combo)
-            return nil
-        }
-    }
-
-    private func stopLocalMonitor() {
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        monitor = nil
     }
 }
