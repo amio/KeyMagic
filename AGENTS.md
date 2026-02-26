@@ -23,6 +23,10 @@
   - **No formatting**: Do not fix indentation/style (handled by external tools).
   - **No example files**: Provide usage examples directly in chat.
 
+## Design Philosophy
+- Meet the standards of the Apple Design Awards, prioritizing intuitive interaction, exceptional craftsmanship, and profound emotional resonance.
+- Embrace the bleeding edge, utilizing the latest SDKs, APIs, and modern UI components to build a state-of-the-art interface.
+
 ## Documentation
 - **Quality**: Focus on "purpose," not a list of changes. Use **English** only.
 
