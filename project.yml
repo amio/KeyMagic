@@ -14,8 +14,15 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: false
-    CODE_SIGN_IDENTITY: "Apple Development"
     DEVELOPMENT_TEAM: "3FKXTCP8JU"
+  configs:
+    # Debug: local development signing
+    Debug:
+      CODE_SIGN_IDENTITY: "Apple Development"
+    # Release: Developer ID for direct distribution + notarization
+    Release:
+      CODE_SIGN_IDENTITY: "Developer ID Application"
+      ENABLE_HARDENED_RUNTIME: true
 
 packages:
   KeyMagicKit:

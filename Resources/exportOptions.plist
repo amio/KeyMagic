@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Direct distribution outside the Mac App Store, signed with Developer ID -->
+    <key>method</key>
+    <string>developer-id</string>
+
+    <key>teamID</key>
+    <string>3FKXTCP8JU</string>
+
+    <!-- Notarize and staple the ticket automatically during export -->
+    <key>notarization</key>
+    <string>upload-and-staple</string>
+
+    <!-- Embed the signing identity from the archive; do not re-sign -->
+    <key>signingStyle</key>
+    <string>automatic</string>
+
+    <!-- Strip Swift standard libraries that are already in the OS -->
+    <key>stripSwiftSymbols</key>
+    <true/>
+</dict>
+</plist>

@@ -22,5 +22,10 @@
     <string>public.app-category.utilities</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright 2026 KeyMagic. All rights reserved.</string>
+
+    <!-- Required by App Store Connect / notarization submission:
+         false = the app does NOT use non-exempt encryption (no export compliance review needed) -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>
