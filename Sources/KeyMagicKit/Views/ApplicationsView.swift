@@ -273,6 +273,12 @@ private struct AppRow: View {
             enabledCell
                 .frame(width: 70, alignment: .trailing)
         }
+        // Tapping anywhere on the row toggles enabled; only active when a shortcut exists.
+        // Child controls (Toggle, HotkeyCellView buttons) intercept their own gestures first.
+        .onTapGesture {
+            guard shortcut != nil else { return }
+            onToggleEnabled()
+        }
     }
 
     // MARK: - Enabled Cell
