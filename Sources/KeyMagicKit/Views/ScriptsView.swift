@@ -1,3 +1,4 @@
+import FoundationModels
 import SwiftUI
 
 /// The Scripts settings view: manages script-type shortcuts.
@@ -310,8 +311,42 @@ struct ScriptEditView: View {
     @State private var shellType: ShortcutAction.ShellType = .zsh
     @State private var hasUnsavedChanges = false
 
+    // AI generation state
+    @State private var isGenerating = false
+    @State private var generationError: String?
+
     private var isValid: Bool {
         !name.isEmpty && !scriptContent.isEmpty
+    }
+
+    /// Whether the on-device Foundation Models framework is usable on this system.
+    private var isAIAvailable: Bool {
+        guard #available(macOS 26, *) else { return false }
+        return SystemLanguageModel.default.availability == .available
+    }
+
+    /// Human-readable reason when AI generation is unavailable.
+    private var aiUnavailableReason: String? {
+        guard #available(macOS 26, *) else {
+            return "Requires macOS 26 or later"
+        }
+        switch SystemLanguageModel.default.availability {
+        case .available:
+            return nil
+        case .unavailable(let reason):
+            switch reason {
+            case .deviceNotEligible:
+                return "This Mac does not support Apple Intelligence"
+            case .modelNotReady:
+                return "Apple Intelligence model is not ready — check Settings"
+            case .appleIntelligenceNotEnabled:
+                return "Enable Apple Intelligence in System Settings"
+            @unknown default:
+                return "Apple Intelligence is not available"
+            }
+        @unknown default:
+            return "Apple Intelligence is not available"
+        }
     }
 
     var body: some View {
@@ -326,6 +361,23 @@ struct ScriptEditView: View {
                 nameField
                 shellPicker
                 scriptEditor
+
+                // Inline error banner for AI generation failures
+                if let error = generationError {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                        Text(error)
+                            .font(.caption)
+                        Spacer()
+                        Button("Dismiss") { generationError = nil }
+                            .font(.caption)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(8)
+                    .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -345,6 +397,23 @@ struct ScriptEditView: View {
                 .font(.headline)
 
             Spacer()
+
+            // AI Generate button — always visible; disabled with explanation when unavailable
+            Button {
+                handleGenerate()
+            } label: {
+                ZStack {
+                    Label("Generate", systemImage: "sparkles")
+                        .opacity(isGenerating ? 0 : 1)
+                    ProgressView()
+                        .controlSize(.small)
+                        .opacity(isGenerating ? 1 : 0)
+                }
+                .frame(minWidth: headerActionMinWidth)
+            }
+            .disabled(!isAIAvailable || isGenerating || isRunning)
+            .controlSize(.regular)
+            .help(aiUnavailableReason ?? "Generate script from comments using Apple Intelligence")
 
             // Run button — executes the current editor content directly
             Button {
@@ -466,6 +535,78 @@ struct ScriptEditView: View {
 
         // Reset dirty flag after loading
         hasUnsavedChanges = false
+    }
+
+    // MARK: - AI Generation
+
+    /// Inserts a starter comment template when the editor is empty,
+    /// otherwise sends the current content to the on-device model for code generation.
+    private func handleGenerate() {
+        generationError = nil
+
+        // Empty editor: insert a starter template so the user knows how to use the feature.
+        let trimmed = scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            scriptContent = scriptTemplateForShell(shellType)
+            return
+        }
+
+        guard #available(macOS 26, *) else { return }
+        generateWithModel()
+    }
+
+    /// Calls the on-device Foundation Model to generate script code from the user's comments.
+    @available(macOS 26, *)
+    private func generateWithModel() {
+        let shell = shellType
+        let input = scriptContent
+        isGenerating = true
+        generationError = nil
+
+        Task {
+            do {
+                let session = LanguageModelSession(
+                    instructions: """
+                        You are a shell script generator. The user provides comments \
+                        describing what they want the script to do. Generate ONLY the \
+                        script code. Do NOT wrap output in markdown code fences. Preserve \
+                        the user's original comments in-place and add implementation code \
+                        right after each relevant comment block. Use \(shell.displayName) \
+                        syntax. Output must be valid, runnable shell code.
+                        """
+                )
+
+                let prompt = """
+                    Based on the following commented instructions, generate a complete \
+                    \(shell.displayName) script:
+
+                    \(input)
+                    """
+
+                let response = try await session.respond(to: prompt)
+                scriptContent = response.content
+            } catch {
+                generationError = error.localizedDescription
+            }
+            isGenerating = false
+        }
+    }
+
+    /// Returns a starter comment template that teaches the user how to use AI generation.
+    private func scriptTemplateForShell(_ shell: ShortcutAction.ShellType) -> String {
+        let shebang = "#!\(shell.rawValue)"
+        return """
+            \(shebang)
+
+            # Describe what you want this script to do.
+            # Write your instructions as comments, then click "Generate" again
+            # to let Apple Intelligence generate the code for you.
+            #
+            # Example:
+            #   List all .log files in /var/log that are older than 7 days,
+            #   then print their total size in human-readable format.
+
+            """
     }
 }
 

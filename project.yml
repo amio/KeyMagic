@@ -47,8 +47,8 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - $(inherited)
           - "@executable_path/../Frameworks"
-    entitlements:
-      path: Resources/KeyMagic.entitlements
+    # entitlements:
+    #   path: Resources/KeyMagic.entitlements
 
   KeyMagicUITests:
     type: bundle.ui-testing
