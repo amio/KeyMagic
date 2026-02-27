@@ -13,9 +13,6 @@ let package = Package(
         .target(
             name: "KeyMagicKit",
             path: "Sources/KeyMagicKit",
-            resources: [
-                .process("Resources"),
-            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

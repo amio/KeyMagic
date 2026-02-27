@@ -27,11 +27,10 @@ targets:
     platform: macOS
     sources:
       - path: Sources/KeyMagic
+      - path: Resources/Assets.xcassets
     dependencies:
       - package: KeyMagicKit
         product: KeyMagicKit
-    resources:
-      - path: Resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.keymagic.app
