@@ -4,7 +4,7 @@
 - **Post-Development**:
   - Refactor for maximum simplicity; resolve all diagnostic errors (auto-apply safe fixes).
   - Document logic using **in-code comments** (not external docs).
-  - Provide a **Conventional Commits** draft (English, code block) for the change set.
+  - Provide a **Conventional Commits** draft (English, code block) for the change set. Blank lines between sections.
 
 ## Development Principles
 - **Simplicity & MVP**: Focus on minimal design; avoid over-engineering.
