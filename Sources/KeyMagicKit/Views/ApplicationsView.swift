@@ -64,7 +64,9 @@ struct ApplicationsView: View {
                 Spacer()
             } else {
                 // Table header
-                AppTableHeader()
+                AppTableHeader(
+                    headerBackground: AnyShapeStyle(Color(.windowBackgroundColor))
+                )
 
                 // App list
                 ScrollView {
@@ -205,8 +207,10 @@ struct ApplicationsView: View {
 // MARK: - Table Header
 
 private struct AppTableHeader: View {
+    var headerBackground: AnyShapeStyle = AnyShapeStyle(.quaternary.opacity(0.5))
+
     var body: some View {
-        ListTableHeader {
+        ListTableHeader(backgroundStyle: headerBackground, content: {
             Text("Application")
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("Path")
@@ -215,7 +219,7 @@ private struct AppTableHeader: View {
                 .frame(width: 120, alignment: .leading)
             Text("Enabled")
                 .frame(width: 70, alignment: .trailing)
-        }
+        })
     }
 }
 

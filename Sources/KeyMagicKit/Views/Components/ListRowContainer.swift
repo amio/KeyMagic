@@ -4,6 +4,15 @@ import SwiftUI
 /// Renders column labels with consistent caption styling and a tinted background.
 struct ListTableHeader<Content: View>: View {
     @ViewBuilder let content: () -> Content
+    var backgroundStyle: AnyShapeStyle = AnyShapeStyle(.quaternary.opacity(0.5))
+
+    init(
+        backgroundStyle: AnyShapeStyle = AnyShapeStyle(.quaternary.opacity(0.5)),
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.content = content
+        self.backgroundStyle = backgroundStyle
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -14,7 +23,7 @@ struct ListTableHeader<Content: View>: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 20)
         .padding(.vertical, 6)
-        .background(.quaternary.opacity(0.5))
+        .background(backgroundStyle)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
