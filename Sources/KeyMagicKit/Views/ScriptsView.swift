@@ -98,7 +98,7 @@ struct ScriptsView: View {
                     Text("Name")
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("Hotkey")
-                        .frame(width: 120, alignment: .trailing)
+                        .frame(width: 100, alignment: .leading)
                 }
 
                 ScrollView {
@@ -280,7 +280,7 @@ private struct ScriptRow: View {
                 onCancelRecording: onCancelRecording,
                 onClearHotkey: onClearHotkey
             )
-            .frame(width: 120, alignment: .trailing)
+            .frame(width: 100, alignment: .leading)
         }
         .opacity(shortcut.isEnabled ? 1.0 : 0.6)
     }

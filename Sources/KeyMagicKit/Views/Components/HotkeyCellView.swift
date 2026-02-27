@@ -6,7 +6,7 @@ import SwiftUI
 /// Three visual states:
 /// 1. **Empty** – shows a "Record Hotkey" button.
 /// 2. **Recording** – pulsing red indicator with "Press keys…"; Escape cancels.
-/// 3. **Bound** – displays the key combo badge plus edit / delete icon buttons.
+/// 3. **Bound** – displays the key combo badge (clickable to re-bind) plus a delete button.
 ///
 /// The parent owns the "which item is recording" state and drives `isRecording` from outside,
 /// so that only one cell can record at a time across the entire list.
@@ -65,35 +65,26 @@ struct HotkeyCellView: View {
         .onDisappear { stopLocalMonitor() }
     }
 
-    // MARK: - Bound State (combo + edit + delete)
+    // MARK: - Bound State (clickable combo badge + delete)
 
     private func boundContent(_ combo: KeyCombo) -> some View {
         HStack(spacing: 4) {
-            Text(combo.displayString)
-                .font(.system(.callout))
-                .fontWeight(.bold)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(.quaternary)
-                )
-
+            // Clicking the badge starts re-binding, identical to the empty-state button
             Button {
                 onStartRecording()
             } label: {
-                Image(systemName: "pencil.circle.fill")
-                    .font(.system(size: 16))
+                Text(combo.displayString)
+                    .tracking(1.5)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Edit hotkey")
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Click to re-bind hotkey")
 
             Button {
                 onClearHotkey()
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
+                    .font(.system(size: 13))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
