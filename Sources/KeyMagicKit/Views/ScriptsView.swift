@@ -475,7 +475,7 @@ struct ScriptEditView: View {
             TextEditor(text: $scriptContent)
                 .font(.system(.body, design: .monospaced))
                 // Inner padding so text doesn't hug the border
-                .padding(8)
+                .padding(EdgeInsets(top: 12, leading: 8, bottom: 12, trailing: 8))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .scrollContentBackground(.hidden)
                 .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
