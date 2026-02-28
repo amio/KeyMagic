@@ -9,11 +9,11 @@
     <key>teamID</key>
     <string>3FKXTCP8JU</string>
 
-    <!-- Notarize and staple the ticket automatically during export -->
-    <key>notarization</key>
-    <string>upload-and-staple</string>
+    <!-- Notarization is handled separately via xcrun notarytool (works both
+         locally via Makefile and in CI via the workflow). Keeping it out of
+         exportArchive avoids needing Apple ID credentials at export time. -->
 
-    <!-- Embed the signing identity from the archive; do not re-sign -->
+    <!-- Use the identity already embedded in the archive; do not re-sign -->
     <key>signingStyle</key>
     <string>automatic</string>
 

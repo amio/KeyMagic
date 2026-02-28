@@ -15,13 +15,9 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: false
     DEVELOPMENT_TEAM: "3FKXTCP8JU"
+    CODE_SIGN_IDENTITY: "Apple Development"
   configs:
-    # Debug: local development signing
-    Debug:
-      CODE_SIGN_IDENTITY: "Apple Development"
-    # Release: Developer ID for direct distribution + notarization
     Release:
-      CODE_SIGN_IDENTITY: "Developer ID Application"
       ENABLE_HARDENED_RUNTIME: true
 
 packages:
@@ -53,8 +49,6 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - $(inherited)
           - "@executable_path/../Frameworks"
-    # entitlements:
-    #   path: Resources/KeyMagic.entitlements
 
   KeyMagicUITests:
     type: bundle.ui-testing

@@ -2,7 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- iCloud Drive container access for cross-device shortcut sync -->
+    <!-- iCloud Drive container access for cross-device shortcut sync.
+         DISABLED: requires a Developer ID provisioning profile with iCloud
+         capability registered in the Apple Developer Portal. Re-enable once
+         the profile is created and added to the project.
     <key>com.apple.developer.icloud-container-identifiers</key>
     <array>
         <string>iCloud.com.keymagic.app</string>
@@ -11,13 +14,15 @@
     <array>
         <string>iCloud.com.keymagic.app</string>
     </array>
+    -->
 
-    <!-- Required by Hardened Runtime: allows JIT-compiled/unsigned code in child
-         processes spawned by ShortcutExecutor when running user shell scripts -->
+    <!-- Hardened Runtime: allow child processes to run unsigned executables
+         (needed by ShortcutExecutor when invoking user shell scripts) -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <false/>
 
-    <!-- Allows calling deprecated Carbon APIs (CGEventTap) used by HotkeyService -->
+    <!-- Hardened Runtime: allow loading unsigned libraries / frameworks
+         (needed by CGEventTap in HotkeyService) -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <false/>
 </dict>
