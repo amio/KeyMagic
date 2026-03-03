@@ -201,6 +201,18 @@ jobs:
           if-no-files-found: error
           retention-days:    30
 
+      # ---- Publish GitHub Release (tag pushes only) -------------------------
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "KeyMagic ${{ env.VERSION }}" \
+            --generate-notes \
+            "${{ env.DMG_PATH }}#${{ env.DMG_NAME }}.dmg"
+
       # ---- Cleanup keychain -------------------------------------------------
 
       - name: Delete temporary keychain

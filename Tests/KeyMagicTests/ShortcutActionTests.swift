@@ -19,7 +19,7 @@ struct ShortcutActionTests {
         let longScript = String(repeating: "echo hello; ", count: 10)
         let action = ShortcutAction.runScript(script: longScript, shell: .bash)
         #expect(action.displayDescription.contains("..."))
-        #expect(action.displayDescription.hasPrefix("Bash:"))
+        #expect(action.displayDescription.hasPrefix("bash:"))
     }
 
     @Test("Run script file display description shows filename")
@@ -28,7 +28,7 @@ struct ShortcutActionTests {
             path: "/Users/test/scripts/hello.sh",
             shell: .zsh
         )
-        #expect(action.displayDescription == "Zsh: hello.sh")
+        #expect(action.displayDescription == "zsh: hello.sh")
     }
 
     @Test("System images are non-empty")
@@ -59,10 +59,10 @@ struct ShortcutActionTests {
 
     @Test("ShellType display names")
     func shellTypeDisplayNames() {
-        #expect(ShortcutAction.ShellType.bash.displayName == "Bash")
-        #expect(ShortcutAction.ShellType.zsh.displayName == "Zsh")
+        #expect(ShortcutAction.ShellType.bash.displayName == "bash")
+        #expect(ShortcutAction.ShellType.zsh.displayName == "zsh")
         #expect(ShortcutAction.ShellType.sh.displayName == "sh")
-        #expect(ShortcutAction.ShellType.fish.displayName == "Fish")
+        #expect(ShortcutAction.ShellType.fish.displayName == "fish")
     }
 
     @Test("ShellType raw values are valid paths")
