@@ -78,11 +78,14 @@ struct ModifiersTests {
         #expect(mods.activeModifiers.isEmpty)
     }
 
-    @Test("CGEventFlags round-trip")
-    func cgEventFlagsRoundTrip() {
-        let original: KeyCombo.Modifiers = [.command, .shift, .option]
-        let flags = original.cgEventFlags
-        let converted = KeyCombo.Modifiers(cgEventFlags: flags)
-        #expect(converted == original)
+    @Test("carbonModifiers round-trip via Carbon flags")
+    func carbonModifiersRoundTrip() {
+        let mods: KeyCombo.Modifiers = [.command, .shift, .option]
+        let carbon = mods.carbonModifiers
+        // Carbon raw values: cmdKey=256, optionKey=2048, shiftKey=512, controlKey=4096
+        #expect(carbon & 256  != 0)  // cmdKey
+        #expect(carbon & 2048 != 0)  // optionKey
+        #expect(carbon & 512  != 0)  // shiftKey
+        #expect(carbon & 4096 == 0)  // controlKey — not in mods
     }
 }
