@@ -30,6 +30,7 @@ struct KeyMagicApp: App {
     @State private var store: ShortcutStore
     @State private var hotkeyService = HotkeyService()
     @State private var loginItemManager = LoginItemManager()
+    @State private var updateService = UpdateService()
 
     init() {
         let sync = CloudSyncService()
@@ -45,6 +46,7 @@ struct KeyMagicApp: App {
                 .environment(hotkeyService)
                 .environment(loginItemManager)
                 .environment(cloudSync)
+                .environment(updateService)
         }
 
         // MARK: - Settings Window
@@ -54,6 +56,7 @@ struct KeyMagicApp: App {
                 .environment(hotkeyService)
                 .environment(loginItemManager)
                 .environment(cloudSync)
+                .environment(updateService)
                 .frame(minWidth: 890, minHeight: 520)
         }
         .windowResizability(.contentSize)

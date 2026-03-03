@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// General settings pane for the app (launch at login, appearance, data & sync).
+/// General settings pane for the app (launch at login, appearance, data & sync, updates).
 struct GeneralSettingsView: View {
     @Environment(HotkeyService.self) private var hotkeyService
     @Environment(LoginItemManager.self) private var loginItemManager
     @Environment(ShortcutStore.self) private var store
     @Environment(CloudSyncService.self) private var cloudSync
+    @Environment(UpdateService.self) private var updateService
 
     @AppStorage("showDockIcon") private var showDockIcon = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
@@ -15,6 +16,7 @@ struct GeneralSettingsView: View {
             statusSection
             startupSection
             dataAndSyncSection
+            updatesSection
         }
         .formStyle(.grouped)
         .safeAreaInset(edge: .bottom) {
@@ -149,6 +151,63 @@ struct GeneralSettingsView: View {
             }
         } header: {
             Text("Data & Sync")
+        }
+    }
+
+    // MARK: - Updates
+
+    private var updatesSection: some View {
+        Section {
+            LabeledContent("Status") {
+                if updateService.isChecking {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Checking...")
+                    }
+                } else if updateService.updateAvailable {
+                    HStack(spacing: 8) {
+                        Circle().fill(.orange).frame(width: 8, height: 8)
+                        Text("Version \(updateService.latestVersion) available")
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        Circle().fill(.green).frame(width: 8, height: 8)
+                        Text("Up to date")
+                    }
+                }
+            }
+
+            if updateService.isDownloading {
+                LabeledContent("Downloading") {
+                    ProgressView(value: updateService.downloadProgress)
+                        .frame(width: 120)
+                }
+            }
+
+            if let error = updateService.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+            }
+
+            HStack(spacing: 8) {
+                Button("Check for Updates") {
+                    Task { await updateService.checkForUpdates() }
+                }
+                .controlSize(.small)
+                .disabled(updateService.isChecking || updateService.isDownloading)
+
+                if updateService.updateAvailable {
+                    Button("Download & Install") {
+                        Task { await updateService.downloadAndInstall() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(updateService.isDownloading)
+                }
+            }
+        } header: {
+            Text("Updates")
         }
     }
 

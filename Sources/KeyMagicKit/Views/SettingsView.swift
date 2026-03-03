@@ -8,6 +8,7 @@ public struct SettingsView: View {
     @Environment(HotkeyService.self) private var hotkeyService
     @Environment(LoginItemManager.self) private var loginItemManager
     @Environment(CloudSyncService.self) private var cloudSync
+    @Environment(UpdateService.self) private var updateService
 
     enum Tab: String, Hashable, CaseIterable {
         case general = "General"
@@ -37,6 +38,7 @@ public struct SettingsView: View {
             case .general:
                 GeneralSettingsView()
                     .environment(cloudSync)
+                    .environment(updateService)
             case .applications:
                 ApplicationsView()
             case .scripts:

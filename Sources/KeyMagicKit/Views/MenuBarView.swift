@@ -7,7 +7,10 @@ public struct MenuBarView: View {
     @Environment(ShortcutStore.self) private var store
     @Environment(HotkeyService.self) private var hotkeyService
     @Environment(LoginItemManager.self) private var loginItemManager
+    @Environment(UpdateService.self) private var updateService
     @Environment(\.openWindow) private var openWindow
+
+    @State private var showUpdateAlert = false
 
     private var enabledShortcuts: [Shortcut] {
         store.shortcuts.filter(\.isEnabled)
@@ -89,6 +92,21 @@ public struct MenuBarView: View {
         }
         .padding(.vertical, 4)
         .frame(width: 260)
+        .onChange(of: updateService.updateAvailable) { _, isAvailable in
+            if isAvailable { showUpdateAlert = true }
+        }
+        .onAppear {
+            // Show alert immediately if an update was already detected before the menu opened.
+            if updateService.updateAvailable { showUpdateAlert = true }
+        }
+        .alert("Update Available", isPresented: $showUpdateAlert) {
+            Button("Install Now") {
+                Task { await updateService.downloadAndInstall() }
+            }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("KeyMagic \(updateService.latestVersion) is ready to download and install.")
+        }
     }
 }
 
