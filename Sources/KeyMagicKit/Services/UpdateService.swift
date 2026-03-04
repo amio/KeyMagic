@@ -37,6 +37,9 @@ public final class UpdateService: @unchecked Sendable {
     public init() {
         // Start the updater immediately; Sparkle defers its first check
         // until the second app launch by default (configurable via Info.plist).
+        // Register default so Sparkle's first-launch value is true instead of false.
+        UserDefaults.standard.register(defaults: ["SUEnableAutomaticChecks": true])
+
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,

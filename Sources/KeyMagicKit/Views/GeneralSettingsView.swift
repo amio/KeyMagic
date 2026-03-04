@@ -17,11 +17,9 @@ struct GeneralSettingsView: View {
             startupSection
             dataAndSyncSection
             updatesSection
+            versionFooterSection
         }
         .formStyle(.grouped)
-        .safeAreaInset(edge: .bottom) {
-            versionFooter
-        }
     }
 
     // MARK: - Status
@@ -163,18 +161,22 @@ struct GeneralSettingsView: View {
                 set: { updateService.automaticallyChecksForUpdates = $0 }
             ))
 
-            if let lastCheck = updateService.lastUpdateCheckDate {
-                LabeledContent("Last Checked") {
-                    Text(lastCheck, style: .relative)
-                        .foregroundStyle(.secondary)
+            LabeledContent("Last Checked") {
+                HStack(spacing: 12) {
+                    if let lastCheck = updateService.lastUpdateCheckDate {
+                        Text(lastCheck, style: .relative)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Never")
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Check for Updates…") {
+                        updateService.checkForUpdates()
+                    }
+                    .controlSize(.small)
+                    .disabled(!updateService.canCheckForUpdates)
                 }
             }
-
-            Button("Check for Updates…") {
-                updateService.checkForUpdates()
-            }
-            .controlSize(.small)
-            .disabled(!updateService.canCheckForUpdates)
         } header: {
             Text("Updates")
         }
@@ -182,14 +184,16 @@ struct GeneralSettingsView: View {
 
     // MARK: - Version Footer
 
-    private var versionFooter: some View {
+    private var versionFooterSection: some View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-        return Text("KeyMagic \(version) (\(build))")
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, 12)
+        return Section {
+            Text("KeyMagic \(version) (\(build))")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
+        }
     }
 
     // MARK: - Dock Icon
