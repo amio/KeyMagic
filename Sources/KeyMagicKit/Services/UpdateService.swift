@@ -35,13 +35,21 @@ public final class UpdateService: @unchecked Sendable {
     // MARK: - Init
 
     public init() {
-        // Start the updater immediately; Sparkle defers its first check
-        // until the second app launch by default (configurable via Info.plist).
         // Register default so Sparkle's first-launch value is true instead of false.
         UserDefaults.standard.register(defaults: ["SUEnableAutomaticChecks": true])
 
+        // In DEBUG builds the app is unsigned and has no valid SUPublicEDKey, so
+        // Sparkle's pre-flight checks fail and it shows an error dialog on every
+        // launch. Skip auto-starting the updater entirely during development;
+        // the "Check for Updates…" button will still work via checkForUpdates().
+        #if DEBUG
+        let shouldStart = false
+        #else
+        let shouldStart = true
+        #endif
+
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: shouldStart,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
