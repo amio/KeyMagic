@@ -1,82 +1,64 @@
-# CORE GUIDELINES
+# DEVELOPMENT PROTOCOL
 
-## Workflow
-- **Post-Development**:
-  - Refactor for maximum simplicity; resolve all diagnostic errors (auto-apply safe fixes).
-  - Document logic using **in-code comments** (not external docs).
-  - Provide a **Conventional Commits** draft (English, code block) for the change set. Blank lines between sections.
+## 1. Workflow & Strategy
 
-## Development Principles
-- **Simplicity & MVP**: Focus on minimal design; avoid over-engineering.
-- **Proactive Execution**: Analyze "why" over "how"; propose optimizations/alternatives instead of passive task completion.
-- **Clean Architecture**: Ensure High Cohesion, Low Coupling (SOLID); prioritize readability over "just working."
-- **Native-First**: Prefer Platform APIs over simulations.
+### Execution Phase
 
-## Coding Standards
-- **Modernity**: Prioritize latest features and modern MacOS APIs.
-- **Structure**:
-  - Max **6 levels** of indentation; extract functions/variables to flatten logic.
-  - Use **local components** for file-specific UI; split complex ternary ops (>3 lines).
-  - Move large inline strings (prompts/constants) to utility functions.
-  - Adopt the "Newspaper Metaphor": Place the primary exported function at the top of the file. Arrange internal helper functions below it, ordered by their sequence of invocation.
-- **Rules**:
-  - **No formatting**: Do not fix indentation/style (handled by external tools).
-  - **No example files**: Provide usage examples directly in chat.
+**Pre-Task**: Before executing any assigned task, agents must conduct a thorough analysis of the relevant codebase to understand the context and potential impact of their changes. This includes:
+  - **Contextual Audit**: Perform a comprehensive audit of relevant code for context and impact.
+  - **Proactive Ownership**: Prioritize "why" over "how." Challenge sub-optimal architectures rather than passive execution.
+  - **Strategic Research**: Formulate the optimal approach considering system-wide implications. Consolidate insights into `docs/research/{date}-{topic}.md`.
 
-## Design Philosophy
-- Meet the standards of the Apple Design Awards, prioritizing intuitive interaction, exceptional craftsmanship, and profound emotional resonance.
-- Embrace the bleeding edge, utilizing the latest SDKs, APIs, and modern UI components to build a state-of-the-art interface.
+**Post Task**: After completing the assigned task, agents must:
+  - **Refinement**: Review the complete changeset; refactor for maximum simplicity and resolve all diagnostic errors.
+  - **Commit Draft**: End every response with an updated English **Conventional Commits** block.
 
-## Documentation
-- **Quality**: Focus on "purpose," not a list of changes. Use **English** only.
+### Design Framework (Three-Layer Onion)
+1. **Foundations**: Define problem, goals/non-goals, and requirements.
+2. **Functional Spec**: Detail external behavior.
+3. **Technical Spec**: Describe internal logic and rationale.
+*Note: Each layer must justify the next; fix upstream flaws before technical implementation.*
 
-## Technical Design Framework
+## 2. Development Principles
 
-- **The Three-Layer Onion**:
-  1. **Foundations**: Define the problem statement, goals/non-goals, and requirements.
-  2. **Functional Spec**: Detail the system's behavior from an external perspective.
-  3. **Technical Spec**: Describe internal implementation and logic.
-- **Top-Down Logic**: Each layer must justify the next. Fix flaws in the problem statement or functional spec *before* moving to technical details to avoid ineffective implementation.
-- **Decision Rationale**: Do not just present the final spec. Document alternatives considered and provide clear rationale for chosen solutions to enable meaningful review.
+- **Simplicity (MVP)**: Eliminate over-engineering and "Trivial Forwarding" (Middle Man). Ensure every function adds value or refactor to reduce call depth.
+- **Clean Architecture**: Enforce SOLID principles; prioritize cohesion and long-term readability.
+- **Native-First**: Use platform APIs (Electron `nativeTheme`, Web Popover/Anchor) and GPU-accelerated CSS over JS-heavy simulations.
+- **Performance-By-Design**: Optimize for real-world usage patterns; avoid premature optimization but identify and address bottlenecks early.
+- **Use Edge APIs**: Leverage cutting-edge features (e.g., React 19 Actions, View Transitions) to enhance UX and maintain modern codebase.
 
-# PROJECT ARCHITECTURE
+## 3. Technical Standards
 
-> **Note for agents**: This section is maintained by agents. If a task changes any aspect of the architecture described here, update this section accordingly — keep it accurate, concise, and informative for agent's future work.
+- **Stack**: Strict TypeScript (zero `any/as`), semicolon-free, **styled-jsx** only (no Tailwind).
+- **Modernity**: React 19 (Actions/use), Node.js test runner, ES2023/2024, View Transitions.
+- **Logic Structure**:
+  - **Newspaper Metaphor**: Primary export at top; helpers follow in execution sequence.
+  - **Organization**: Localize file-specific components; move large strings/prompts to constants.
+- **Constraints**:
+  - No manual reformatting. Use tools like `npm run format/lint`.
+  - No standalone example files. All code must be production-ready and integrated into the system.
 
-## Overview
+## 4. Documentation & Comments
 
-KeyMagic is a native macOS menu bar utility (SwiftUI, Swift 6, macOS 15+) that binds global hotkeys to app launches and shell scripts. Built as a two-target project: `KeyMagic` (app) and `KeyMagicKit` (SPM library containing all models, services, and views).
+- **In-Code Focus**: Document logic intent within source code, not external docs.
+- **Language & Style**: English only. Use single-line `/** */` for types and **TSDoc** (`@param`, `@returns`) for exports.
+- **Synchronization**: Maintain strict alignment between code comments and `README.md`.
 
-## Data Model
 
-- **`Shortcut`** — core entity: UUID-identified, binds a `KeyCombo` to a `ShortcutAction`. Has `modifiedAt` for iCloud merge conflict resolution. `isAvailableOnThisDevice` computed property checks local app/file availability.
-- **`ShortcutAction`** — enum: `.launchApp(bundleIdentifier, appName)`, `.runScript(script, shell)`, `.runScriptFile(path, shell)`.
-- **`KeyCombo`** — Carbon key code + modifier flags.
 
-## Persistence
 
-- **Local**: `~/Library/Application Support/KeyMagic/shortcuts.json` — single JSON file, read/written by `ShortcutStore`.
-- **iCloud**: Optional sync via iCloud Drive container `iCloud.com.keymagic.app`. Managed by `CloudSyncService`. File: `<ubiquity-container>/Documents/shortcuts.json`.
-- **UserDefaults**: `showDockIcon`, `showMenuBarIcon`, `iCloudSyncEnabled`.
 
-## iCloud Sync
 
-- **Approach**: iCloud Drive document sync (not CloudKit/NSUbiquitousKeyValueStore). File coordination via `NSFileCoordinator`, change detection via `NSMetadataQuery`.
-- **Merge strategy**: Union by UUID; conflicting UUIDs resolved by later `modifiedAt` wins. `markTriggered` is local-only (no sync/no modifiedAt bump).
-- **Cross-device handling**: `Shortcut.isAvailableOnThisDevice` checks if the target app is installed or script file exists. `ApplicationsView` shows an "Unavailable on This Mac" section for synced app shortcuts whose bundle ID isn't locally installed. `ScriptsView` shows a warning icon for `runScriptFile` shortcuts with missing files.
-- **Opt-in**: Toggle in General Settings. First enable triggers a full sync (download + merge + upload).
-- **Entitlements**: `com.apple.developer.icloud-container-identifiers` and `com.apple.developer.ubiquity-container-identifiers` set to `iCloud.com.keymagic.app`.
+# ARCHITECTURE BLUEPRINT
 
-## Services
-
-| Service | Responsibility |
-|---|---|
-| `ShortcutStore` | In-memory state + local JSON persistence + cloud sync integration |
-| `CloudSyncService` | iCloud Drive upload/download, `NSMetadataQuery` monitoring, merge logic |
-| `HotkeyService` | Global `CGEvent` tap for keyboard shortcuts |
-| `ShortcutExecutor` | Executes actions (toggle app visibility, run scripts) |
-| `LoginItemManager` | Launch-at-login via `SMAppService` |
-
-## App Entry
-
-`KeyMagicApp` creates `CloudSyncService` first, passes it into `ShortcutStore` via constructor injection. All services are injected into views via SwiftUI `.environment()`.
+> ⚠️ **CRITICAL DIRECTIVE FOR ALL AGENTS** ⚠️
+> This section is the **Mind Map** for the system's core structure and is maintained entirely by agents.
+> **Mandatory Action**: Update this section immediately if your task alters the tech stack, product logic, or file responsibilities.
+>
+> **Content Focus & Style**: Keep it lean. Each concept must be 1-2 sentences. Only three categories are permitted:
+>
+> 1. **Core Tech Stack**: Critical selections and versions.
+> 2. **Product Logic**: Core concepts and their interaction patterns.
+> 3. **Component Map**: Key components and the specific files responsible for them.
+>
+> Failure to maintain this skeleton will degrade future agents' navigation and decision-making capabilities.
