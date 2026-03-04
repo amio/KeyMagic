@@ -30,7 +30,7 @@ export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
         archive export notarize dmg dist \
         clean reset \
         ci \
-        version-patch version-minor version-major version-bump
+        version-patch version-minor version-major version-build
 
 # -----------------------------------------------------------------------------
 # Help
@@ -165,7 +165,7 @@ lint: ## Lint Swift source files with swift-format (no writes)
 #   4. Run `make gen` to update KeyMagic.xcodeproj
 #   5. Commit project.yml, create an annotated git tag vX.Y.Z
 #
-# version-bump workflow:
+# version-build workflow:
 #   1. Read and increment CURRENT_PROJECT_VERSION only
 #   2. Write back into project.yml and run `make gen`
 #   3. Commit project.yml
@@ -221,7 +221,7 @@ version-minor: ## Bump minor version (1.0.0 → 1.1.0), commit and tag
 version-major: ## Bump major version (1.0.0 → 2.0.0), commit and tag
 	$(call _bump_version,major)
 
-version-bump: ## Bump build number only, no semver change, no tag
+version-build: ## Bump build number only, no semver change, commit and tag
 	$(call _bump_version,build)
 
 # -----------------------------------------------------------------------------
