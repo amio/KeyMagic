@@ -23,6 +23,9 @@ settings:
 packages:
   KeyMagicKit:
     path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.7.0"
 
 targets:
   KeyMagic:
@@ -34,6 +37,8 @@ targets:
     dependencies:
       - package: KeyMagicKit
         product: KeyMagicKit
+      - package: Sparkle
+        product: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.keymagic.app
@@ -46,6 +51,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         COMBINE_HIDPI_IMAGES: true
         ENABLE_TESTING_SEARCH_PATHS: true
+        SPARKLE_ED_PUBLIC_KEY: ""
         LD_RUNPATH_SEARCH_PATHS:
           - $(inherited)
           - "@executable_path/../Frameworks"

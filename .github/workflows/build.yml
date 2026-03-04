@@ -12,6 +12,8 @@
 #   APPLE_TEAM_ID              Apple Developer Team ID (e.g. 3FKXTCP8JU)
 #   APPLE_ID                   Apple ID email used for notarization
 #   APPLE_APP_PASSWORD         App-specific password for notarytool
+#   SPARKLE_ED_PRIVATE_KEY     EdDSA (ed25519) private key for signing updates
+#   SPARKLE_ED_PUBLIC_KEY      EdDSA (ed25519) public key embedded in the app
 # =============================================================================
 
 name: Build & Distribute
@@ -127,11 +129,15 @@ jobs:
       # ---- Generate Xcode project -------------------------------------------
 
       - name: Generate Xcode project
+        env:
+          SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
         run: make gen
 
       # ---- Archive ----------------------------------------------------------
 
       - name: Archive
+        env:
+          SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
         run: |
           xcodebuild archive \
             -project     KeyMagic.xcodeproj \
@@ -141,7 +147,8 @@ jobs:
             MARKETING_VERSION="$VERSION" \
             CODE_SIGN_IDENTITY="Developer ID Application" \
             CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}"
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            SPARKLE_ED_PUBLIC_KEY="$SPARKLE_ED_PUBLIC_KEY"
 
       # ---- Export (Developer ID signed .app) --------------------------------
 
@@ -214,6 +221,58 @@ jobs:
             --title "KeyMagic ${{ env.VERSION }}" \
             --generate-notes \
             "${{ env.DMG_PATH }}#${{ env.DMG_NAME }}.dmg"
+
+      # ---- Generate Sparkle appcast -----------------------------------------
+      # Downloads Sparkle CLI tools, fetches the existing appcast from GitHub
+      # Pages (if any), then runs generate_appcast to add the new release item.
+      # The tool reads the EdDSA private key from SPARKLE_ED_PRIVATE_KEY env var
+      # to sign the update archive.
+
+      - name: Generate Sparkle appcast
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          # --- Install Sparkle CLI tools ---
+          SPARKLE_VERSION="2.7.5"
+          SPARKLE_TOOLS="$RUNNER_TEMP/sparkle-tools"
+          mkdir -p "$SPARKLE_TOOLS"
+          curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
+            | tar xJ -C "$SPARKLE_TOOLS"
+          SPARKLE_BIN="$SPARKLE_TOOLS/bin"
+          echo "Using Sparkle tools from: $SPARKLE_BIN"
+
+          # --- Prepare updates folder ---
+          # generate_appcast scans this folder for archives and produces appcast.xml.
+          UPDATES_DIR="$RUNNER_TEMP/sparkle-updates"
+          mkdir -p "$UPDATES_DIR"
+          cp "${{ env.DMG_PATH }}" "$UPDATES_DIR/"
+
+          # --- Fetch existing appcast (if any) so new items are appended ---
+          if curl -sfL "https://amio.github.io/KeyMagic/appcast.xml" -o "$UPDATES_DIR/appcast.xml" 2>/dev/null; then
+            echo "Fetched existing appcast.xml from GitHub Pages"
+          else
+            echo "No existing appcast found — will create a new one"
+          fi
+
+          # --- Run generate_appcast ---
+          # --download-url-prefix: a URL prefix prepended to each archive filename
+          #   to form the <enclosure url="...">. Since each release tag has its own
+          #   path on GitHub Releases, we use the tag-specific URL prefix.
+          #   For the current release the resulting URL will be:
+          #     https://github.com/amio/KeyMagic/releases/download/vX.Y.Z/KeyMagic-X.Y.Z.dmg
+          #
+          # generate_appcast reads SPARKLE_ED_PRIVATE_KEY from the environment
+          # to generate EdDSA signatures for the enclosure.
+          "$SPARKLE_BIN/generate_appcast" \
+            --download-url-prefix "https://github.com/amio/KeyMagic/releases/download/${GITHUB_REF_NAME}/" \
+            --link "https://amio.github.io/KeyMagic/" \
+            "$UPDATES_DIR"
+
+          # --- Copy appcast into public/ for GitHub Pages deployment ---
+          cp "$UPDATES_DIR/appcast.xml" public/appcast.xml
+          echo "--- Appcast generated ---"
+          cat public/appcast.xml
 
       # ---- Update Landing Page ----------------------------------------------
 

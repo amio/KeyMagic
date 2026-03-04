@@ -94,5 +94,13 @@ struct KeyMagicApp: App {
         .onChange(of: appState.openSettingsTrigger) { _ in
             openWindow(id: "settings")
         }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    updateService.checkForUpdates()
+                }
+                .disabled(!updateService.canCheckForUpdates)
+            }
+        }
     }
 }

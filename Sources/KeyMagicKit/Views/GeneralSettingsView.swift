@@ -158,54 +158,23 @@ struct GeneralSettingsView: View {
 
     private var updatesSection: some View {
         Section {
-            LabeledContent("Status") {
-                if updateService.isChecking {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("Checking...")
-                    }
-                } else if updateService.updateAvailable {
-                    HStack(spacing: 8) {
-                        Circle().fill(.orange).frame(width: 8, height: 8)
-                        Text("Version \(updateService.latestVersion) available")
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        Circle().fill(.green).frame(width: 8, height: 8)
-                        Text("Up to date")
-                    }
+            Toggle("Automatically Check for Updates", isOn: Binding(
+                get: { updateService.automaticallyChecksForUpdates },
+                set: { updateService.automaticallyChecksForUpdates = $0 }
+            ))
+
+            if let lastCheck = updateService.lastUpdateCheckDate {
+                LabeledContent("Last Checked") {
+                    Text(lastCheck, style: .relative)
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            if updateService.isDownloading {
-                LabeledContent("Downloading") {
-                    ProgressView(value: updateService.downloadProgress)
-                        .frame(width: 120)
-                }
+            Button("Check for Updates…") {
+                updateService.checkForUpdates()
             }
-
-            if let error = updateService.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-                    .font(.caption)
-            }
-
-            HStack(spacing: 8) {
-                Button("Check for Updates") {
-                    Task { await updateService.checkForUpdates() }
-                }
-                .controlSize(.small)
-                .disabled(updateService.isChecking || updateService.isDownloading)
-
-                if updateService.updateAvailable {
-                    Button("Download & Install") {
-                        Task { await updateService.downloadAndInstall() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(updateService.isDownloading)
-                }
-            }
+            .controlSize(.small)
+            .disabled(!updateService.canCheckForUpdates)
         } header: {
             Text("Updates")
         }
