@@ -214,19 +214,15 @@ endef
 
 version-patch: ## Bump patch version (1.0.0 → 1.0.1), commit and tag
 	$(call _bump_version,patch)
-	git push --tags
 
 version-minor: ## Bump minor version (1.0.0 → 1.1.0), commit and tag
 	$(call _bump_version,minor)
-	git push --tags
 
 version-major: ## Bump major version (1.0.0 → 2.0.0), commit and tag
 	$(call _bump_version,major)
-	git push --tags
 
 version-build: ## Bump build number only, no semver change, commit and tag
 	$(call _bump_version,build)
-	git push --tags
 
 # -----------------------------------------------------------------------------
 # Archive / Release
