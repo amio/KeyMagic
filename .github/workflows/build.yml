@@ -265,9 +265,10 @@ jobs:
           #   For the current release the resulting URL will be:
           #     https://github.com/amio/KeyMagic/releases/download/vX.Y.Z/KeyMagic-X.Y.Z.dmg
           #
-          # generate_appcast reads SPARKLE_ED_PRIVATE_KEY from the environment
-          # to generate EdDSA signatures for the enclosure.
-          "$SPARKLE_BIN/generate_appcast" \
+          # The private key is passed via stdin with --ed-key-file - so the CI runner
+          # never needs a Keychain entry. The secret is never written to disk.
+          echo "$SPARKLE_ED_PRIVATE_KEY" | "$SPARKLE_BIN/generate_appcast" \
+            --ed-key-file - \
             --download-url-prefix "https://github.com/amio/KeyMagic/releases/download/${GITHUB_REF_NAME}/" \
             --link "https://amio.github.io/KeyMagic/" \
             "$UPDATES_DIR"
