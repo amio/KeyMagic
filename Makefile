@@ -279,7 +279,7 @@ dmg: ## Package the notarized .app into a distributable DMG
 	    --hide-extension "KeyMagic.app" \
 	    --app-drop-link  480 170 \
 	    "$(BUILD_DIR)/KeyMagic.dmg" \
-	    "$(EXPORT_PATH)/"
+	    "$(EXPORT_PATH)/$(SCHEME).app"
 	@echo "  ✓ DMG: $(BUILD_DIR)/KeyMagic.dmg"
 
 # -----------------------------------------------------------------------------

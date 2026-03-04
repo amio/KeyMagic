@@ -188,7 +188,7 @@ jobs:
             --hide-extension "KeyMagic.app" \
             --app-drop-link  480 170 \
             "$RUNNER_TEMP/${DMG_NAME}.dmg" \
-            "$RUNNER_TEMP/export/"
+            "$RUNNER_TEMP/export/KeyMagic.app"
 
           echo "DMG_PATH=$RUNNER_TEMP/${DMG_NAME}.dmg" >> "$GITHUB_ENV"
           echo "DMG_NAME=${DMG_NAME}"                  >> "$GITHUB_ENV"
