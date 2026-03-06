@@ -80,11 +80,11 @@
 
 ## Component Map
 
-- **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, MenuBarExtra, Settings Window, environment wiring.
+- **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, `AppState` (shared singleton owning all services), `AppDelegate` (lifecycle + `MenuBarController` init), Settings Window scene.
 - **Hotkey engine**: `Sources/TapTickKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, `ShortcutExecutor` invocation.
 - **Data layer**: `Sources/TapTickKit/Services/ShortcutStore.swift` — CRUD, disk I/O, cloud sync coordination.
 - **Cloud sync**: `Sources/TapTickKit/Services/CloudSyncService.swift` — NSMetadataQuery monitoring, upload/download, merge algorithm.
 - **Action execution**: `Sources/TapTickKit/Services/ShortcutExecutor.swift` — app toggle/launch, inline script, script file.
 - **Settings UI**: `Sources/TapTickKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`.
-- **Menu bar UI**: `Sources/TapTickKit/Views/MenuBarView.swift` — dropdown with shortcut rows, settings/quit buttons.
+- **Menu bar UI**: `Sources/TapTickKit/Views/MenuBarController.swift` — native `NSStatusItem` + `NSMenu`; Observation-driven rebuild on shortcut changes; UserDefaults KVO show/hide; native key equivalent glyphs.
 - **Bundle IDs**: App `com.taptick.app`; iCloud container `iCloud.com.taptick.app`.

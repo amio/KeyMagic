@@ -6,7 +6,25 @@ import TapTickKit
 @MainActor
 final class AppState: ObservableObject {
     static let shared = AppState()
+
     @Published var openSettingsTrigger = 0
+
+    // MARK: - Shared Services
+
+    let cloudSync: CloudSyncService
+    let store: ShortcutStore
+    let hotkeyService = HotkeyService()
+    let loginItemManager = LoginItemManager()
+    let updateService = UpdateService()
+
+    /// Native NSStatusItem + NSMenu controller — retained for the lifetime of the app.
+    var menuBarController: MenuBarController?
+
+    private init() {
+        let sync = CloudSyncService()
+        self.cloudSync = sync
+        self.store = ShortcutStore(cloudSync: sync)
+    }
 }
 
 /// Returns `true` when this process was launched by launchd (login item / system boot),
@@ -30,7 +48,11 @@ private func isLaunchedByLoginItem() -> Bool {
 /// where `NSApplication.shared` has not yet been created.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Observation token for the notification posted by `MenuBarController` to open settings.
+    private var settingsNotificationObserver: Any?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let appState = AppState.shared
         let hasLaunchedBefore = UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
 
         if !hasLaunchedBefore {
@@ -51,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !launchedBySystem {
                 // Launched manually by the user: open settings window and bring app to front.
                 // Window uses .defaultLaunchBehavior(.suppressed) so it won't open automatically.
-                AppState.shared.openSettingsTrigger += 1
+                appState.openSettingsTrigger += 1
                 NSApp.activate(ignoringOtherApps: true)
             }
             // Launched by login item: do nothing — window stays hidden, app lives in menu bar.
@@ -60,6 +82,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let showDockIcon = UserDefaults.standard.bool(forKey: "showDockIcon")
         if !showDockIcon {
             NSApp.setActivationPolicy(.accessory)
+        }
+
+        // Install the native menu bar controller now that NSApplication is fully initialised.
+        appState.menuBarController = MenuBarController(
+            store: appState.store,
+            hotkeyService: appState.hotkeyService,
+            updateService: appState.updateService
+        )
+
+        // Listen for the "open settings" notification posted by MenuBarController.
+        settingsNotificationObserver = NotificationCenter.default.addObserver(
+            forName: .openSettingsWindow,
+            object: nil,
+            queue: .main
+        ) { [weak appState] _ in
+            MainActor.assumeIsolated {
+                appState?.openSettingsTrigger += 1
+            }
         }
     }
 
@@ -75,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// TapTick — a utility app for launching apps and running scripts via global hotkeys.
 ///
 /// Architecture:
-/// - The app lives primarily in the menu bar (MenuBarExtra).
+/// - The app lives primarily in the menu bar (native NSStatusItem + NSMenu via MenuBarController).
 /// - A settings window is the main (and only) substantial UI.
 /// - Global keyboard shortcuts are registered via Carbon's RegisterEventHotKey (no permissions needed).
 /// - Login item is managed through ServiceManagement.
@@ -86,51 +126,29 @@ struct TapTickApp: App {
     @StateObject private var appState = AppState.shared
     @Environment(\.openWindow) private var openWindow
 
-    @State private var cloudSync = CloudSyncService()
-    @State private var store: ShortcutStore
-    @State private var hotkeyService = HotkeyService()
-    @State private var loginItemManager = LoginItemManager()
-    @State private var updateService = UpdateService()
-
-    init() {
-        let sync = CloudSyncService()
-        _cloudSync = State(initialValue: sync)
-        _store = State(initialValue: ShortcutStore(cloudSync: sync))
-    }
-
     var body: some Scene {
-        // MARK: - Menu Bar
-        MenuBarExtra("TapTick", systemImage: "keyboard.badge.ellipsis") {
-            MenuBarView()
-                .environment(store)
-                .environment(hotkeyService)
-                .environment(loginItemManager)
-                .environment(cloudSync)
-                .environment(updateService)
-        }
-
         // MARK: - Settings Window
         Window("TapTick Settings", id: "settings") {
             SettingsView()
-                .environment(store)
-                .environment(hotkeyService)
-                .environment(loginItemManager)
-                .environment(cloudSync)
-                .environment(updateService)
+                .environment(appState.store)
+                .environment(appState.hotkeyService)
+                .environment(appState.loginItemManager)
+                .environment(appState.cloudSync)
+                .environment(appState.updateService)
                 .frame(minWidth: 890, minHeight: 520)
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 960, height: 620)
         .defaultLaunchBehavior(.suppressed)
-        .onChange(of: appState.openSettingsTrigger) { _ in
+        .onChange(of: appState.openSettingsTrigger) {
             openWindow(id: "settings")
         }
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {
-                    updateService.checkForUpdates()
+                    appState.updateService.checkForUpdates()
                 }
-                .disabled(!updateService.canCheckForUpdates)
+                .disabled(!appState.updateService.canCheckForUpdates)
             }
         }
     }
