@@ -2,31 +2,31 @@
 import PackageDescription
 
 let package = Package(
-    name: "KeyMagicKit",
+    name: "TapTikKit",
     platforms: [
         .macOS(.v15),
     ],
     products: [
-        .library(name: "KeyMagicKit", targets: ["KeyMagicKit"]),
+        .library(name: "TapTikKit", targets: ["TapTikKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.7.0"),
     ],
     targets: [
         .target(
-            name: "KeyMagicKit",
+            name: "TapTikKit",
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
-            path: "Sources/KeyMagicKit",
+            path: "Sources/TapTikKit",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .testTarget(
-            name: "KeyMagicTests",
-            dependencies: ["KeyMagicKit"],
-            path: "Tests/KeyMagicTests",
+            name: "TapTikTests",
+            dependencies: ["TapTikKit"],
+            path: "Tests/TapTikTests",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

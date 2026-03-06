@@ -3,7 +3,7 @@ import Observation
 
 /// Manages persistence and in-memory state of all user-defined shortcuts.
 ///
-/// Local data lives in `~/Library/Application Support/KeyMagic/shortcuts.json`.
+/// Local data lives in `~/Library/Application Support/TapTik/shortcuts.json`.
 /// When iCloud sync is enabled, every local mutation is also pushed to the cloud,
 /// and remote changes are merged in automatically via `CloudSyncService`.
 @Observable
@@ -23,7 +23,7 @@ public final class ShortcutStore: @unchecked Sendable {
     public init(directory: URL? = nil, cloudSync: CloudSyncService? = nil) {
         let dir = directory ?? FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
-        ).first!.appendingPathComponent("KeyMagic", isDirectory: true)
+        ).first!.appendingPathComponent("TapTik", isDirectory: true)
 
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.fileURL = dir.appendingPathComponent("shortcuts.json")
@@ -143,7 +143,7 @@ public final class ShortcutStore: @unchecked Sendable {
             let data = try Data(contentsOf: fileURL)
             shortcuts = try JSONDecoder().decode([Shortcut].self, from: data)
         } catch {
-            print("KeyMagic: Failed to load shortcuts: \(error)")
+            print("TapTik: Failed to load shortcuts: \(error)")
             shortcuts = []
         }
     }
@@ -155,7 +155,7 @@ public final class ShortcutStore: @unchecked Sendable {
             let data = try encoder.encode(shortcuts)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            print("KeyMagic: Failed to save shortcuts: \(error)")
+            print("TapTik: Failed to save shortcuts: \(error)")
         }
     }
 

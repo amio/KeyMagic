@@ -22,7 +22,7 @@ public final class LoginItemManager: @unchecked Sendable {
                 try service.register()
             }
         } catch {
-            print("KeyMagic: Failed to toggle login item: \(error)")
+            print("TapTik: Failed to toggle login item: \(error)")
         }
         refreshStatus()
     }

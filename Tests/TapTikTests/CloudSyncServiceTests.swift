@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import KeyMagicKit
+@testable import TapTikKit
 
 @Suite("CloudSyncService")
 struct CloudSyncServiceTests {

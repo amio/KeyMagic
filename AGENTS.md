@@ -1,4 +1,4 @@
-# DEVELOPMENT PROTOCOL
+# DEVELOPMENT PROTOCOL — TapTik
 
 ## 1. Workflow & Strategy
 
@@ -62,3 +62,29 @@
 > 3. **Component Map**: Key components and the specific files responsible for them.
 >
 > Failure to maintain this skeleton will degrade future agents' navigation and decision-making capabilities.
+
+## Core Tech Stack
+
+- **Language & UI**: Swift 6 (strict concurrency) + SwiftUI, targeting macOS 15+.
+- **Build System**: XcodeGen (`project.yml`) generates `TapTik.xcodeproj`; `Makefile` drives all dev/CI tasks.
+- **Package Structure**: SPM monorepo — `TapTikKit` library (`Sources/TapTikKit`) + `TapTik` app (`Sources/TapTik`).
+- **Auto-Update**: Sparkle 2 (`SPUStandardUpdaterController`) with EdDSA-signed appcast at `https://amio.github.io/TapTik/appcast.xml`.
+- **CI**: GitHub Actions (`.github/workflows/build.yml`) — unit tests on every push; archive → notarize → DMG → GitHub Release on `v*` tags.
+
+## Product Logic
+
+- **Global Hotkeys**: Carbon `RegisterEventHotKey` API (no Accessibility permission needed); each `KeyCombo` is registered individually and fires a targeted callback.
+- **Shortcuts**: Each `Shortcut` has a `KeyCombo`, a `ShortcutAction` (launch app / run inline script / run script file), and metadata (`isEnabled`, `createdAt`, `modifiedAt`, `lastTriggeredAt`).
+- **iCloud Sync**: Optional, uses ubiquity container `iCloud.com.taptik.app`; last-writer-wins merge by UUID + `modifiedAt`; currently disabled pending provisioning profile.
+- **Persistence**: Local JSON at `~/Library/Application Support/TapTik/shortcuts.json`; cloud mirror at `iCloud.com.taptik.app/Documents/shortcuts.json`.
+
+## Component Map
+
+- **App entry point**: `Sources/TapTik/App/TapTikApp.swift` — `@main`, MenuBarExtra, Settings Window, environment wiring.
+- **Hotkey engine**: `Sources/TapTikKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, `ShortcutExecutor` invocation.
+- **Data layer**: `Sources/TapTikKit/Services/ShortcutStore.swift` — CRUD, disk I/O, cloud sync coordination.
+- **Cloud sync**: `Sources/TapTikKit/Services/CloudSyncService.swift` — NSMetadataQuery monitoring, upload/download, merge algorithm.
+- **Action execution**: `Sources/TapTikKit/Services/ShortcutExecutor.swift` — app toggle/launch, inline script, script file.
+- **Settings UI**: `Sources/TapTikKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`.
+- **Menu bar UI**: `Sources/TapTikKit/Views/MenuBarView.swift` — dropdown with shortcut rows, settings/quit buttons.
+- **Bundle IDs**: App `com.taptik.app`; iCloud container `iCloud.com.taptik.app`.

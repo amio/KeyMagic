@@ -188,7 +188,7 @@ struct GeneralSettingsView: View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
         return Section {
-            Text("KeyMagic \(version) (\(build))")
+            Text("TapTik \(version) (\(build))")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity)
@@ -217,7 +217,7 @@ struct GeneralSettingsView: View {
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "keymagic-shortcuts.json"
+        panel.nameFieldStringValue = "taptik-shortcuts.json"
 
         if panel.runModal() == .OK, let url = panel.url {
             try? data.write(to: url)

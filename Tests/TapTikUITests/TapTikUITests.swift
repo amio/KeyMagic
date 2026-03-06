@@ -1,6 +1,6 @@
 import XCTest
 
-final class KeyMagicUITests: XCTestCase {
+final class TapTikUITests: XCTestCase {
 
     var app: XCUIApplication!
 
@@ -18,16 +18,17 @@ final class KeyMagicUITests: XCTestCase {
 
     func testSettingsWindowOpens() throws {
         // The settings window should be available
-        let window = app.windows["KeyMagic Settings"]
+        let window = app.windows["TapTik Settings"]
         // Give it a moment to appear
         let exists = window.waitForExistence(timeout: 5)
         // Note: The window might not open automatically since it's a menu bar app.
         // This test verifies the basic launch works.
         XCTAssertTrue(app.exists)
+        _ = exists
     }
 
     func testEmptyStateShowsPlaceholder() throws {
-        let window = app.windows["KeyMagic Settings"]
+        let window = app.windows["TapTik Settings"]
         if window.waitForExistence(timeout: 5) {
             // Should show "No Shortcut Selected" or similar empty state
             let noSelection = window.staticTexts["No Shortcut Selected"]
@@ -38,7 +39,7 @@ final class KeyMagicUITests: XCTestCase {
     }
 
     func testAddButtonExists() throws {
-        let window = app.windows["KeyMagic Settings"]
+        let window = app.windows["TapTik Settings"]
         if window.waitForExistence(timeout: 5) {
             let addButton = window.buttons["Add Shortcut"]
             if addButton.waitForExistence(timeout: 3) {

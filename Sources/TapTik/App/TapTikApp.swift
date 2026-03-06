@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import KeyMagicKit
+import TapTikKit
 
 @MainActor
 final class AppState: ObservableObject {
@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !showDockIcon {
             NSApp.setActivationPolicy(.accessory)
         }
-        
+
         let hasLaunchedBefore = UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
         if !hasLaunchedBefore {
             UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
@@ -26,13 +26,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             // Close the settings window automatically created by SwiftUI on subsequent launches
             for window in NSApp.windows {
-                if window.title == "KeyMagic Settings" || window.identifier?.rawValue == "settings" {
+                if window.title == "TapTik Settings" || window.identifier?.rawValue == "settings" {
                     window.close()
                 }
             }
         }
     }
-    
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
             AppState.shared.openSettingsTrigger += 1
@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// KeyMagic — a utility app for launching apps and running scripts via global hotkeys.
+/// TapTik — a utility app for launching apps and running scripts via global hotkeys.
 ///
 /// Architecture:
 /// - The app lives primarily in the menu bar (MenuBarExtra).
@@ -51,11 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// - Login item is managed through ServiceManagement.
 /// - Shortcuts are optionally synced across Macs via iCloud Drive.
 @main
-struct KeyMagicApp: App {
+struct TapTikApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var appState = AppState.shared
     @Environment(\.openWindow) private var openWindow
-    
+
     @State private var cloudSync = CloudSyncService()
     @State private var store: ShortcutStore
     @State private var hotkeyService = HotkeyService()
@@ -70,7 +70,7 @@ struct KeyMagicApp: App {
 
     var body: some Scene {
         // MARK: - Menu Bar
-        MenuBarExtra("KeyMagic", systemImage: "keyboard.badge.ellipsis") {
+        MenuBarExtra("TapTik", systemImage: "keyboard.badge.ellipsis") {
             MenuBarView()
                 .environment(store)
                 .environment(hotkeyService)
@@ -80,7 +80,7 @@ struct KeyMagicApp: App {
         }
 
         // MARK: - Settings Window
-        Window("KeyMagic Settings", id: "settings") {
+        Window("TapTik Settings", id: "settings") {
             SettingsView()
                 .environment(store)
                 .environment(hotkeyService)

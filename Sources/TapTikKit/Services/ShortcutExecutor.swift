@@ -42,7 +42,7 @@ final class ShortcutExecutor: Sendable {
             guard let url = NSWorkspace.shared.urlForApplication(
                 withBundleIdentifier: bundleIdentifier
             ) else {
-                print("KeyMagic: App not found: \(bundleIdentifier)")
+                print("TapTik: App not found: \(bundleIdentifier)")
                 return
             }
 
@@ -51,7 +51,7 @@ final class ShortcutExecutor: Sendable {
 
             NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
                 if let error {
-                    print("KeyMagic: Failed to launch app: \(error)")
+                    print("TapTik: Failed to launch app: \(error)")
                 }
             }
         }
@@ -71,10 +71,10 @@ final class ShortcutExecutor: Sendable {
                 try process.run()
                 process.waitUntilExit()
                 if process.terminationStatus != 0 {
-                    print("KeyMagic: Script exited with code \(process.terminationStatus)")
+                    print("TapTik: Script exited with code \(process.terminationStatus)")
                 }
             } catch {
-                print("KeyMagic: Failed to run script: \(error)")
+                print("TapTik: Failed to run script: \(error)")
             }
         }
     }
@@ -82,7 +82,7 @@ final class ShortcutExecutor: Sendable {
     private func runScriptFile(path: String, shell: ShortcutAction.ShellType) {
         let expandedPath = NSString(string: path).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expandedPath) else {
-                print("KeyMagic: Script file not found: \(expandedPath)")
+                print("TapTik: Script file not found: \(expandedPath)")
             return
         }
 
@@ -97,10 +97,10 @@ final class ShortcutExecutor: Sendable {
                 try process.run()
                 process.waitUntilExit()
                 if process.terminationStatus != 0 {
-                    print("KeyMagic: Script exited with code \(process.terminationStatus)")
+                    print("TapTik: Script exited with code \(process.terminationStatus)")
                 }
             } catch {
-                print("KeyMagic: Failed to run script file: \(error)")
+                print("TapTik: Failed to run script file: \(error)")
             }
         }
     }
