@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 import TapTickKit
 
@@ -8,28 +9,64 @@ final class AppState: ObservableObject {
     @Published var openSettingsTrigger = 0
 }
 
+/// Returns `true` when this process was launched by launchd (login item / system boot),
+/// rather than directly by the user (Dock, Finder, Terminal, etc.).
+///
+/// The heuristic compares the parent-process name: launchd always has PID 1 and name
+/// "launchd". Any interactive launch will have a parent such as "Dock" or "launchservicesd".
+private func isLaunchedByLoginItem() -> Bool {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.stride
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getppid()]
+    sysctl(&mib, 4, &info, &size, nil, 0)
+    let parentName = withUnsafeBytes(of: info.kp_proc.p_comm) { bytes in
+        bytes.baseAddress.flatMap { String(validatingCString: $0.assumingMemoryBound(to: CChar.self)) } ?? ""
+    }
+    return parentName == "launchd"
+}
+
 /// Applies the dock icon policy once at launch based on the stored user preference.
 /// Using an app delegate avoids the crash from accessing `NSApp` in the `App.init()`,
 /// where `NSApplication.shared` has not yet been created.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let hasLaunchedBefore = UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
+
+        if !hasLaunchedBefore {
+            // First launch: apply defaults and register login item
+            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+            // showDockIcon defaults to true — no write needed; @AppStorage default handles UI,
+            // but AppDelegate reads UserDefaults directly, so seed the value explicitly.
+            if UserDefaults.standard.object(forKey: "showDockIcon") == nil {
+                UserDefaults.standard.set(true, forKey: "showDockIcon")
+            }
+            // Enable launch at login by default on first launch
+            try? SMAppService.mainApp.register()
+
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            let launchedBySystem = isLaunchedByLoginItem()
+
+            if launchedBySystem {
+                // Launched by login item: close the settings window SwiftUI opens automatically.
+                // Defer to the next run-loop cycle to ensure SwiftUI has created the window first.
+                DispatchQueue.main.async {
+                    for window in NSApp.windows {
+                        if window.title == "TapTick Settings" || window.identifier?.rawValue == "settings" {
+                            window.close()
+                        }
+                    }
+                }
+            } else {
+                // Launched manually by the user: settings window is already opened by SwiftUI.
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+
         let showDockIcon = UserDefaults.standard.bool(forKey: "showDockIcon")
         if !showDockIcon {
             NSApp.setActivationPolicy(.accessory)
-        }
-
-        let hasLaunchedBefore = UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
-        if !hasLaunchedBefore {
-            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-            NSApp.activate(ignoringOtherApps: true)
-        } else {
-            // Close the settings window automatically created by SwiftUI on subsequent launches
-            for window in NSApp.windows {
-                if window.title == "TapTick Settings" || window.identifier?.rawValue == "settings" {
-                    window.close()
-                }
-            }
         }
     }
 

@@ -8,7 +8,7 @@ struct GeneralSettingsView: View {
     @Environment(CloudSyncService.self) private var cloudSync
     @Environment(UpdateService.self) private var updateService
 
-    @AppStorage("showDockIcon") private var showDockIcon = false
+    @AppStorage("showDockIcon") private var showDockIcon = true
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
 
     var body: some View {
