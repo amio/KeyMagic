@@ -110,6 +110,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return true
     }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
 }
 
 /// TapTick — a utility app for launching apps and running scripts via global hotkeys.
