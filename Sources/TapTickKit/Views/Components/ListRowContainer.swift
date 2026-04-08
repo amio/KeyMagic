@@ -1,18 +1,10 @@
 import SwiftUI
 
 /// A shared table header used in ApplicationsView and ScriptsView.
-/// Renders column labels with consistent caption styling and a tinted background.
+/// Renders column labels with consistent caption styling without adding a tint
+/// layer that can bleed into nearby liquid glass surfaces.
 struct ListTableHeader<Content: View>: View {
     @ViewBuilder let content: () -> Content
-    var backgroundStyle: AnyShapeStyle = AnyShapeStyle(.quaternary.opacity(0.5))
-
-    init(
-        backgroundStyle: AnyShapeStyle = AnyShapeStyle(.quaternary.opacity(0.5)),
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.content = content
-        self.backgroundStyle = backgroundStyle
-    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -23,7 +15,10 @@ struct ListTableHeader<Content: View>: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 20)
         .padding(.vertical, 6)
-        .background(backgroundStyle)
+        .background(Color.clear)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

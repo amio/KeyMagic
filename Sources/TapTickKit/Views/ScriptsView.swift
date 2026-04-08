@@ -95,14 +95,12 @@ struct ScriptsView: View {
                 Spacer()
             } else {
                 // Header
-                ListTableHeader(
-                    backgroundStyle: AnyShapeStyle(Color(.windowBackgroundColor)),
-                    content: {
+                ListTableHeader {
                     Text("Name")
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("Hotkey")
                         .frame(width: 100, alignment: .leading)
-                })
+                }
 
                 ScrollView {
                     LazyVStack(spacing: 0) {
