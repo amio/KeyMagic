@@ -10,11 +10,13 @@ struct GeneralSettingsView: View {
 
     @AppStorage("showDockIcon") private var showDockIcon = true
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+    @State private var isRecordingSettingsWindowHotkey = false
 
     var body: some View {
         Form {
             statusSection
             startupSection
+            globalHotkeysSection
             dataAndSyncSection
             updatesSection
             versionFooterSection
@@ -64,6 +66,50 @@ struct GeneralSettingsView: View {
             Toggle("Show Menu Bar Icon", isOn: $showMenuBarIcon)
         } header: {
             Text("Startup & Appearance")
+        }
+    }
+
+    // MARK: - Global Hotkeys
+
+    private var globalHotkeysSection: some View {
+        Section {
+            LabeledContent("Toggle Settings Window") {
+                HStack(spacing: 8) {
+                    HotkeyBindingControl(
+                        keyCombo: hotkeyService.settingsWindowHotkey,
+                        isRecording: isRecordingSettingsWindowHotkey,
+                        onStartRecording: {
+                            isRecordingSettingsWindowHotkey = true
+                        },
+                        onRecordKey: { combo in
+                            hotkeyService.updateSettingsWindowHotkey(combo)
+                            isRecordingSettingsWindowHotkey = false
+                        },
+                        onCancelRecording: {
+                            isRecordingSettingsWindowHotkey = false
+                        },
+                        checkConflict: { combo in
+                            hotkeyService.hasConflict(
+                                keyCombo: combo,
+                                excludingSettingsWindowHotkey: true
+                            )
+                        },
+                        emptyTitle: "Record Hotkey"
+                    )
+
+                    Button("Default") {
+                        hotkeyService.restoreDefaultSettingsWindowHotkey()
+                    }
+                    .controlSize(.small)
+                    .disabled(hotkeyService.settingsWindowHotkey == HotkeyService.defaultSettingsWindowHotkey)
+                }
+            }
+
+            Text("Shows or hides the TapTick settings window from anywhere.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("Global Hotkeys")
         }
     }
 

@@ -1,3 +1,4 @@
+import Foundation
 import Carbon.HIToolbox
 import Observation
 
@@ -13,15 +14,24 @@ public final class HotkeyService: @unchecked Sendable {
     public init() {}
 
     private(set) var isListening = false
+    private(set) var settingsWindowHotkey = HotkeyService.loadSettingsWindowHotkey()
 
     /// Active registrations keyed by the Carbon hot-key ID (sequential UInt32).
     private var registrations: [UInt32: Registration] = [:]
     /// Monotonically increasing ID counter for Carbon hot-key handles.
     private var nextID: UInt32 = 1
+    /// Nested recorders can temporarily suspend global hotkeys without racing each other.
+    private var suspensionCount = 0
 
     private var store: ShortcutStore?
     private var executor: ShortcutExecutor?
     private var eventHandlerRef: EventHandlerRef?
+
+    static let settingsWindowHotkeyDefaultsKey = "settingsWindowHotkey"
+    static let defaultSettingsWindowHotkey = KeyCombo(
+        keyCode: UInt32(kVK_ANSI_Comma),
+        modifiers: [.command, .control, .option]
+    )
 
     // MARK: - Public API
 
@@ -34,8 +44,7 @@ public final class HotkeyService: @unchecked Sendable {
 
     /// Unregister all hotkeys and stop dispatching.
     func stop() {
-        registrations.values.forEach { UnregisterEventHotKey($0.ref) }
-        registrations.removeAll()
+        unregisterAllHotKeys()
         isListening = false
     }
 
@@ -52,17 +61,72 @@ public final class HotkeyService: @unchecked Sendable {
         exec.execute(action: shortcut.action)
     }
 
+    /// Returns true when a combo conflicts with either a user shortcut or the reserved settings hotkey.
+    func hasConflict(
+        keyCombo: KeyCombo,
+        excludingShortcutID: UUID? = nil,
+        excludingSettingsWindowHotkey: Bool = false
+    ) -> Bool {
+        let shortcutConflict = store?.hasConflict(keyCombo: keyCombo, excludingID: excludingShortcutID) ?? false
+        let settingsConflict = !excludingSettingsWindowHotkey && settingsWindowHotkey == keyCombo
+        return shortcutConflict || settingsConflict
+    }
+
+    /// Persist a new settings-window hotkey and rebuild registrations if needed.
+    func updateSettingsWindowHotkey(_ combo: KeyCombo) {
+        settingsWindowHotkey = combo
+        saveSettingsWindowHotkey(combo)
+        rebuildActiveRegistrationsIfPossible()
+    }
+
+    /// Restore the reserved settings-window hotkey to the app default.
+    func restoreDefaultSettingsWindowHotkey() {
+        updateSettingsWindowHotkey(Self.defaultSettingsWindowHotkey)
+    }
+
+    /// Temporarily unregister all global hotkeys while a recorder is active.
+    func suspendRegistrations() {
+        suspensionCount += 1
+        guard suspensionCount == 1 else { return }
+        unregisterAllHotKeys()
+        isListening = eventHandlerRef != nil
+    }
+
+    /// Re-register hotkeys after the last active recorder stops.
+    func resumeRegistrations() {
+        guard suspensionCount > 0 else { return }
+        suspensionCount -= 1
+        guard suspensionCount == 0 else { return }
+        rebuildActiveRegistrationsIfPossible()
+    }
+
     // MARK: - Registration
 
     private func rebuildRegistrations(store: ShortcutStore) {
-        registrations.values.forEach { UnregisterEventHotKey($0.ref) }
-        registrations.removeAll()
+        unregisterAllHotKeys()
 
         installEventHandlerIfNeeded()
 
+        guard suspensionCount == 0 else {
+            isListening = eventHandlerRef != nil
+            return
+        }
+
+        var registeredCombos = Set<KeyCombo>()
+
+        registerCombo(
+            settingsWindowHotkey,
+            action: .toggleSettingsWindow,
+            registeredCombos: &registeredCombos
+        )
+
         for shortcut in store.shortcuts where shortcut.isEnabled {
             guard let combo = shortcut.keyCombo else { continue }
-            registerCombo(combo, shortcutID: shortcut.id)
+            registerCombo(
+                combo,
+                action: .shortcut(shortcut.id),
+                registeredCombos: &registeredCombos
+            )
         }
 
         // Listening is considered active as long as the handler is installed,
@@ -70,7 +134,13 @@ public final class HotkeyService: @unchecked Sendable {
         isListening = eventHandlerRef != nil
     }
 
-    private func registerCombo(_ combo: KeyCombo, shortcutID: Shortcut.ID) {
+    private func registerCombo(
+        _ combo: KeyCombo,
+        action: RegistrationAction,
+        registeredCombos: inout Set<KeyCombo>
+    ) {
+        guard registeredCombos.insert(combo).inserted else { return }
+
         let id = nextID
         nextID += 1
 
@@ -87,7 +157,7 @@ public final class HotkeyService: @unchecked Sendable {
         )
 
         guard status == noErr, let ref else { return }
-        registrations[id] = Registration(ref: ref, shortcutID: shortcutID)
+        registrations[id] = Registration(ref: ref, action: action)
     }
 
     // MARK: - Carbon Event Handler
@@ -117,13 +187,45 @@ public final class HotkeyService: @unchecked Sendable {
 
     /// Called by the C-level event handler when a registered hotkey fires.
     fileprivate func handleHotKeyEvent(id: UInt32) {
-        guard let registration = registrations[id],
-              let store,
-              let shortcut = store.shortcuts.first(where: { $0.id == registration.shortcutID })
-        else { return }
+        guard let registration = registrations[id] else { return }
 
-        store.markTriggered(id: shortcut.id)
-        executor?.execute(action: shortcut.action)
+        switch registration.action {
+        case .shortcut(let shortcutID):
+            guard let store,
+                  let shortcut = store.shortcuts.first(where: { $0.id == shortcutID })
+            else { return }
+
+            store.markTriggered(id: shortcut.id)
+            executor?.execute(action: shortcut.action)
+
+        case .toggleSettingsWindow:
+            NotificationCenter.default.post(name: .toggleSettingsWindow, object: nil)
+        }
+    }
+
+    private func rebuildActiveRegistrationsIfPossible() {
+        guard let store else { return }
+        rebuildRegistrations(store: store)
+    }
+
+    private func unregisterAllHotKeys() {
+        registrations.values.forEach { UnregisterEventHotKey($0.ref) }
+        registrations.removeAll()
+    }
+
+    private static func loadSettingsWindowHotkey() -> KeyCombo {
+        guard let data = UserDefaults.standard.data(forKey: settingsWindowHotkeyDefaultsKey),
+              let combo = try? JSONDecoder().decode(KeyCombo.self, from: data)
+        else {
+            return defaultSettingsWindowHotkey
+        }
+
+        return combo
+    }
+
+    private func saveSettingsWindowHotkey(_ combo: KeyCombo) {
+        guard let data = try? JSONEncoder().encode(combo) else { return }
+        UserDefaults.standard.set(data, forKey: Self.settingsWindowHotkeyDefaultsKey)
     }
 }
 
@@ -132,7 +234,13 @@ public final class HotkeyService: @unchecked Sendable {
 /// Associates a Carbon EventHotKeyRef with a Shortcut UUID.
 private struct Registration {
     let ref: EventHotKeyRef
-    let shortcutID: Shortcut.ID
+    let action: RegistrationAction
+}
+
+/// Identifies what a registered Carbon hotkey should do when it fires.
+private enum RegistrationAction {
+    case shortcut(Shortcut.ID)
+    case toggleSettingsWindow
 }
 
 /// Four-char code used to namespace our hot-key IDs within the system.

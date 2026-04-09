@@ -8,6 +8,7 @@ final class AppState: ObservableObject {
     static let shared = AppState()
 
     @Published var openSettingsTrigger = 0
+    weak var settingsWindow: NSWindow?
 
     // MARK: - Shared Services
 
@@ -50,6 +51,7 @@ private func isLaunchedByLoginItem() -> Bool {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Observation token for the notification posted by `MenuBarController` to open settings.
     private var settingsNotificationObserver: Any?
+    private var toggleSettingsNotificationObserver: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let appState = AppState.shared
@@ -96,9 +98,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .openSettingsWindow,
             object: nil,
             queue: .main
-        ) { [weak appState] _ in
-            MainActor.assumeIsolated {
-                appState?.openSettingsTrigger += 1
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.openSettingsWindow()
+            }
+        }
+
+        toggleSettingsNotificationObserver = NotificationCenter.default.addObserver(
+            forName: .toggleSettingsWindow,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.toggleSettingsWindow()
             }
         }
     }
@@ -113,6 +125,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    private func openSettingsWindow() {
+        AppState.shared.openSettingsTrigger += 1
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func toggleSettingsWindow() {
+        if let window = currentSettingsWindow(), window.isVisible {
+            window.close()
+            return
+        }
+
+        openSettingsWindow()
+    }
+
+    private func currentSettingsWindow() -> NSWindow? {
+        AppState.shared.settingsWindow
+            ?? NSApp.windows.first(where: { $0.identifier == settingsWindowIdentifier })
     }
 }
 
@@ -139,6 +170,11 @@ struct TapTickApp: App {
                 .environment(appState.loginItemManager)
                 .environment(appState.cloudSync)
                 .environment(appState.updateService)
+                .background(SettingsWindowObserver { window in
+                    guard let window else { return }
+                    window.identifier = settingsWindowIdentifier
+                    appState.settingsWindow = window
+                })
                 .frame(minWidth: 890, minHeight: 520)
         }
         .windowResizability(.contentSize)
@@ -154,6 +190,39 @@ struct TapTickApp: App {
                 }
                 .disabled(!appState.updateService.canCheckForUpdates)
             }
+        }
+    }
+}
+
+private let settingsWindowIdentifier = NSUserInterfaceItemIdentifier("TapTick.settingsWindow")
+
+/// Captures the underlying NSWindow for the SwiftUI settings scene once it exists.
+private struct SettingsWindowObserver: NSViewRepresentable {
+    let onResolve: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> SettingsWindowObserverView {
+        let view = SettingsWindowObserverView()
+        view.onResolve = onResolve
+        return view
+    }
+
+    func updateNSView(_ nsView: SettingsWindowObserverView, context: Context) {
+        nsView.onResolve = onResolve
+        nsView.resolveWindow()
+    }
+}
+
+private final class SettingsWindowObserverView: NSView {
+    var onResolve: ((NSWindow?) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        resolveWindow()
+    }
+
+    func resolveWindow() {
+        DispatchQueue.main.async { [weak self] in
+            self?.onResolve?(self?.window)
         }
     }
 }

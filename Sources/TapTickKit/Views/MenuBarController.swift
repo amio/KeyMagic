@@ -292,6 +292,8 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
 public extension Notification.Name {
     /// Posted by `MenuBarController` when the user clicks "Settings…" in the menu bar dropdown.
     static let openSettingsWindow = Notification.Name("TapTick.openSettingsWindow")
+    /// Posted by `HotkeyService` when the reserved settings hotkey should toggle the window.
+    static let toggleSettingsWindow = Notification.Name("TapTick.toggleSettingsWindow")
 }
 
 // MARK: - UserDefaults KVO Key Path

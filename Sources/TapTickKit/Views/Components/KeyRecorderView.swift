@@ -10,6 +10,8 @@ import SwiftUI
 ///   Invalid combos (e.g. bare "S") show their characters but recording continues.
 /// - If the combo conflicts with an existing binding, an alert is shown and recording stops.
 struct KeyRecorderView: View {
+    @Environment(HotkeyService.self) private var hotkeyService
+
     @Binding var keyCombo: KeyCombo?
     var checkConflict: ((KeyCombo) -> Bool)?
     /// Called after a successful, non-conflicting record.
@@ -68,6 +70,7 @@ struct KeyRecorderView: View {
     private func startRecording() {
         isRecording = true
         previewText = nil
+        hotkeyService.suspendRegistrations()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             handleEvent(event)
             return nil
@@ -114,9 +117,13 @@ struct KeyRecorderView: View {
     }
 
     private func stopRecording() {
+        let hadMonitor = monitor != nil
         isRecording = false
         previewText = nil
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        if hadMonitor {
+            hotkeyService.resumeRegistrations()
+        }
     }
 }

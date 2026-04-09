@@ -109,9 +109,9 @@ struct ApplicationsView: View {
                                     toggleEnabled(for: app)
                                 },
                                 checkConflict: { combo in
-                                    store.hasConflict(
+                                    hotkeyService.hasConflict(
                                         keyCombo: combo,
-                                        excludingID: shortcutFor(app: app)?.id
+                                        excludingShortcutID: shortcutFor(app: app)?.id
                                     )
                                 }
                             )
@@ -311,7 +311,7 @@ private struct AppRow: View {
                 .frame(width: 70, alignment: .trailing)
         }
         // Tapping anywhere on the row toggles enabled; only active when a shortcut exists.
-        // Child controls (Toggle, HotkeyCellView buttons) intercept their own gestures first.
+        // Child controls (Toggle, hotkey binding buttons) intercept their own gestures first.
         .onTapGesture {
             guard shortcut != nil else { return }
             onToggleEnabled()

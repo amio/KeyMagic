@@ -124,7 +124,10 @@ struct ScriptsView: View {
                                     clearHotkey(for: shortcut)
                                 },
                                 checkConflict: { combo in
-                                    store.hasConflict(keyCombo: combo, excludingID: shortcut.id)
+                                    hotkeyService.hasConflict(
+                                        keyCombo: combo,
+                                        excludingShortcutID: shortcut.id
+                                    )
                                 }
                             )
                             .onTapGesture { selectedID = shortcut.id }

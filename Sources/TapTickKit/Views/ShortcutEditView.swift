@@ -3,6 +3,7 @@ import SwiftUI
 /// The edit/create form for a shortcut. Presented as a sheet.
 struct ShortcutEditView: View {
     @Environment(ShortcutStore.self) private var store
+    @Environment(HotkeyService.self) private var hotkeyService
     @Environment(\.dismiss) private var dismiss
 
     /// If editing an existing shortcut, this is set; otherwise it's a new shortcut.
@@ -48,7 +49,10 @@ struct ShortcutEditView: View {
                 TextField("Name", text: $name, prompt: Text("e.g. Open Terminal"))
 
                 KeyRecorderView(keyCombo: $keyCombo, checkConflict: { combo in
-                    store.hasConflict(keyCombo: combo, excludingID: editingShortcut?.id)
+                    hotkeyService.hasConflict(
+                        keyCombo: combo,
+                        excludingShortcutID: editingShortcut?.id
+                    )
                 })
             } header: {
                 Text("Shortcut")

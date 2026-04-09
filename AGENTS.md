@@ -73,18 +73,19 @@
 
 ## Product Logic
 
-- **Global Hotkeys**: Carbon `RegisterEventHotKey` API (no Accessibility permission needed); each `KeyCombo` is registered individually and fires a targeted callback.
+- **Global Hotkeys**: Carbon `RegisterEventHotKey` API (no Accessibility permission needed); each `KeyCombo` is registered individually, including the reserved settings-window toggle hotkey, and fires a targeted callback.
 - **Shortcuts**: Each `Shortcut` has a `KeyCombo`, a `ShortcutAction` (launch app / run inline script / run script file), and metadata (`isEnabled`, `createdAt`, `modifiedAt`, `lastTriggeredAt`).
 - **iCloud Sync**: Optional, uses ubiquity container `iCloud.com.taptick.app`; last-writer-wins merge by UUID + `modifiedAt`; currently disabled pending provisioning profile.
 - **Persistence**: Local JSON at `~/Library/Application Support/TapTick/shortcuts.json`; cloud mirror at `iCloud.com.taptick.app/Documents/shortcuts.json`.
 
 ## Component Map
 
-- **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, `AppState` (shared singleton owning all services), `AppDelegate` (lifecycle + `MenuBarController` init), Settings Window scene.
-- **Hotkey engine**: `Sources/TapTickKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, `ShortcutExecutor` invocation.
+- **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, `AppState` (shared singleton owning all services and the settings window reference), `AppDelegate` (lifecycle + settings-window toggle + `MenuBarController` init), Settings Window scene.
+- **Hotkey engine**: `Sources/TapTickKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, reserved settings-window hotkey persistence, shortcut conflict checks, and recorder suspension.
 - **Data layer**: `Sources/TapTickKit/Services/ShortcutStore.swift` — CRUD, disk I/O, cloud sync coordination.
 - **Cloud sync**: `Sources/TapTickKit/Services/CloudSyncService.swift` — NSMetadataQuery monitoring, upload/download, merge algorithm.
 - **Action execution**: `Sources/TapTickKit/Services/ShortcutExecutor.swift` — app toggle/launch, inline script, script file.
-- **Settings UI**: `Sources/TapTickKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`.
+- **Settings UI**: `Sources/TapTickKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`; `GeneralSettingsView` owns the reserved settings-window hotkey editor.
+- **Hotkey input UI**: `Sources/TapTickKit/Views/Components/HotkeyBindingControl.swift` owns the compact shared hotkey recording/binding interaction reused by settings surfaces.
 - **Menu bar UI**: `Sources/TapTickKit/Views/MenuBarController.swift` — native `NSStatusItem` + `NSMenu`; Observation-driven rebuild on shortcut changes; UserDefaults KVO show/hide; native key equivalent glyphs.
 - **Bundle IDs**: App `com.taptick.app`; iCloud container `iCloud.com.taptick.app`.
