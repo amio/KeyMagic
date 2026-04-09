@@ -74,19 +74,21 @@
 ## Product Logic
 
 - **Global Hotkeys**: Carbon `RegisterEventHotKey` API (no Accessibility permission needed); each `KeyCombo` is registered individually, including the reserved settings-window toggle hotkey, and fires a targeted callback.
+- **Built-In Features**: Native utilities live outside the user shortcut model, with their own persisted settings, reserved hotkeys, and permission-aware runtime services.
 - **Shortcuts**: Each `Shortcut` has a `KeyCombo`, a `ShortcutAction` (launch app / run inline script / run script file), and metadata (`isEnabled`, `createdAt`, `modifiedAt`, `lastTriggeredAt`).
 - **Installed App Discovery**: The Applications tab keeps the first discovered app snapshot in a shared in-memory catalog for the rest of the session, while later tab visits trigger silent background refreshes instead of returning to a loading-only state.
 - **iCloud Sync**: Optional, uses ubiquity container `iCloud.com.taptick.app`; last-writer-wins merge by UUID + `modifiedAt`; currently disabled pending provisioning profile.
-- **Persistence**: Local JSON at `~/Library/Application Support/TapTick/shortcuts.json`; cloud mirror at `iCloud.com.taptick.app/Documents/shortcuts.json`.
+- **Persistence**: User shortcuts persist to `~/Library/Application Support/TapTick/shortcuts.json` with optional cloud mirror at `iCloud.com.taptick.app/Documents/shortcuts.json`; built-in feature settings persist locally in `~/Library/Application Support/TapTick/built-in-features.json`.
 
 ## Component Map
 
-- **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, `AppState` (shared singleton owning all services and the settings window reference), `AppDelegate` (lifecycle + settings-window toggle + `MenuBarController` init), Settings Window scene.
-- **Hotkey engine**: `Sources/TapTickKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, reserved settings-window hotkey persistence, shortcut conflict checks, and recorder suspension.
+- **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, `AppState` (shared singleton owning all services, the built-in feature controller, and the settings window reference), `AppDelegate` (lifecycle, startup wiring, settings-window toggle, menu bar init, hotkey bootstrap), Settings Window scene.
+- **Hotkey engine**: `Sources/TapTickKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, reserved settings-window/built-in hotkeys, shortcut conflict checks, and recorder suspension.
 - **Data layer**: `Sources/TapTickKit/Services/ShortcutStore.swift` — CRUD, disk I/O, cloud sync coordination.
+- **Built-in feature runtime**: `Sources/TapTickKit/Services/BuiltInFeatureController.swift` and `Sources/TapTickKit/Services/KeystrokeOverlayService.swift` — built-in feature persistence, keystroke overlay permission flow, global key capture, and floating HUD presentation.
 - **Cloud sync**: `Sources/TapTickKit/Services/CloudSyncService.swift` — NSMetadataQuery monitoring, upload/download, merge algorithm.
 - **Action execution**: `Sources/TapTickKit/Services/ShortcutExecutor.swift` — app toggle/launch, inline script, script file.
-- **Settings UI**: `Sources/TapTickKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`; `GeneralSettingsView` owns the reserved settings-window hotkey editor.
+- **Settings UI**: `Sources/TapTickKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`, `BuiltInFeaturesView`; `BuiltInFeaturesView` owns the scalable built-in directory and the keystroke overlay settings panel.
 - **Applications catalog UI**: `Sources/TapTickKit/Views/ApplicationsView.swift` — shared discovered-app cache, background rescan policy, unavailable-app section, and per-app hotkey binding rows.
 - **Hotkey input UI**: `Sources/TapTickKit/Views/Components/HotkeyBindingControl.swift` owns the compact shared hotkey recording/binding interaction reused by settings surfaces.
 - **Menu bar UI**: `Sources/TapTickKit/Views/MenuBarController.swift` — native `NSStatusItem` + `NSMenu`; Observation-driven rebuild on shortcut changes; UserDefaults KVO show/hide; native key equivalent glyphs.

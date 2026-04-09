@@ -1,6 +1,14 @@
 # TapTick
 
-An Application Launcher, and Shell Script Runner. A Minimal hotkey manager for Mac.
+An application launcher, script runner, and native utility hub for macOS.
+
+TapTick currently covers three shortcut surfaces:
+
+- application launchers
+- shell scripts
+- built-in native features such as the keystroke subtitle overlay
+
+Some built-in features may require additional macOS permissions. The keystroke overlay uses Input Monitoring so it can observe global keyboard input and render an on-screen HUD.
 
 ![](./public/screenshot-apps.png)
 

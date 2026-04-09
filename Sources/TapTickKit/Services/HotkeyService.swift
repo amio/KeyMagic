@@ -24,6 +24,7 @@ public final class HotkeyService: @unchecked Sendable {
     private var suspensionCount = 0
 
     private var store: ShortcutStore?
+    private var builtInFeatures: BuiltInFeatureController?
     private var executor: ShortcutExecutor?
     private var eventHandlerRef: EventHandlerRef?
 
@@ -36,20 +37,23 @@ public final class HotkeyService: @unchecked Sendable {
     // MARK: - Public API
 
     /// Register all shortcuts in the store and begin dispatching.
-    func start(store: ShortcutStore) {
+    public func start(store: ShortcutStore, builtInFeatures: BuiltInFeatureController? = nil) {
         self.store = store
+        if let builtInFeatures {
+            self.builtInFeatures = builtInFeatures
+        }
         self.executor = ShortcutExecutor()
         rebuildRegistrations(store: store)
     }
 
     /// Unregister all hotkeys and stop dispatching.
-    func stop() {
+    public func stop() {
         unregisterAllHotKeys()
         isListening = false
     }
 
     /// Re-register all hotkeys (call after shortcuts change).
-    func restart(store: ShortcutStore) {
+    public func restart(store: ShortcutStore) {
         stop()
         start(store: store)
     }
@@ -65,11 +69,16 @@ public final class HotkeyService: @unchecked Sendable {
     func hasConflict(
         keyCombo: KeyCombo,
         excludingShortcutID: UUID? = nil,
-        excludingSettingsWindowHotkey: Bool = false
+        excludingSettingsWindowHotkey: Bool = false,
+        excludingBuiltInFeatureID: BuiltInFeatureID? = nil
     ) -> Bool {
         let shortcutConflict = store?.hasConflict(keyCombo: keyCombo, excludingID: excludingShortcutID) ?? false
         let settingsConflict = !excludingSettingsWindowHotkey && settingsWindowHotkey == keyCombo
-        return shortcutConflict || settingsConflict
+        let builtInConflict = builtInFeatures?.reservedHotkeyConflict(
+            for: keyCombo,
+            excluding: excludingBuiltInFeatureID
+        ) ?? false
+        return shortcutConflict || settingsConflict || builtInConflict
     }
 
     /// Persist a new settings-window hotkey and rebuild registrations if needed.
@@ -119,6 +128,14 @@ public final class HotkeyService: @unchecked Sendable {
             action: .toggleSettingsWindow,
             registeredCombos: &registeredCombos
         )
+
+        for builtInHotkey in builtInFeatures?.reservedHotkeys() ?? [] {
+            registerCombo(
+                builtInHotkey.combo,
+                action: .toggleBuiltInFeature(builtInHotkey.featureID),
+                registeredCombos: &registeredCombos
+            )
+        }
 
         for shortcut in store.shortcuts where shortcut.isEnabled {
             guard let combo = shortcut.keyCombo else { continue }
@@ -200,6 +217,9 @@ public final class HotkeyService: @unchecked Sendable {
 
         case .toggleSettingsWindow:
             NotificationCenter.default.post(name: .toggleSettingsWindow, object: nil)
+
+        case .toggleBuiltInFeature(let featureID):
+            builtInFeatures?.handleHotkey(for: featureID)
         }
     }
 
@@ -241,6 +261,7 @@ private struct Registration {
 private enum RegistrationAction {
     case shortcut(Shortcut.ID)
     case toggleSettingsWindow
+    case toggleBuiltInFeature(BuiltInFeatureID)
 }
 
 /// Four-char code used to namespace our hot-key IDs within the system.
