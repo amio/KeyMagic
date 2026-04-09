@@ -75,6 +75,7 @@
 
 - **Global Hotkeys**: Carbon `RegisterEventHotKey` API (no Accessibility permission needed); each `KeyCombo` is registered individually, including the reserved settings-window toggle hotkey, and fires a targeted callback.
 - **Shortcuts**: Each `Shortcut` has a `KeyCombo`, a `ShortcutAction` (launch app / run inline script / run script file), and metadata (`isEnabled`, `createdAt`, `modifiedAt`, `lastTriggeredAt`).
+- **Installed App Discovery**: The Applications tab keeps the first discovered app snapshot in a shared in-memory catalog for the rest of the session, while later tab visits trigger silent background refreshes instead of returning to a loading-only state.
 - **iCloud Sync**: Optional, uses ubiquity container `iCloud.com.taptick.app`; last-writer-wins merge by UUID + `modifiedAt`; currently disabled pending provisioning profile.
 - **Persistence**: Local JSON at `~/Library/Application Support/TapTick/shortcuts.json`; cloud mirror at `iCloud.com.taptick.app/Documents/shortcuts.json`.
 
@@ -86,6 +87,7 @@
 - **Cloud sync**: `Sources/TapTickKit/Services/CloudSyncService.swift` — NSMetadataQuery monitoring, upload/download, merge algorithm.
 - **Action execution**: `Sources/TapTickKit/Services/ShortcutExecutor.swift` — app toggle/launch, inline script, script file.
 - **Settings UI**: `Sources/TapTickKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`; `GeneralSettingsView` owns the reserved settings-window hotkey editor.
+- **Applications catalog UI**: `Sources/TapTickKit/Views/ApplicationsView.swift` — shared discovered-app cache, background rescan policy, unavailable-app section, and per-app hotkey binding rows.
 - **Hotkey input UI**: `Sources/TapTickKit/Views/Components/HotkeyBindingControl.swift` owns the compact shared hotkey recording/binding interaction reused by settings surfaces.
 - **Menu bar UI**: `Sources/TapTickKit/Views/MenuBarController.swift` — native `NSStatusItem` + `NSMenu`; Observation-driven rebuild on shortcut changes; UserDefaults KVO show/hide; native key equivalent glyphs.
 - **Bundle IDs**: App `com.taptick.app`; iCloud container `iCloud.com.taptick.app`.

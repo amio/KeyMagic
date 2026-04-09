@@ -1,4 +1,5 @@
 import Cocoa
+import Observation
 import SwiftUI
 
 /// Represents a discovered application on the system.
@@ -17,6 +18,56 @@ struct DiscoveredApp: Identifiable, Hashable {
     }
 }
 
+/** Sendable application metadata produced by background scanning before AppKit materialization. */
+private struct DiscoveredAppRecord: Sendable {
+    let id: String
+    let name: String
+    let path: String
+}
+
+/// Owns the app discovery lifecycle so the view can reuse the first loaded snapshot
+/// and refresh later scans without returning to a loading-only state.
+@MainActor
+@Observable
+private final class ApplicationsCatalog {
+    static let shared = ApplicationsCatalog()
+
+    private(set) var discoveredApps: [DiscoveredApp] = []
+    private(set) var hasLoadedSnapshot = false
+
+    private var refreshTask: Task<Void, Never>?
+
+    private init() {}
+
+    func refresh() {
+        refresh(priority: hasLoadedSnapshot ? .utility : .userInitiated)
+    }
+
+    private func refresh(priority: TaskPriority) {
+        guard refreshTask == nil else { return }
+
+        refreshTask = Task {
+            defer { refreshTask = nil }
+
+            let records = await Task.detached(priority: priority) {
+                ApplicationsView.scanApplicationRecords()
+            }.value
+
+            discoveredApps = records.map(Self.materializeApp)
+            hasLoadedSnapshot = true
+        }
+    }
+
+    private static func materializeApp(from record: DiscoveredAppRecord) -> DiscoveredApp {
+        DiscoveredApp(
+            id: record.id,
+            name: record.name,
+            path: record.path,
+            icon: NSWorkspace.shared.icon(forFile: record.path)
+        )
+    }
+}
+
 /// The Applications settings view: lists all system apps with hotkey binding support.
 ///
 /// Apps synced from other devices that are not installed locally appear in a separate
@@ -25,18 +76,17 @@ struct ApplicationsView: View {
     @Environment(ShortcutStore.self) private var store
     @Environment(HotkeyService.self) private var hotkeyService
 
-    @State private var discoveredApps: [DiscoveredApp] = []
+    @State private var applicationsCatalog = ApplicationsCatalog.shared
     @State private var searchText = ""
-    @State private var isLoading = true
     @State private var recordingAppID: String?
 
     /// All apps sorted: bound apps first, then alphabetical.
     private var sortedApps: [DiscoveredApp] {
         let filtered: [DiscoveredApp]
         if searchText.isEmpty {
-            filtered = discoveredApps
+            filtered = applicationsCatalog.discoveredApps
         } else {
-            filtered = discoveredApps.filter {
+            filtered = applicationsCatalog.discoveredApps.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText)
                     || $0.path.localizedCaseInsensitiveContains(searchText)
                     || $0.id.localizedCaseInsensitiveContains(searchText)
@@ -61,7 +111,7 @@ struct ApplicationsView: View {
 
     /// App shortcuts synced from other devices whose bundle ID isn't installed locally.
     private var unavailableAppShortcuts: [Shortcut] {
-        let localBundleIDs = Set(discoveredApps.map(\.id))
+        let localBundleIDs = Set(applicationsCatalog.discoveredApps.map(\.id))
         let query = searchText.lowercased()
 
         return store.shortcuts.filter { shortcut in
@@ -75,7 +125,7 @@ struct ApplicationsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if isLoading {
+            if applicationsCatalog.hasLoadedSnapshot == false {
                 Spacer()
                 ProgressView("Scanning applications...")
                 Spacer()
@@ -136,7 +186,7 @@ struct ApplicationsView: View {
         .navigationTitle("Applications")
         .searchable(text: $searchText, placement: .toolbar, prompt: "Search")
         .task {
-            await loadApps()
+            applicationsCatalog.refresh()
         }
     }
 
@@ -182,20 +232,10 @@ struct ApplicationsView: View {
         }
     }
 
-    @MainActor
-    private func loadApps() async {
-        isLoading = true
-        let apps = await Task.detached {
-            ApplicationsView.scanApplications()
-        }.value
-        discoveredApps = apps
-        isLoading = false
-    }
-
     // MARK: - App Discovery
 
-    private nonisolated static func scanApplications() -> [DiscoveredApp] {
-        var apps: [String: DiscoveredApp] = [:]
+    fileprivate nonisolated static func scanApplicationRecords() -> [DiscoveredAppRecord] {
+        var apps: [String: DiscoveredAppRecord] = [:]
 
         let searchDirs = [
             "/Applications",
@@ -220,13 +260,11 @@ struct ApplicationsView: View {
                 guard apps[bundleID] == nil else { continue }
 
                 let name = url.deletingPathExtension().lastPathComponent
-                let icon = NSWorkspace.shared.icon(forFile: fullPath)
 
-                apps[bundleID] = DiscoveredApp(
+                apps[bundleID] = DiscoveredAppRecord(
                     id: bundleID,
                     name: name,
-                    path: fullPath,
-                    icon: icon
+                    path: fullPath
                 )
             }
         }
