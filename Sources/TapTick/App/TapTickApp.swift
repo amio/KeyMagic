@@ -53,6 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Observation token for the notification posted by `MenuBarController` to open settings.
     private var settingsNotificationObserver: Any?
     private var toggleSettingsNotificationObserver: Any?
+    /// The app that was frontmost when the settings window was last shown via the toggle hotkey.
+    /// Restored on toggle-close so the user lands back where they started.
+    private var previousActiveApp: NSRunningApplication?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let appState = AppState.shared
@@ -156,10 +159,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (i.e. the user is actively looking at it). If the window is merely visible but
         // behind another app, the first press should bring it to front, not close it.
         if let window = currentSettingsWindow(), window.isVisible, window.isKeyWindow {
-            window.close()
+            // orderOut instead of close keeps the NSWindow instance alive so the next
+            // open can use makeKeyAndOrderFront directly without the SwiftUI scene hop.
+            window.orderOut(nil)
+            // Restore focus to wherever the user was before we took it.
+            // Guard against restoring to TapTick itself (no visible window would remain).
+            let app = previousActiveApp
+            previousActiveApp = nil
+            if app?.bundleIdentifier != Bundle.main.bundleIdentifier {
+                app?.activate()
+            }
             return
         }
 
+        // Carbon delivers the hotkey without activating TapTick, so frontmostApplication
+        // is still the user's previous app at this point — capture it before activate().
+        previousActiveApp = NSWorkspace.shared.frontmostApplication
         openSettingsWindow()
     }
 
