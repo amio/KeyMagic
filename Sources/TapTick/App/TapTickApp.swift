@@ -128,8 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            AppState.shared.openSettingsTrigger += 1
-            NSApp.activate(ignoringOtherApps: true)
+            openSettingsWindow()
         }
         return true
     }
@@ -139,12 +138,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openSettingsWindow() {
-        AppState.shared.openSettingsTrigger += 1
         NSApp.activate(ignoringOtherApps: true)
+        if let window = currentSettingsWindow() {
+            // Window already exists (ordered-out or behind another app): bring it directly
+            // to front via AppKit. This is synchronous and happens after activate(), so the
+            // window reliably appears on the first keypress — no deferred Combine/SwiftUI hop.
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            // Window hasn't been created yet (first launch after suppressed startup).
+            // Delegate to the SwiftUI scene mechanism to instantiate it.
+            AppState.shared.openSettingsTrigger += 1
+        }
     }
 
     private func toggleSettingsWindow() {
-        if let window = currentSettingsWindow(), window.isVisible {
+        // Only collapse the window when it is already the key window and the app is active
+        // (i.e. the user is actively looking at it). If the window is merely visible but
+        // behind another app, the first press should bring it to front, not close it.
+        if let window = currentSettingsWindow(), window.isVisible, window.isKeyWindow {
             window.close()
             return
         }
