@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 import Observation
 import SwiftUI
@@ -13,6 +14,13 @@ final class KeystrokeOverlayService {
     private var configuration = KeystrokeOverlayConfiguration.default
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+
+    /// After a combo keyDown, suppress flagsChanged until all modifiers are released.
+    private var suppressFlagsUntilRelease = false
+    /// Accumulated bare characters for consecutive typing (e.g. "HELLO").
+    private var accumulatedText: String?
+    /// Timestamp of the last presenter.show() call, used as the merge-window reference.
+    private var lastShowTimestamp: CFAbsoluteTime = 0
 
     func refreshPermissionStatus() -> EventListeningPermissionStatus {
         notifyPermissionStatus(currentPermissionStatus())
@@ -93,6 +101,8 @@ final class KeystrokeOverlayService {
 
     private func stopCapture() {
         presenter.hide(immediately: true)
+        suppressFlagsUntilRelease = false
+        accumulatedText = nil
 
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
@@ -129,30 +139,88 @@ final class KeystrokeOverlayService {
             }
         case .tapDisabledByUserInput:
             stopCapture()
-        case .flagsChanged, .keyDown:
+        case .flagsChanged:
             guard configuration.isEnabled else { return }
-            guard let text = overlayText(for: type, keyCode: keyCode, modifiers: modifiers) else { return }
-            presenter.show(text: text, configuration: configuration)
+            handleFlagsChanged(modifiers: modifiers)
+        case .keyDown:
+            guard configuration.isEnabled else { return }
+            handleKeyDown(keyCode: keyCode, modifiers: modifiers)
         default:
             break
         }
     }
 
-    private func overlayText(
-        for eventType: CGEventType,
-        keyCode: UInt32,
-        modifiers: KeyCombo.Modifiers
-    ) -> String? {
-        switch eventType {
-        case .flagsChanged:
-            return modifiers.isEmpty ? nil : modifiers.displayString
-        case .keyDown:
-            let combo = KeyCombo(keyCode: keyCode, modifiers: modifiers)
-            guard combo != configuration.hotkey else { return nil }
-            return combo.displayString
-        default:
-            return nil
+    // MARK: - Event State Machine
+
+    private func handleFlagsChanged(modifiers: KeyCombo.Modifiers) {
+        // Any modifier activity breaks character accumulation
+        accumulatedText = nil
+
+        // After a combo keyDown, suppress all flagsChanged until full release
+        if suppressFlagsUntilRelease {
+            if modifiers.isEmpty {
+                suppressFlagsUntilRelease = false
+            }
+            return
         }
+
+        guard !modifiers.isEmpty else { return }
+        presenter.show(text: modifiers.displayString, configuration: configuration)
+    }
+
+    private func handleKeyDown(keyCode: UInt32, modifiers: KeyCombo.Modifiers) {
+        let combo = KeyCombo(keyCode: keyCode, modifiers: modifiers)
+        guard combo != configuration.hotkey else { return }
+
+        if modifiers.isEmpty {
+            suppressFlagsUntilRelease = false
+
+            if Self.isTypeableCharacter(keyCode) {
+                let keyName = Self.typeableDisplayName(for: keyCode)
+                let now = CFAbsoluteTimeGetCurrent()
+                if let existing = accumulatedText,
+                   now - lastShowTimestamp < configuration.holdDuration {
+                    accumulatedText = existing + keyName
+                } else {
+                    accumulatedText = keyName
+                }
+                lastShowTimestamp = now
+                presenter.show(text: accumulatedText!, configuration: configuration)
+            } else {
+                // Non-typeable key (Return, arrows, function keys …) — show standalone
+                let keyName = KeyCodeMapping.keyName(for: keyCode)
+                accumulatedText = nil
+                lastShowTimestamp = CFAbsoluteTimeGetCurrent()
+                presenter.show(text: keyName, configuration: configuration)
+            }
+        } else {
+            // Combo with modifiers — show and arm suppression
+            accumulatedText = nil
+            suppressFlagsUntilRelease = true
+            lastShowTimestamp = CFAbsoluteTimeGetCurrent()
+            presenter.show(text: combo.displayString, configuration: configuration)
+        }
+    }
+
+    /// A key is "typeable" when it represents a character the user is typing:
+    /// letters, digits, punctuation, and space. Multi-character names like "F1"
+    /// and Unicode symbols like "↩" or "⌫" are excluded — they display standalone
+    /// and break any ongoing text accumulation.
+    private static func isTypeableCharacter(_ keyCode: UInt32) -> Bool {
+        if Int(keyCode) == kVK_Space { return true }
+        let name = KeyCodeMapping.keyName(for: keyCode)
+        guard let scalar = name.unicodeScalars.first,
+              name.unicodeScalars.count == 1 else {
+            return false
+        }
+        return scalar.value >= 0x21 && scalar.value <= 0x7E
+    }
+
+    /// Display name used inside accumulated text. Space renders as a literal
+    /// whitespace character instead of the symbolic "Space" label.
+    private static func typeableDisplayName(for keyCode: UInt32) -> String {
+        if Int(keyCode) == kVK_Space { return " " }
+        return KeyCodeMapping.keyName(for: keyCode)
     }
 }
 
