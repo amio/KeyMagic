@@ -119,14 +119,18 @@ private struct KeystrokeOverlaySettingsPane: View {
                 )
             )
 
-            LabeledContent("Capture Status") {
+            HStack {
+                Text("Capture Status")
+                Spacer(minLength: 16)
                 StatusPill(
                     title: builtInFeatures.isKeystrokeOverlayCapturing ? "Active" : "Inactive",
                     color: builtInFeatures.isKeystrokeOverlayCapturing ? .green : .secondary
                 )
             }
 
-            LabeledContent("Input Monitoring") {
+            HStack {
+                Text("Input Monitoring")
+                Spacer(minLength: 16)
                 StatusPill(
                     title: builtInFeatures.keystrokeOverlayPermission.title,
                     color: builtInFeatures.keystrokeOverlayPermission == .granted ? .green : .orange
@@ -252,11 +256,13 @@ private struct KeystrokeOverlaySettingsPane: View {
             LabeledContent("Foreground Color") {
                 ColorPicker("", selection: foregroundColorBinding, supportsOpacity: true)
                     .labelsHidden()
+                    .frame(height: 16)
             }
 
             LabeledContent("Background Color") {
                 ColorPicker("", selection: backgroundColorBinding, supportsOpacity: true)
                     .labelsHidden()
+                    .frame(height: 16)
             }
         } header: {
             Text("Appearance")
