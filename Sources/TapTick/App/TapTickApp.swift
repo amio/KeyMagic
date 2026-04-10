@@ -211,12 +211,13 @@ struct TapTickApp: App {
                 .background(SettingsWindowObserver { window in
                     guard let window else { return }
                     window.identifier = settingsWindowIdentifier
+                    window.styleMask.remove(.resizable)
                     appState.settingsWindow = window
                 })
-                .frame(minWidth: 890, minHeight: 520)
+                .frame(minWidth: 980, idealWidth: 980, maxWidth: 980,
+                       minHeight: 600, idealHeight: 600, maxHeight: 600)
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 980, height: 640)
         .defaultLaunchBehavior(.suppressed)
         .onChange(of: appState.openSettingsTrigger) {
             openWindow(id: "settings")

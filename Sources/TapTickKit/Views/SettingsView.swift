@@ -26,13 +26,12 @@ public struct SettingsView: View {
     }
 
     @State private var selectedTab: Tab = .applications
-
     public var body: some View {
         NavigationSplitView {
             List(Tab.allCases, id: \.self, selection: $selectedTab) { tab in
                 Label(tab.rawValue, systemImage: tab.systemImage)
             }
-            .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
+            .navigationSplitViewColumnWidth(180)
             .listStyle(.sidebar)
         } detail: {
             switch selectedTab {
