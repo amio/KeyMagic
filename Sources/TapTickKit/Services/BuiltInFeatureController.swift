@@ -56,6 +56,12 @@ public final class BuiltInFeatureController: @unchecked Sendable {
         set { configuration.keystrokeOverlay = newValue }
     }
 
+    /// Show a transient preview HUD on the actual screen, used by the settings UI
+    /// for live feedback on position and timing changes.
+    func showKeystrokeOverlayPreview() {
+        keystrokeOverlayService.showPreview(configuration: keystrokeOverlay)
+    }
+
     public func bootstrap() {
         keystrokeOverlayPermission = keystrokeOverlayService.refreshPermissionStatus()
         applyKeystrokeOverlayConfiguration(promptForPermission: false)

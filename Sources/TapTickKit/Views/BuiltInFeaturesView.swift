@@ -104,6 +104,7 @@ private struct KeystrokeOverlaySettingsPane: View {
             hotkeySection
             previewSection
             appearanceSection
+            positionSection
             timingSection
         }
         .formStyle(.grouped)
@@ -269,6 +270,26 @@ private struct KeystrokeOverlaySettingsPane: View {
         }
     }
 
+    private var positionSection: some View {
+        Section {
+            LabeledContent("Vertical Position") {
+                HStack(spacing: 12) {
+                    Slider(value: verticalPositionBinding.stepped(by: 0.01), in: 0 ... 1)
+                        .frame(width: 200)
+                    Text("\(Int(builtInFeatures.keystrokeOverlay.verticalPosition * 100))%")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(width: 42, alignment: .trailing)
+                }
+            }
+            .onChange(of: builtInFeatures.keystrokeOverlay.verticalPosition) {
+                builtInFeatures.showKeystrokeOverlayPreview()
+            }
+        } header: {
+            Text("Position")
+        }
+    }
+
     private var timingSection: some View {
         Section {
             LabeledContent("Visible Time") {
@@ -281,6 +302,9 @@ private struct KeystrokeOverlaySettingsPane: View {
                         .frame(width: 42, alignment: .trailing)
                 }
             }
+            .onChange(of: builtInFeatures.keystrokeOverlay.holdDuration) {
+                builtInFeatures.showKeystrokeOverlayPreview()
+            }
 
             LabeledContent("Fade Out") {
                 HStack(spacing: 12) {
@@ -292,9 +316,19 @@ private struct KeystrokeOverlaySettingsPane: View {
                         .frame(width: 42, alignment: .trailing)
                 }
             }
+            .onChange(of: builtInFeatures.keystrokeOverlay.fadeOutDuration) {
+                builtInFeatures.showKeystrokeOverlayPreview()
+            }
         } header: {
             Text("Timing")
         }
+    }
+
+    private var verticalPositionBinding: Binding<Double> {
+        Binding(
+            get: { builtInFeatures.keystrokeOverlay.verticalPosition },
+            set: { builtInFeatures.keystrokeOverlay.verticalPosition = $0 }
+        )
     }
 
     private var fontSizeBinding: Binding<Double> {

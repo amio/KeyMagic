@@ -147,6 +147,41 @@ struct KeystrokeOverlayConfiguration: Codable, Hashable, Sendable {
     var backgroundColor: RGBAColor
     var holdDuration: Double
     var fadeOutDuration: Double
+    /// Vertical position on screen as a fraction (0 = bottom, 1 = top).
+    var verticalPosition: Double
+
+    init(
+        isEnabled: Bool,
+        hotkey: KeyCombo,
+        fontSize: Double,
+        foregroundColor: RGBAColor,
+        backgroundColor: RGBAColor,
+        holdDuration: Double,
+        fadeOutDuration: Double,
+        verticalPosition: Double
+    ) {
+        self.isEnabled = isEnabled
+        self.hotkey = hotkey
+        self.fontSize = fontSize
+        self.foregroundColor = foregroundColor
+        self.backgroundColor = backgroundColor
+        self.holdDuration = holdDuration
+        self.fadeOutDuration = fadeOutDuration
+        self.verticalPosition = verticalPosition
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        hotkey = try container.decode(KeyCombo.self, forKey: .hotkey)
+        fontSize = try container.decode(Double.self, forKey: .fontSize)
+        foregroundColor = try container.decode(RGBAColor.self, forKey: .foregroundColor)
+        backgroundColor = try container.decode(RGBAColor.self, forKey: .backgroundColor)
+        holdDuration = try container.decode(Double.self, forKey: .holdDuration)
+        fadeOutDuration = try container.decode(Double.self, forKey: .fadeOutDuration)
+        verticalPosition = try container.decodeIfPresent(Double.self, forKey: .verticalPosition)
+            ?? Self.default.verticalPosition
+    }
 
     static let defaultHotkey = KeyCombo(
         keyCode: UInt32(kVK_ANSI_K),
@@ -165,7 +200,8 @@ struct KeystrokeOverlayConfiguration: Codable, Hashable, Sendable {
             alpha: 0.84
         ),
         holdDuration: 1.3,
-        fadeOutDuration: 0.28
+        fadeOutDuration: 0.28,
+        verticalPosition: 0.15
     )
 }
 

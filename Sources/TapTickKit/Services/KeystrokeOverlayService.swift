@@ -35,6 +35,13 @@ final class KeystrokeOverlayService {
         return notifyPermissionStatus(granted ? .granted : .denied)
     }
 
+    /// Show a transient preview HUD using the given configuration. Works regardless
+    /// of whether the overlay is enabled — used by the settings UI for live feedback
+    /// on position and timing changes.
+    func showPreview(configuration: KeystrokeOverlayConfiguration) {
+        presenter.show(text: "⌘C", configuration: configuration)
+    }
+
     func apply(
         configuration: KeystrokeOverlayConfiguration,
         promptForPermission: Bool
@@ -231,8 +238,10 @@ private final class KeystrokeOverlayPresenter {
     private lazy var panel = makePanel()
 
     private var hideTask: Task<Void, Never>?
+    private var currentConfiguration = KeystrokeOverlayConfiguration.default
 
     func update(configuration: KeystrokeOverlayConfiguration) {
+        currentConfiguration = configuration
         model.apply(configuration: configuration)
         if panel.isVisible {
             layoutPanel()
@@ -241,6 +250,7 @@ private final class KeystrokeOverlayPresenter {
 
     func show(text: String, configuration: KeystrokeOverlayConfiguration) {
         hideTask?.cancel()
+        currentConfiguration = configuration
         model.apply(configuration: configuration)
         model.text = text
 
@@ -310,9 +320,10 @@ private final class KeystrokeOverlayPresenter {
         guard let screen = targetScreen() else { return }
 
         let frame = screen.visibleFrame
+        let verticalSpace = frame.height - contentSize.height
         let origin = CGPoint(
             x: frame.midX - (contentSize.width / 2),
-            y: frame.minY + 56
+            y: frame.minY + verticalSpace * currentConfiguration.verticalPosition
         )
 
         panel.setFrameOrigin(origin)
