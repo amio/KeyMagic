@@ -7,7 +7,7 @@
 **Pre-Task**: Before executing any assigned task, agents must conduct a thorough analysis of the relevant codebase to understand the context and potential impact of their changes. This includes:
   - **Contextual Audit**: Perform a comprehensive audit of relevant code for context and impact.
   - **Proactive Ownership**: Prioritize "why" over "how." Challenge sub-optimal architectures rather than passive execution.
-  - **Strategic Research**: Formulate the optimal approach considering system-wide implications. Consolidate insights into `docs/research/{date}-{topic}.md`.
+  - **Strategic Research**: Formulate the optimal approach considering system-wide implications. Consolidate insights into `docs/{date}-{topic}.md`.
 
 **Post Task**: After completing the assigned task, agents must:
   - **Refinement**: Review the complete changeset; refactor for maximum simplicity and resolve all diagnostic errors.
