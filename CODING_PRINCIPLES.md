@@ -6,3 +6,6 @@
 
 **Principle**: Separate Runtime Lifecycles From Tuning Lifecycles
 **Cases**: (a) Split keystroke overlay capture shutdown from preview shutdown so disabled-state reconfiguration no longer tears down the live tuning HUD and preview can temporarily suppress event-driven text.
+
+**Principle**: Keep Repository Inputs Separate From Local Build Artifacts
+**Cases**: (a) Removed root-level compiler byproducts and a standalone scratch app from version control, then pinned them in `.gitignore` so the repo only tracks files that participate in the product graph.

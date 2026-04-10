@@ -6,6 +6,11 @@ TapTick.xcodeproj/
 # Build
 build/
 DerivedData/
+/DesignTokens-2.d
+/DesignTokens-2.dia
+/DesignTokens-2.swiftdeps
+/test_app
+/test_app.swift
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 
