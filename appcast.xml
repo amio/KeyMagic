@@ -3,6 +3,15 @@
     <channel>
         <title>KeyMagic</title>
         <item>
+            <title>1.2.1</title>
+            <pubDate>Fri, 10 Apr 2026 03:23:25 +0000</pubDate>
+            <link>https://amio.github.io/TapTick/</link>
+            <sparkle:version>24</sparkle:version>
+            <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/amio/TapTick/releases/download/v1.2.1/TapTick-1.2.1.dmg" length="3444194" type="application/octet-stream" sparkle:edSignature="EnmihD1Oowb8r875ZUsafrRksp3HpCGhl3Diabyj4Xqk5LmZGegEQn6wqXyNitt7Y5DG+l6xbn93NShyMTwsDA=="/>
+        </item>
+        <item>
             <title>1.2.0</title>
             <pubDate>Fri, 10 Apr 2026 03:08:51 +0000</pubDate>
             <link>https://amio.github.io/TapTick/</link>
@@ -19,15 +28,6 @@
             <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/amio/TapTick/releases/download/v1.1.0/TapTick-1.1.0.dmg" length="3301134" type="application/octet-stream" sparkle:edSignature="9Ti5ccCHspRjnTttR+COsWqm/1jf+U+35saScuDlNm0pp8pU/yASUwB8vKepdBShlLsHywmmaouk4LcsBboFAQ=="/>
-        </item>
-        <item>
-            <title>1.0.0+b21</title>
-            <pubDate>Tue, 10 Mar 2026 01:01:17 +0000</pubDate>
-            <link>https://amio.github.io/TapTick/</link>
-            <sparkle:version>21</sparkle:version>
-            <sparkle:shortVersionString>1.0.0+b21</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/amio/TapTick/releases/download/v1.0.0+b21/TapTick-1.0.0+b21.dmg" length="3272499" type="application/octet-stream" sparkle:edSignature="vvO4Q3A7/i9IAxIE5fdfpm+DLM/iT8+skMyfoRrDvHclPk2lHjo2zaPJ5ViflwTYUAcctUtHaPBPGdn1px5VDA=="/>
         </item>
     </channel>
 </rss>
