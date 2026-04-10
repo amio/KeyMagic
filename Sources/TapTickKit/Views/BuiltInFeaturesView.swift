@@ -240,25 +240,24 @@ private struct KeystrokeOverlaySettingsPane: View {
         Section {
             LabeledContent("Font Size") {
                 HStack(spacing: 12) {
-                    Slider(value: fontSizeBinding, in: 18 ... 72, step: 1)
-                        .frame(width: 220)
+                    Slider(value: fontSizeBinding.stepped(by: 1), in: 18 ... 72)
+                        .frame(width: 200)
                     Text("\(Int(builtInFeatures.keystrokeOverlay.fontSize)) pt")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .frame(width: 42, alignment: .trailing)
                 }
             }
 
-            ColorPicker(
-                "Foreground Color",
-                selection: foregroundColorBinding,
-                supportsOpacity: true
-            )
+            LabeledContent("Foreground Color") {
+                ColorPicker("", selection: foregroundColorBinding, supportsOpacity: true)
+                    .labelsHidden()
+            }
 
-            ColorPicker(
-                "Background Color",
-                selection: backgroundColorBinding,
-                supportsOpacity: true
-            )
+            LabeledContent("Background Color") {
+                ColorPicker("", selection: backgroundColorBinding, supportsOpacity: true)
+                    .labelsHidden()
+            }
         } header: {
             Text("Appearance")
         }
@@ -268,21 +267,23 @@ private struct KeystrokeOverlaySettingsPane: View {
         Section {
             LabeledContent("Visible Time") {
                 HStack(spacing: 12) {
-                    Slider(value: holdDurationBinding, in: 0.4 ... 4, step: 0.1)
-                        .frame(width: 220)
-                    Text("\(builtInFeatures.keystrokeOverlay.holdDuration.formatted(.number.precision(.fractionLength(1)))) s")
+                    Slider(value: holdDurationBinding.stepped(by: 0.1), in: 0.4 ... 4)
+                        .frame(width: 200)
+                    Text("\(builtInFeatures.keystrokeOverlay.holdDuration.formatted(.number.precision(.fractionLength(2)))) s")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .frame(width: 42, alignment: .trailing)
                 }
             }
 
             LabeledContent("Fade Out") {
                 HStack(spacing: 12) {
-                    Slider(value: fadeOutDurationBinding, in: 0.1 ... 1.4, step: 0.05)
-                        .frame(width: 220)
+                    Slider(value: fadeOutDurationBinding.stepped(by: 0.05), in: 0.1 ... 1.4)
+                        .frame(width: 200)
                     Text("\(builtInFeatures.keystrokeOverlay.fadeOutDuration.formatted(.number.precision(.fractionLength(2)))) s")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .frame(width: 42, alignment: .trailing)
                 }
             }
         } header: {
@@ -322,6 +323,19 @@ private struct KeystrokeOverlaySettingsPane: View {
         Binding(
             get: { builtInFeatures.keystrokeOverlay.backgroundColor.color },
             set: { builtInFeatures.keystrokeOverlay.backgroundColor = RGBAColor(NSColor($0)) }
+        )
+    }
+}
+
+// MARK: - Helpers
+
+private extension Binding where Value == Double {
+    /** Returns a derived binding that snaps to the nearest multiple of `step`, avoiding
+     tick marks that SwiftUI adds to `NSSlider` when the `step:` parameter is used. */
+    func stepped(by step: Double) -> Binding<Double> {
+        Binding(
+            get: { wrappedValue },
+            set: { wrappedValue = (($0 / step).rounded() * step * 1e10).rounded() / 1e10 }
         )
     }
 }
