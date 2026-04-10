@@ -206,7 +206,7 @@ private struct KeystrokeOverlaySettingsPane: View {
                 HStack {
                     Spacer(minLength: 0)
 
-                    Text("⌘⌃⌥K")
+                    Text(builtInFeatures.keystrokeOverlay.hotkey.displayString)
                         .font(.system(
                             size: builtInFeatures.keystrokeOverlay.fontSize,
                             weight: .semibold,
