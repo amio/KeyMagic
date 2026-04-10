@@ -27,6 +27,27 @@ struct UtilitiesControllerTests {
         #expect(reloaded.keystrokeOverlay.hotkey == overrideHotkey)
     }
 
+    @Test("Preview sessions suppress event presentations until they expire")
+    func previewSessionsSuppressEventPresentations() {
+        var coordinator = KeystrokeOverlayPresentationCoordinator()
+        coordinator.begin(.preview)
+
+        #expect(coordinator.isPreviewActive)
+        #expect(coordinator.allowsEventPresentation == false)
+        #expect(coordinator.stopCapture() == .keepPresentation)
+        #expect(coordinator.isPreviewActive)
+    }
+
+    @Test("Stopping capture only dismisses event presentations")
+    func stoppingCaptureDismissesOnlyEventPresentations() {
+        var coordinator = KeystrokeOverlayPresentationCoordinator()
+        coordinator.begin(.event)
+
+        #expect(coordinator.allowsEventPresentation)
+        #expect(coordinator.stopCapture() == .hidePresentation)
+        #expect(coordinator.activeIntent == nil)
+    }
+
     private func makeDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("TapTickUtilities-\(UUID().uuidString)")

@@ -19,7 +19,7 @@ final class KeystrokeOverlayService {
     private var suppressFlagsUntilRelease = false
     /// Accumulated bare characters for consecutive typing (e.g. "HELLO").
     private var accumulatedText: String?
-    /// Timestamp of the last presenter.show() call, used as the merge-window reference.
+    /// Timestamp of the last event presentation, used as the merge-window reference.
     private var lastShowTimestamp: CFAbsoluteTime = 0
 
     func refreshPermissionStatus() -> EventListeningPermissionStatus {
@@ -35,11 +35,11 @@ final class KeystrokeOverlayService {
         return notifyPermissionStatus(granted ? .granted : .denied)
     }
 
-    /// Show a transient preview HUD using the given configuration. Works regardless
-    /// of whether the overlay is enabled — used by the settings UI for live feedback
-    /// on position and timing changes.
+    /// Show a settings-driven preview HUD using the given configuration. Works
+    /// regardless of whether the overlay is enabled and keeps the HUD alive for
+    /// one full visible-time interval from the latest settings change.
     func showPreview(configuration: KeystrokeOverlayConfiguration) {
-        presenter.show(text: configuration.hotkey.displayString, configuration: configuration)
+        presenter.showPreview(text: configuration.hotkey.displayString, configuration: configuration)
     }
 
     func apply(
@@ -70,7 +70,7 @@ final class KeystrokeOverlayService {
         suppressFlagsUntilRelease = true
 
         if !wasCapturing, eventTap != nil {
-            presenter.show(text: "Keystroke Overlay On", configuration: configuration)
+            presenter.showEvent(text: "Keystroke Overlay On", configuration: configuration)
         }
 
         return permissionStatus
@@ -116,7 +116,7 @@ final class KeystrokeOverlayService {
     }
 
     private func stopCapture() {
-        presenter.hide(immediately: true)
+        presenter.dismissEventPresentationIfNeeded()
         suppressFlagsUntilRelease = false
         accumulatedText = nil
 
@@ -172,6 +172,13 @@ final class KeystrokeOverlayService {
         // Any modifier activity breaks character accumulation
         accumulatedText = nil
 
+        if presenter.isPreviewActive {
+            if modifiers.isEmpty {
+                suppressFlagsUntilRelease = false
+            }
+            return
+        }
+
         // After a combo keyDown, suppress all flagsChanged until full release
         if suppressFlagsUntilRelease {
             if modifiers.isEmpty {
@@ -181,12 +188,18 @@ final class KeystrokeOverlayService {
         }
 
         guard !modifiers.isEmpty else { return }
-        presenter.show(text: modifiers.displayString, configuration: configuration)
+        presenter.showEvent(text: modifiers.displayString, configuration: configuration)
     }
 
     private func handleKeyDown(keyCode: UInt32, modifiers: KeyCombo.Modifiers) {
         let combo = KeyCombo(keyCode: keyCode, modifiers: modifiers)
         guard combo != configuration.hotkey else { return }
+
+        if presenter.isPreviewActive {
+            accumulatedText = nil
+            lastShowTimestamp = 0
+            return
+        }
 
         if modifiers.isEmpty {
             suppressFlagsUntilRelease = false
@@ -201,20 +214,20 @@ final class KeystrokeOverlayService {
                     accumulatedText = keyName
                 }
                 lastShowTimestamp = now
-                presenter.show(text: accumulatedText!, configuration: configuration)
+                presenter.showEvent(text: accumulatedText!, configuration: configuration)
             } else {
                 // Non-typeable key (Return, arrows, function keys …) — show standalone
                 let keyName = KeyCodeMapping.keyName(for: keyCode)
                 accumulatedText = nil
                 lastShowTimestamp = CFAbsoluteTimeGetCurrent()
-                presenter.show(text: keyName, configuration: configuration)
+                presenter.showEvent(text: keyName, configuration: configuration)
             }
         } else {
             // Combo with modifiers — show and arm suppression
             accumulatedText = nil
             suppressFlagsUntilRelease = true
             lastShowTimestamp = CFAbsoluteTimeGetCurrent()
-            presenter.show(text: combo.displayString, configuration: configuration)
+            presenter.showEvent(text: combo.displayString, configuration: configuration)
         }
     }
 
@@ -240,6 +253,45 @@ final class KeystrokeOverlayService {
     }
 }
 
+struct KeystrokeOverlayPresentationCoordinator {
+    enum Intent {
+        case event
+        case preview
+    }
+
+    enum CaptureShutdownDisposition {
+        case hidePresentation
+        case keepPresentation
+    }
+
+    private(set) var activeIntent: Intent?
+
+    var isPreviewActive: Bool {
+        activeIntent == .preview
+    }
+
+    var allowsEventPresentation: Bool {
+        activeIntent != .preview
+    }
+
+    mutating func begin(_ intent: Intent) {
+        activeIntent = intent
+    }
+
+    mutating func finishPresentation() {
+        activeIntent = nil
+    }
+
+    mutating func stopCapture() -> CaptureShutdownDisposition {
+        guard activeIntent == .event else {
+            return .keepPresentation
+        }
+
+        activeIntent = nil
+        return .hidePresentation
+    }
+}
+
 @MainActor
 private final class KeystrokeOverlayPresenter {
     private let model = KeystrokeOverlayPresentationModel()
@@ -248,70 +300,41 @@ private final class KeystrokeOverlayPresenter {
 
     private var hideTask: Task<Void, Never>?
     private var currentConfiguration = KeystrokeOverlayConfiguration.default
+    private var coordinator = KeystrokeOverlayPresentationCoordinator()
     /// True from the moment the panel is ordered in until the fade-out completes.
     private var isShowing = false
+
+    var isPreviewActive: Bool {
+        coordinator.isPreviewActive
+    }
 
     func update(configuration: KeystrokeOverlayConfiguration) {
         currentConfiguration = configuration
         model.apply(configuration: configuration)
         if panel.isVisible {
-            layoutPanel()
+            restoreVisiblePanel()
         }
     }
 
-    func show(text: String, configuration: KeystrokeOverlayConfiguration) {
-        hideTask?.cancel()
-        currentConfiguration = configuration
-        model.apply(configuration: configuration)
-        model.text = text
+    func showEvent(text: String, configuration: KeystrokeOverlayConfiguration) {
+        guard coordinator.allowsEventPresentation else { return }
+        present(text: text, configuration: configuration, intent: .event)
+    }
 
-        if isShowing {
-            // Already on screen — snap to full opacity (kills any in-progress
-            // fade-out) and update content/position without a fade-in animation.
-            panel.alphaValue = 1
-            layoutPanel()
-        } else {
-            // Fresh appearance — fade in.
-            isShowing = true
-            panel.alphaValue = 0
-            panel.orderFrontRegardless()
-            layoutPanel()
+    func showPreview(text: String, configuration: KeystrokeOverlayConfiguration) {
+        present(text: text, configuration: configuration, intent: .preview)
+    }
 
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
-                context.allowsImplicitAnimation = true
-                panel.animator().alphaValue = 1
-            }
-        }
-
-        hideTask = Task { [weak self] in
-            guard let self else { return }
-
-            try? await Task.sleep(nanoseconds: configuration.holdDuration.nanoseconds)
-            guard Task.isCancelled == false else { return }
-
-            await MainActor.run {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = configuration.fadeOutDuration
-                    context.allowsImplicitAnimation = true
-                    self.panel.animator().alphaValue = 0
-                }
-            }
-
-            try? await Task.sleep(nanoseconds: configuration.fadeOutDuration.nanoseconds)
-            guard Task.isCancelled == false else { return }
-
-            await MainActor.run {
-                self.isShowing = false
-                self.panel.orderOut(nil)
-            }
-        }
+    func dismissEventPresentationIfNeeded() {
+        guard coordinator.stopCapture() == .hidePresentation else { return }
+        hide(immediately: true)
     }
 
     func hide(immediately: Bool) {
         hideTask?.cancel()
         hideTask = nil
         isShowing = false
+        coordinator.finishPresentation()
 
         if immediately {
             panel.alphaValue = 0
@@ -321,10 +344,71 @@ private final class KeystrokeOverlayPresenter {
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
-            context.allowsImplicitAnimation = true
-            panel.animator().alphaValue = 0
+            panel.alphaValue = 0
         } completionHandler: {
             Task { @MainActor in
+                self.panel.orderOut(nil)
+            }
+        }
+    }
+
+    private func present(
+        text: String,
+        configuration: KeystrokeOverlayConfiguration,
+        intent: KeystrokeOverlayPresentationCoordinator.Intent
+    ) {
+        hideTask?.cancel()
+        currentConfiguration = configuration
+        coordinator.begin(intent)
+        model.apply(configuration: configuration)
+        model.text = text
+
+        if isShowing {
+            restoreVisiblePanel()
+        } else {
+            showPanel()
+        }
+
+        scheduleHide(using: configuration)
+    }
+
+    private func showPanel() {
+        isShowing = true
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        layoutPanel()
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            panel.alphaValue = 1
+        }
+    }
+
+    private func restoreVisiblePanel() {
+        panel.alphaValue = 1
+        layoutPanel()
+    }
+
+    private func scheduleHide(using configuration: KeystrokeOverlayConfiguration) {
+        hideTask = Task { [weak self] in
+            guard let self else { return }
+
+            try? await Task.sleep(nanoseconds: configuration.holdDuration.nanoseconds)
+            guard Task.isCancelled == false else { return }
+
+            await MainActor.run {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = configuration.fadeOutDuration
+                    self.panel.alphaValue = 0
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: configuration.fadeOutDuration.nanoseconds)
+            guard Task.isCancelled == false else { return }
+
+            await MainActor.run {
+                self.isShowing = false
+                self.coordinator.finishPresentation()
                 self.panel.orderOut(nil)
             }
         }

@@ -57,7 +57,11 @@ That model breaks down for system-native utilities that need dedicated permissio
   - background color
   - visible hold duration
   - fade-out duration
+  - vertical position
 - If input-listening permission is missing, the settings panel must communicate that clearly and offer a request flow.
+- While editing overlay settings, the live preview on the actual screen should behave like a persistent tuning session instead of a sequence of transient flashes.
+- Position and timing edits must keep the preview continuously visible, reusing the configured visible time as the keep-alive window so the HUD stays on screen while the user is actively dragging or nudging controls.
+- The preview should only begin fading after the latest settings change has been idle for one full visible-time interval, and then use the configured fade-out duration.
 
 ## Technical Spec
 
@@ -97,6 +101,13 @@ This keeps long-lived native features out of the generic shortcut schema and avo
   - capture service: owns the event tap, permission checks, and key event normalization
   - overlay presenter: owns a borderless floating panel and fade timing
 - The presenter should be reusable by future built-ins that may need temporary on-screen HUDs.
+- The presenter must support two display intents:
+  - event-driven transient display for real keystrokes
+  - settings-driven persistent preview for configuration tuning
+- Persistent preview is not a different visual component. It is the same HUD with different lifetime semantics: every relevant settings change refreshes content/layout immediately, cancels any pending fade, restores full opacity, and reschedules dismissal from the latest interaction timestamp.
+- The lifetime model should be deadline-based rather than animation-trigger-based. In practice, the presenter tracks a single “visible until” deadline and derives fade start from that deadline, which prevents flicker when many updates arrive in quick succession.
+- Position changes should relayout the existing visible panel in place instead of hiding and re-showing it, so the HUD appears to glide to the new location without blinking.
+- Timing changes should also apply in place. Updating visible time extends or shortens the current preview session from “now”, while updating fade-out changes only the eventual fade animation duration.
 
 ### Persistence
 
@@ -107,3 +118,11 @@ This keeps long-lived native features out of the generic shortcut schema and avo
 
 - Reuse existing key name mappings where possible so the overlay and hotkey recorder present a consistent visual language.
 - The overlay should render modifier-only changes and normal key chords as one composed display string.
+
+### Settings Preview Scenarios
+
+- Slider drag, repeated arrow-key nudges, direct numeric edits, and programmatic resets should all flow through the same preview-refresh path so behavior stays consistent across input methods.
+- If the HUD is already visible because of real keystroke capture, entering a settings preview session should take over the same panel cleanly instead of creating a second overlay or forcing a hide/show cycle.
+- If the user stops interacting, the HUD remains visible for exactly the configured visible time counted from the latest relevant settings mutation, then fades once.
+- If the user resumes interaction during a fade-out, the fade must be cancelled, opacity restored to full immediately, and the preview session extended from the new interaction time.
+- Non-lifetime appearance edits such as font size or colors should also be able to refresh the currently visible preview in place, even if the primary UX issue was first noticed on position and timing controls.

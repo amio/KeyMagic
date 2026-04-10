@@ -107,6 +107,24 @@ private struct KeystrokeOverlaySettingsPane: View {
             timingSection
         }
         .settingsFormStyle()
+        .onChange(of: utilities.keystrokeOverlay.fontSize) {
+            refreshLivePreview()
+        }
+        .onChange(of: utilities.keystrokeOverlay.foregroundColor) {
+            refreshLivePreview()
+        }
+        .onChange(of: utilities.keystrokeOverlay.backgroundColor) {
+            refreshLivePreview()
+        }
+        .onChange(of: utilities.keystrokeOverlay.verticalPosition) {
+            refreshLivePreview()
+        }
+        .onChange(of: utilities.keystrokeOverlay.holdDuration) {
+            refreshLivePreview()
+        }
+        .onChange(of: utilities.keystrokeOverlay.fadeOutDuration) {
+            refreshLivePreview()
+        }
     }
 
     private var controlSection: some View {
@@ -260,9 +278,6 @@ private struct KeystrokeOverlaySettingsPane: View {
                         .frame(width: 42, alignment: .trailing)
                 }
             }
-            .onChange(of: utilities.keystrokeOverlay.verticalPosition) {
-                utilities.showKeystrokeOverlayPreview()
-            }
         } header: {
             Text("Position")
         }
@@ -280,9 +295,6 @@ private struct KeystrokeOverlaySettingsPane: View {
                         .frame(width: 42, alignment: .trailing)
                 }
             }
-            .onChange(of: utilities.keystrokeOverlay.holdDuration) {
-                utilities.showKeystrokeOverlayPreview()
-            }
 
             LabeledContent("Fade Out") {
                 HStack(spacing: 12) {
@@ -293,9 +305,6 @@ private struct KeystrokeOverlaySettingsPane: View {
                         .monospacedDigit()
                         .frame(width: 42, alignment: .trailing)
                 }
-            }
-            .onChange(of: utilities.keystrokeOverlay.fadeOutDuration) {
-                utilities.showKeystrokeOverlayPreview()
             }
         } header: {
             Text("Timing")
@@ -342,6 +351,10 @@ private struct KeystrokeOverlaySettingsPane: View {
             get: { utilities.keystrokeOverlay.backgroundColor.color },
             set: { utilities.keystrokeOverlay.backgroundColor = RGBAColor(NSColor($0)) }
         )
+    }
+
+    private func refreshLivePreview() {
+        utilities.showKeystrokeOverlayPreview()
     }
 }
 

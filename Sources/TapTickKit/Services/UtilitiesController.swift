@@ -56,8 +56,9 @@ public final class UtilitiesController: @unchecked Sendable {
         set { configuration.keystrokeOverlay = newValue }
     }
 
-    /// Show a transient preview HUD on the actual screen, used by the settings UI
-    /// for live feedback on position and timing changes.
+    /// Refresh the on-screen preview HUD using the current settings configuration.
+    /// Repeated calls are expected while the user tunes settings, so the underlying
+    /// presenter should keep the preview alive instead of flashing between updates.
     func showKeystrokeOverlayPreview() {
         keystrokeOverlayService.showPreview(configuration: keystrokeOverlay)
     }
