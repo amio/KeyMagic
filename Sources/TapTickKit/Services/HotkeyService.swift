@@ -24,7 +24,7 @@ public final class HotkeyService: @unchecked Sendable {
     private var suspensionCount = 0
 
     private var store: ShortcutStore?
-    private var builtInFeatures: BuiltInFeatureController?
+    private var utilities: UtilitiesController?
     private var executor: ShortcutExecutor?
     private var eventHandlerRef: EventHandlerRef?
 
@@ -37,10 +37,10 @@ public final class HotkeyService: @unchecked Sendable {
     // MARK: - Public API
 
     /// Register all shortcuts in the store and begin dispatching.
-    public func start(store: ShortcutStore, builtInFeatures: BuiltInFeatureController? = nil) {
+    public func start(store: ShortcutStore, utilities: UtilitiesController? = nil) {
         self.store = store
-        if let builtInFeatures {
-            self.builtInFeatures = builtInFeatures
+        if let utilities {
+            self.utilities = utilities
         }
         self.executor = ShortcutExecutor()
         rebuildRegistrations(store: store)
@@ -70,15 +70,15 @@ public final class HotkeyService: @unchecked Sendable {
         keyCombo: KeyCombo,
         excludingShortcutID: UUID? = nil,
         excludingSettingsWindowHotkey: Bool = false,
-        excludingBuiltInFeatureID: BuiltInFeatureID? = nil
+        excludingUtilityID: UtilityID? = nil
     ) -> Bool {
         let shortcutConflict = store?.hasConflict(keyCombo: keyCombo, excludingID: excludingShortcutID) ?? false
         let settingsConflict = !excludingSettingsWindowHotkey && settingsWindowHotkey == keyCombo
-        let builtInConflict = builtInFeatures?.reservedHotkeyConflict(
+        let utilityConflict = utilities?.reservedHotkeyConflict(
             for: keyCombo,
-            excluding: excludingBuiltInFeatureID
+            excluding: excludingUtilityID
         ) ?? false
-        return shortcutConflict || settingsConflict || builtInConflict
+        return shortcutConflict || settingsConflict || utilityConflict
     }
 
     /// Persist a new settings-window hotkey and rebuild registrations if needed.
@@ -129,10 +129,10 @@ public final class HotkeyService: @unchecked Sendable {
             registeredCombos: &registeredCombos
         )
 
-        for builtInHotkey in builtInFeatures?.reservedHotkeys() ?? [] {
+        for utilityHotkey in utilities?.reservedHotkeys() ?? [] {
             registerCombo(
-                builtInHotkey.combo,
-                action: .toggleBuiltInFeature(builtInHotkey.featureID),
+                utilityHotkey.combo,
+                action: .toggleUtility(utilityHotkey.featureID),
                 registeredCombos: &registeredCombos
             )
         }
@@ -218,8 +218,8 @@ public final class HotkeyService: @unchecked Sendable {
         case .toggleSettingsWindow:
             NotificationCenter.default.post(name: .toggleSettingsWindow, object: nil)
 
-        case .toggleBuiltInFeature(let featureID):
-            builtInFeatures?.handleHotkey(for: featureID)
+        case .toggleUtility(let featureID):
+            utilities?.handleHotkey(for: featureID)
         }
     }
 
@@ -261,7 +261,7 @@ private struct Registration {
 private enum RegistrationAction {
     case shortcut(Shortcut.ID)
     case toggleSettingsWindow
-    case toggleBuiltInFeature(BuiltInFeatureID)
+    case toggleUtility(UtilityID)
 }
 
 /// Four-char code used to namespace our hot-key IDs within the system.

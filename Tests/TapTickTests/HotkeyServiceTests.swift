@@ -41,26 +41,26 @@ struct HotkeyServiceTests {
         #expect(reloaded.settingsWindowHotkey == override)
     }
 
-    @Test("Built-in feature hotkeys participate in conflict detection")
+    @Test("Utility hotkeys participate in conflict detection")
     @MainActor
-    func builtInFeatureConflicts() {
+    func utilityHotkeyConflicts() {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("TapTickHotkeyService-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let store = ShortcutStore(directory: directory)
-        let builtInFeatures = BuiltInFeatureController(directory: directory)
+        let utilities = UtilitiesController(directory: directory)
         let service = HotkeyService()
 
-        service.start(store: store, builtInFeatures: builtInFeatures)
+        service.start(store: store, utilities: utilities)
         defer { service.stop() }
 
-        let reservedHotkey = builtInFeatures.keystrokeOverlay.hotkey
+        let reservedHotkey = utilities.keystrokeOverlay.hotkey
         #expect(service.hasConflict(keyCombo: reservedHotkey))
         #expect(
             service.hasConflict(
                 keyCombo: reservedHotkey,
-                excludingBuiltInFeatureID: .keystrokeOverlay
+                excludingUtilityID: .keystrokeOverlay
             ) == false
         )
     }

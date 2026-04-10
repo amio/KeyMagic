@@ -3,7 +3,7 @@ import Observation
 
 @Observable
 @MainActor
-public final class BuiltInFeatureController: @unchecked Sendable {
+public final class UtilitiesController: @unchecked Sendable {
     public init(directory: URL? = nil) {
         let baseDirectory = directory ?? FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -12,8 +12,8 @@ public final class BuiltInFeatureController: @unchecked Sendable {
 
         try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
 
-        self.fileURL = baseDirectory.appendingPathComponent("built-in-features.json")
-        self.catalog = BuiltInFeatureDescriptor.catalog
+        self.fileURL = baseDirectory.appendingPathComponent("utilities.json")
+        self.catalog = UtilityDescriptor.catalog
 
         if let configuration = Self.loadConfiguration(from: self.fileURL) {
             self.configuration = configuration
@@ -33,9 +33,9 @@ public final class BuiltInFeatureController: @unchecked Sendable {
         }
     }
 
-    let catalog: [BuiltInFeatureDescriptor]
+    let catalog: [UtilityDescriptor]
 
-    private var configuration: BuiltInFeatureConfiguration {
+    private var configuration: UtilityConfiguration {
         didSet {
             guard configuration != oldValue else { return }
             saveConfiguration()
@@ -67,17 +67,17 @@ public final class BuiltInFeatureController: @unchecked Sendable {
         applyKeystrokeOverlayConfiguration(promptForPermission: false)
     }
 
-    func descriptor(for featureID: BuiltInFeatureID) -> BuiltInFeatureDescriptor {
+    func descriptor(for featureID: UtilityID) -> UtilityDescriptor {
         catalog.first(where: { $0.id == featureID }) ?? catalog[0]
     }
 
-    func reservedHotkeys() -> [(featureID: BuiltInFeatureID, combo: KeyCombo)] {
+    func reservedHotkeys() -> [(featureID: UtilityID, combo: KeyCombo)] {
         [
             (.keystrokeOverlay, keystrokeOverlay.hotkey),
         ]
     }
 
-    func reservedHotkeyConflict(for combo: KeyCombo, excluding featureID: BuiltInFeatureID? = nil) -> Bool {
+    func reservedHotkeyConflict(for combo: KeyCombo, excluding featureID: UtilityID? = nil) -> Bool {
         reservedHotkeys().contains { entry in
             entry.featureID != featureID && entry.combo == combo
         }
@@ -120,7 +120,7 @@ public final class BuiltInFeatureController: @unchecked Sendable {
         keystrokeOverlay.isEnabled = true
     }
 
-    func toggleFeature(_ featureID: BuiltInFeatureID) {
+    func toggleFeature(_ featureID: UtilityID) {
         switch featureID {
         case .keystrokeOverlay:
             setKeystrokeOverlayEnabled(!keystrokeOverlay.isEnabled)
@@ -129,7 +129,7 @@ public final class BuiltInFeatureController: @unchecked Sendable {
         }
     }
 
-    func handleHotkey(for featureID: BuiltInFeatureID) {
+    func handleHotkey(for featureID: UtilityID) {
         toggleFeature(featureID)
     }
 
@@ -147,20 +147,20 @@ public final class BuiltInFeatureController: @unchecked Sendable {
             let data = try encoder.encode(configuration)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            print("TapTick: Failed to save built-in feature configuration: \(error)")
+            print("TapTick: Failed to save utility configuration: \(error)")
         }
     }
 
-    private static func loadConfiguration(from fileURL: URL) -> BuiltInFeatureConfiguration? {
+    private static func loadConfiguration(from fileURL: URL) -> UtilityConfiguration? {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return nil
         }
 
         do {
             let data = try Data(contentsOf: fileURL)
-            return try JSONDecoder().decode(BuiltInFeatureConfiguration.self, from: data)
+            return try JSONDecoder().decode(UtilityConfiguration.self, from: data)
         } catch {
-            print("TapTick: Failed to load built-in feature configuration: \(error)")
+            print("TapTick: Failed to load utility configuration: \(error)")
             return nil
         }
     }

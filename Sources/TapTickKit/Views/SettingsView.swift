@@ -4,7 +4,7 @@ import SwiftUI
 public struct SettingsView: View {
     public init() {}
 
-    @Environment(BuiltInFeatureController.self) private var builtInFeatures
+    @Environment(UtilitiesController.self) private var utilities
     @Environment(LoginItemManager.self) private var loginItemManager
     @Environment(CloudSyncService.self) private var cloudSync
     @Environment(UpdateService.self) private var updateService
@@ -13,14 +13,14 @@ public struct SettingsView: View {
         case general = "General"
         case applications = "Applications"
         case scripts = "Scripts"
-        case builtIns = "Built-Ins"
+        case utilities = "Utilities"
 
         var systemImage: String {
             switch self {
             case .general:      return "gearshape"
             case .applications: return "app.badge.checkmark"
             case .scripts:      return "terminal"
-            case .builtIns:     return "sparkles.rectangle.stack"
+            case .utilities:    return "sparkles.rectangle.stack"
             }
         }
     }
@@ -44,9 +44,9 @@ public struct SettingsView: View {
                 ApplicationsView()
             case .scripts:
                 ScriptsView()
-            case .builtIns:
-                BuiltInFeaturesView()
-                    .environment(builtInFeatures)
+            case .utilities:
+                UtilitiesView()
+                    .environment(utilities)
             }
         }
     }

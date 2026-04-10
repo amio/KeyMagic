@@ -14,7 +14,7 @@ final class AppState: ObservableObject {
 
     let cloudSync: CloudSyncService
     let store: ShortcutStore
-    let builtInFeatures = BuiltInFeatureController()
+    let utilities = UtilitiesController()
     let hotkeyService = HotkeyService()
     let loginItemManager = LoginItemManager()
     let updateService = UpdateService()
@@ -97,14 +97,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateService: appState.updateService
         )
 
-        appState.builtInFeatures.onReservedHotkeysChanged = { [weak hotkeyService = appState.hotkeyService, weak store = appState.store] in
+        appState.utilities.onReservedHotkeysChanged = { [weak hotkeyService = appState.hotkeyService, weak store = appState.store] in
             guard let hotkeyService, let store else { return }
             hotkeyService.restart(store: store)
         }
-        appState.builtInFeatures.bootstrap()
+        appState.utilities.bootstrap()
         appState.hotkeyService.start(
             store: appState.store,
-            builtInFeatures: appState.builtInFeatures
+            utilities: appState.utilities
         )
 
         // Listen for the "open settings" notification posted by MenuBarController.
@@ -203,7 +203,7 @@ struct TapTickApp: App {
         Window("TapTick Settings", id: "settings") {
             SettingsView()
                 .environment(appState.store)
-                .environment(appState.builtInFeatures)
+                .environment(appState.utilities)
                 .environment(appState.hotkeyService)
                 .environment(appState.loginItemManager)
                 .environment(appState.cloudSync)

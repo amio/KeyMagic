@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-struct BuiltInFeaturesView: View {
-    @Environment(BuiltInFeatureController.self) private var builtInFeatures
+struct UtilitiesView: View {
+    @Environment(UtilitiesController.self) private var utilities
 
-    @State private var selectedFeatureID: BuiltInFeatureID? = .keystrokeOverlay
+    @State private var selectedFeatureID: UtilityID? = .keystrokeOverlay
     @State private var isRecordingKeystrokeOverlayHotkey = false
 
     var body: some View {
@@ -17,19 +17,19 @@ struct BuiltInFeaturesView: View {
             featureDetail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle("Built-Ins")
+        .navigationTitle("Utilities")
     }
 
-    private var selectedFeature: BuiltInFeatureDescriptor {
+    private var selectedFeature: UtilityDescriptor {
         let resolvedFeatureID = selectedFeatureID ?? .keystrokeOverlay
-        return builtInFeatures.descriptor(for: resolvedFeatureID)
+        return utilities.descriptor(for: resolvedFeatureID)
     }
 
     private var featureDirectory: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array(builtInFeatures.catalog.enumerated()), id: \.element.id) { index, feature in
-                    BuiltInFeatureRow(
+                ForEach(Array(utilities.catalog.enumerated()), id: \.element.id) { index, feature in
+                    UtilityRow(
                         feature: feature,
                         isOdd: !index.isMultiple(of: 2),
                         isSelected: selectedFeatureID == feature.id
@@ -48,13 +48,13 @@ struct BuiltInFeaturesView: View {
                 isRecordingHotkey: $isRecordingKeystrokeOverlayHotkey
             )
         case .screenshotTools, .windowManager, .largeType:
-            PlannedBuiltInFeaturePane(feature: selectedFeature)
+            PlannedUtilityPane(feature: selectedFeature)
         }
     }
 }
 
-private struct BuiltInFeatureRow: View {
-    let feature: BuiltInFeatureDescriptor
+private struct UtilityRow: View {
+    let feature: UtilityDescriptor
     var isOdd: Bool = false
     var isSelected: Bool = false
 
@@ -93,7 +93,7 @@ private struct BuiltInFeatureRow: View {
 }
 
 private struct KeystrokeOverlaySettingsPane: View {
-    @Environment(BuiltInFeatureController.self) private var builtInFeatures
+    @Environment(UtilitiesController.self) private var utilities
     @Environment(HotkeyService.self) private var hotkeyService
 
     @Binding var isRecordingHotkey: Bool
@@ -115,8 +115,8 @@ private struct KeystrokeOverlaySettingsPane: View {
             Toggle(
                 "Enable Keystroke Overlay",
                 isOn: Binding(
-                    get: { builtInFeatures.keystrokeOverlay.isEnabled },
-                    set: { builtInFeatures.setKeystrokeOverlayEnabled($0) }
+                    get: { utilities.keystrokeOverlay.isEnabled },
+                    set: { utilities.setKeystrokeOverlayEnabled($0) }
                 )
             )
 
@@ -124,8 +124,8 @@ private struct KeystrokeOverlaySettingsPane: View {
                 Text("Capture Status")
                 Spacer(minLength: 16)
                 StatusPill(
-                    title: builtInFeatures.isKeystrokeOverlayCapturing ? "Active" : "Inactive",
-                    color: builtInFeatures.isKeystrokeOverlayCapturing ? .green : .secondary
+                    title: utilities.isKeystrokeOverlayCapturing ? "Active" : "Inactive",
+                    color: utilities.isKeystrokeOverlayCapturing ? .green : .secondary
                 )
             }
 
@@ -133,14 +133,14 @@ private struct KeystrokeOverlaySettingsPane: View {
                 Text("Input Monitoring")
                 Spacer(minLength: 16)
                 StatusPill(
-                    title: builtInFeatures.keystrokeOverlayPermission.title,
-                    color: builtInFeatures.keystrokeOverlayPermission == .granted ? .green : .orange
+                    title: utilities.keystrokeOverlayPermission.title,
+                    color: utilities.keystrokeOverlayPermission == .granted ? .green : .orange
                 )
             }
 
-            if builtInFeatures.keystrokeOverlayPermission != .granted {
+            if utilities.keystrokeOverlayPermission != .granted {
                 Button("Request Input Monitoring Access") {
-                    builtInFeatures.requestKeystrokeOverlayPermission()
+                    utilities.requestKeystrokeOverlayPermission()
                 }
                 .controlSize(.small)
 
@@ -158,13 +158,13 @@ private struct KeystrokeOverlaySettingsPane: View {
             LabeledContent("Toggle Overlay") {
                 HStack(spacing: 8) {
                     HotkeyBindingControl(
-                        keyCombo: builtInFeatures.keystrokeOverlay.hotkey,
+                        keyCombo: utilities.keystrokeOverlay.hotkey,
                         isRecording: isRecordingHotkey,
                         onStartRecording: {
                             isRecordingHotkey = true
                         },
                         onRecordKey: { combo in
-                            builtInFeatures.updateKeystrokeOverlayHotkey(combo)
+                            utilities.updateKeystrokeOverlayHotkey(combo)
                             isRecordingHotkey = false
                         },
                         onCancelRecording: {
@@ -173,18 +173,18 @@ private struct KeystrokeOverlaySettingsPane: View {
                         checkConflict: { combo in
                             hotkeyService.hasConflict(
                                 keyCombo: combo,
-                                excludingBuiltInFeatureID: .keystrokeOverlay
+                                excludingUtilityID: .keystrokeOverlay
                             )
                         },
                         emptyTitle: "Record Hotkey"
                     )
 
                     Button("Default") {
-                        builtInFeatures.restoreDefaultKeystrokeOverlayHotkey()
+                        utilities.restoreDefaultKeystrokeOverlayHotkey()
                     }
                     .controlSize(.small)
                     .disabled(
-                        builtInFeatures.keystrokeOverlay.hotkey == KeystrokeOverlayConfiguration.defaultHotkey
+                        utilities.keystrokeOverlay.hotkey == KeystrokeOverlayConfiguration.defaultHotkey
                     )
                 }
             }
@@ -206,23 +206,23 @@ private struct KeystrokeOverlaySettingsPane: View {
                 HStack {
                     Spacer(minLength: 0)
 
-                    Text(builtInFeatures.keystrokeOverlay.hotkey.displayString)
+                    Text(utilities.keystrokeOverlay.hotkey.displayString)
                         .font(.system(
-                            size: builtInFeatures.keystrokeOverlay.fontSize,
+                            size: utilities.keystrokeOverlay.fontSize,
                             weight: .semibold,
                             design: .rounded
                         ))
-                        .tracking(max(0.8, builtInFeatures.keystrokeOverlay.fontSize * 0.025))
-                        .foregroundStyle(builtInFeatures.keystrokeOverlay.foregroundColor.color)
+                        .tracking(max(0.8, utilities.keystrokeOverlay.fontSize * 0.025))
+                        .foregroundStyle(utilities.keystrokeOverlay.foregroundColor.color)
                         .lineLimit(1)
-                        .padding(.horizontal, max(18, builtInFeatures.keystrokeOverlay.fontSize * 0.48))
-                        .padding(.vertical, max(12, builtInFeatures.keystrokeOverlay.fontSize * 0.28))
+                        .padding(.horizontal, max(18, utilities.keystrokeOverlay.fontSize * 0.48))
+                        .padding(.vertical, max(12, utilities.keystrokeOverlay.fontSize * 0.28))
                         .background {
                             RoundedRectangle(
-                                cornerRadius: max(18, builtInFeatures.keystrokeOverlay.fontSize * 0.42),
+                                cornerRadius: max(18, utilities.keystrokeOverlay.fontSize * 0.42),
                                 style: .continuous
                             )
-                            .fill(builtInFeatures.keystrokeOverlay.backgroundColor.color)
+                            .fill(utilities.keystrokeOverlay.backgroundColor.color)
                         }
 
                     Spacer(minLength: 0)
@@ -247,7 +247,7 @@ private struct KeystrokeOverlaySettingsPane: View {
                 HStack(spacing: 12) {
                     Slider(value: fontSizeBinding.stepped(by: 1), in: 18 ... 72)
                         .frame(width: 200)
-                    Text("\(Int(builtInFeatures.keystrokeOverlay.fontSize)) pt")
+                    Text("\(Int(utilities.keystrokeOverlay.fontSize)) pt")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(width: 42, alignment: .trailing)
@@ -276,14 +276,14 @@ private struct KeystrokeOverlaySettingsPane: View {
                 HStack(spacing: 12) {
                     Slider(value: verticalPositionBinding.stepped(by: 0.01), in: 0 ... 1)
                         .frame(width: 200)
-                    Text("\(Int(builtInFeatures.keystrokeOverlay.verticalPosition * 100))%")
+                    Text("\(Int(utilities.keystrokeOverlay.verticalPosition * 100))%")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(width: 42, alignment: .trailing)
                 }
             }
-            .onChange(of: builtInFeatures.keystrokeOverlay.verticalPosition) {
-                builtInFeatures.showKeystrokeOverlayPreview()
+            .onChange(of: utilities.keystrokeOverlay.verticalPosition) {
+                utilities.showKeystrokeOverlayPreview()
             }
         } header: {
             Text("Position")
@@ -296,28 +296,28 @@ private struct KeystrokeOverlaySettingsPane: View {
                 HStack(spacing: 12) {
                     Slider(value: holdDurationBinding.stepped(by: 0.1), in: 0.4 ... 4)
                         .frame(width: 200)
-                    Text("\(builtInFeatures.keystrokeOverlay.holdDuration.formatted(.number.precision(.fractionLength(2)))) s")
+                    Text("\(utilities.keystrokeOverlay.holdDuration.formatted(.number.precision(.fractionLength(2)))) s")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(width: 42, alignment: .trailing)
                 }
             }
-            .onChange(of: builtInFeatures.keystrokeOverlay.holdDuration) {
-                builtInFeatures.showKeystrokeOverlayPreview()
+            .onChange(of: utilities.keystrokeOverlay.holdDuration) {
+                utilities.showKeystrokeOverlayPreview()
             }
 
             LabeledContent("Fade Out") {
                 HStack(spacing: 12) {
                     Slider(value: fadeOutDurationBinding.stepped(by: 0.05), in: 0.1 ... 1.4)
                         .frame(width: 200)
-                    Text("\(builtInFeatures.keystrokeOverlay.fadeOutDuration.formatted(.number.precision(.fractionLength(2)))) s")
+                    Text("\(utilities.keystrokeOverlay.fadeOutDuration.formatted(.number.precision(.fractionLength(2)))) s")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(width: 42, alignment: .trailing)
                 }
             }
-            .onChange(of: builtInFeatures.keystrokeOverlay.fadeOutDuration) {
-                builtInFeatures.showKeystrokeOverlayPreview()
+            .onChange(of: utilities.keystrokeOverlay.fadeOutDuration) {
+                utilities.showKeystrokeOverlayPreview()
             }
         } header: {
             Text("Timing")
@@ -326,43 +326,43 @@ private struct KeystrokeOverlaySettingsPane: View {
 
     private var verticalPositionBinding: Binding<Double> {
         Binding(
-            get: { builtInFeatures.keystrokeOverlay.verticalPosition },
-            set: { builtInFeatures.keystrokeOverlay.verticalPosition = $0 }
+            get: { utilities.keystrokeOverlay.verticalPosition },
+            set: { utilities.keystrokeOverlay.verticalPosition = $0 }
         )
     }
 
     private var fontSizeBinding: Binding<Double> {
         Binding(
-            get: { builtInFeatures.keystrokeOverlay.fontSize },
-            set: { builtInFeatures.keystrokeOverlay.fontSize = $0 }
+            get: { utilities.keystrokeOverlay.fontSize },
+            set: { utilities.keystrokeOverlay.fontSize = $0 }
         )
     }
 
     private var holdDurationBinding: Binding<Double> {
         Binding(
-            get: { builtInFeatures.keystrokeOverlay.holdDuration },
-            set: { builtInFeatures.keystrokeOverlay.holdDuration = $0 }
+            get: { utilities.keystrokeOverlay.holdDuration },
+            set: { utilities.keystrokeOverlay.holdDuration = $0 }
         )
     }
 
     private var fadeOutDurationBinding: Binding<Double> {
         Binding(
-            get: { builtInFeatures.keystrokeOverlay.fadeOutDuration },
-            set: { builtInFeatures.keystrokeOverlay.fadeOutDuration = $0 }
+            get: { utilities.keystrokeOverlay.fadeOutDuration },
+            set: { utilities.keystrokeOverlay.fadeOutDuration = $0 }
         )
     }
 
     private var foregroundColorBinding: Binding<Color> {
         Binding(
-            get: { builtInFeatures.keystrokeOverlay.foregroundColor.color },
-            set: { builtInFeatures.keystrokeOverlay.foregroundColor = RGBAColor(NSColor($0)) }
+            get: { utilities.keystrokeOverlay.foregroundColor.color },
+            set: { utilities.keystrokeOverlay.foregroundColor = RGBAColor(NSColor($0)) }
         )
     }
 
     private var backgroundColorBinding: Binding<Color> {
         Binding(
-            get: { builtInFeatures.keystrokeOverlay.backgroundColor.color },
-            set: { builtInFeatures.keystrokeOverlay.backgroundColor = RGBAColor(NSColor($0)) }
+            get: { utilities.keystrokeOverlay.backgroundColor.color },
+            set: { utilities.keystrokeOverlay.backgroundColor = RGBAColor(NSColor($0)) }
         )
     }
 }
@@ -380,8 +380,8 @@ private extension Binding where Value == Double {
     }
 }
 
-private struct PlannedBuiltInFeaturePane: View {
-    let feature: BuiltInFeatureDescriptor
+private struct PlannedUtilityPane: View {
+    let feature: UtilityDescriptor
 
     var body: some View {
         ScrollView {

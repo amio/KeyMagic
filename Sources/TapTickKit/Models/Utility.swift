@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-enum BuiltInFeatureID: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
+enum UtilityID: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
     case keystrokeOverlay
     case screenshotTools
     case windowManager
@@ -11,7 +11,7 @@ enum BuiltInFeatureID: String, CaseIterable, Codable, Hashable, Identifiable, Se
     var id: String { rawValue }
 }
 
-enum BuiltInFeatureAvailability: String, Codable, Hashable, Sendable {
+enum UtilityAvailability: String, Codable, Hashable, Sendable {
     case available
     case planned
 
@@ -25,16 +25,16 @@ enum BuiltInFeatureAvailability: String, Codable, Hashable, Sendable {
     }
 }
 
-struct BuiltInFeatureDescriptor: Identifiable, Hashable, Sendable {
-    let id: BuiltInFeatureID
+struct UtilityDescriptor: Identifiable, Hashable, Sendable {
+    let id: UtilityID
     let title: String
     let summary: String
     let systemImage: String
-    let availability: BuiltInFeatureAvailability
+    let availability: UtilityAvailability
     let highlights: [String]
 
-    static let catalog: [BuiltInFeatureDescriptor] = [
-        BuiltInFeatureDescriptor(
+    static let catalog: [UtilityDescriptor] = [
+        UtilityDescriptor(
             id: .keystrokeOverlay,
             title: "Keystroke Overlay",
             summary: "Show the current key chord in a subtitle-style HUD near the bottom of the screen.",
@@ -46,7 +46,7 @@ struct BuiltInFeatureDescriptor: Identifiable, Hashable, Sendable {
                 "Font, color, hold time, and fade controls",
             ]
         ),
-        BuiltInFeatureDescriptor(
+        UtilityDescriptor(
             id: .screenshotTools,
             title: "Screenshot Tools",
             summary: "Capture screen regions, annotate quickly, and send the result straight to the clipboard.",
@@ -58,7 +58,7 @@ struct BuiltInFeatureDescriptor: Identifiable, Hashable, Sendable {
                 "Clipboard-first output",
             ]
         ),
-        BuiltInFeatureDescriptor(
+        UtilityDescriptor(
             id: .windowManager,
             title: "Window Manager",
             summary: "Resize, snap, and reposition windows with native layouts and shortcut-driven commands.",
@@ -70,7 +70,7 @@ struct BuiltInFeatureDescriptor: Identifiable, Hashable, Sendable {
                 "Native window geometry control",
             ]
         ),
-        BuiltInFeatureDescriptor(
+        UtilityDescriptor(
             id: .largeType,
             title: "Large Type",
             summary: "Project large temporary text on screen for quick glanceable display, similar to Alfred.",
@@ -205,10 +205,10 @@ struct KeystrokeOverlayConfiguration: Codable, Hashable, Sendable {
     )
 }
 
-struct BuiltInFeatureConfiguration: Codable, Hashable, Sendable {
+struct UtilityConfiguration: Codable, Hashable, Sendable {
     var keystrokeOverlay: KeystrokeOverlayConfiguration
 
-    static let `default` = BuiltInFeatureConfiguration(
+    static let `default` = UtilityConfiguration(
         keystrokeOverlay: .default
     )
 }

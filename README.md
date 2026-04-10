@@ -6,9 +6,9 @@ TapTick currently covers three shortcut surfaces:
 
 - application launchers
 - shell scripts
-- built-in native features such as the keystroke subtitle overlay
+- built-in utilities such as the keystroke subtitle overlay
 
-Some built-in features may require additional macOS permissions. The keystroke overlay uses Input Monitoring so it can observe global keyboard input and render an on-screen HUD.
+Some built-in utilities may require additional macOS permissions. The keystroke overlay uses Input Monitoring so it can observe global keyboard input and render an on-screen HUD.
 
 ![](./public/screenshot-apps.png)
 
