@@ -39,7 +39,7 @@ final class KeystrokeOverlayService {
     /// of whether the overlay is enabled — used by the settings UI for live feedback
     /// on position and timing changes.
     func showPreview(configuration: KeystrokeOverlayConfiguration) {
-        presenter.show(text: "⌘C", configuration: configuration)
+        presenter.show(text: configuration.hotkey.displayString, configuration: configuration)
     }
 
     func apply(
@@ -239,6 +239,8 @@ private final class KeystrokeOverlayPresenter {
 
     private var hideTask: Task<Void, Never>?
     private var currentConfiguration = KeystrokeOverlayConfiguration.default
+    /// True from the moment the panel is ordered in until the fade-out completes.
+    private var isShowing = false
 
     func update(configuration: KeystrokeOverlayConfiguration) {
         currentConfiguration = configuration
@@ -254,17 +256,23 @@ private final class KeystrokeOverlayPresenter {
         model.apply(configuration: configuration)
         model.text = text
 
-        if panel.isVisible == false {
+        if isShowing {
+            // Already on screen — snap to full opacity (kills any in-progress
+            // fade-out) and update content/position without a fade-in animation.
+            panel.alphaValue = 1
+            layoutPanel()
+        } else {
+            // Fresh appearance — fade in.
+            isShowing = true
             panel.alphaValue = 0
             panel.orderFrontRegardless()
-        }
+            layoutPanel()
 
-        layoutPanel()
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            context.allowsImplicitAnimation = true
-            panel.animator().alphaValue = 1
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                context.allowsImplicitAnimation = true
+                panel.animator().alphaValue = 1
+            }
         }
 
         hideTask = Task { [weak self] in
@@ -285,6 +293,7 @@ private final class KeystrokeOverlayPresenter {
             guard Task.isCancelled == false else { return }
 
             await MainActor.run {
+                self.isShowing = false
                 self.panel.orderOut(nil)
             }
         }
@@ -293,6 +302,7 @@ private final class KeystrokeOverlayPresenter {
     func hide(immediately: Bool) {
         hideTask?.cancel()
         hideTask = nil
+        isShowing = false
 
         if immediately {
             panel.alphaValue = 0
