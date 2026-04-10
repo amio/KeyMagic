@@ -26,11 +26,18 @@ struct BuiltInFeaturesView: View {
     }
 
     private var featureDirectory: some View {
-        List(builtInFeatures.catalog, selection: $selectedFeatureID) { feature in
-            BuiltInFeatureRow(feature: feature)
-                .tag(Optional(feature.id))
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(builtInFeatures.catalog.enumerated()), id: \.element.id) { index, feature in
+                    BuiltInFeatureRow(
+                        feature: feature,
+                        isOdd: !index.isMultiple(of: 2),
+                        isSelected: selectedFeatureID == feature.id
+                    )
+                    .onTapGesture { selectedFeatureID = feature.id }
+                }
+            }
         }
-        .listStyle(.sidebar)
     }
 
     @ViewBuilder
@@ -48,37 +55,40 @@ struct BuiltInFeaturesView: View {
 
 private struct BuiltInFeatureRow: View {
     let feature: BuiltInFeatureDescriptor
+    var isOdd: Bool = false
+    var isSelected: Bool = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: feature.systemImage)
-                .font(.title3)
-                .foregroundStyle(feature.availability == .available ? Color.accentColor : Color.secondary)
-                .frame(width: 24)
+        ListRowContainer(isOdd: isOdd, accentBackground: isSelected ? Color.accentColor.opacity(0.10) : .clear, verticalPadding: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: feature.systemImage)
+                    .font(.title3)
+                    .foregroundStyle(feature.availability == .available ? Color.accentColor : Color.secondary)
+                    .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(feature.title)
-                        .font(.headline)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(feature.title)
+                            .font(.headline)
 
-                    Text(feature.availability.badgeTitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(feature.availability == .available ? .green : .secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule()
-                                .fill(feature.availability == .available ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
-                        )
+                        Text(feature.availability.badgeTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(feature.availability == .available ? .green : .secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule()
+                                    .fill(feature.availability == .available ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
+                            )
+                    }
+
+                    Text(feature.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
-
-                Text(feature.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
             }
         }
-        .padding(.vertical, 6)
     }
 }
 
