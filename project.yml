@@ -56,6 +56,20 @@ targets:
           - $(inherited)
           - "@executable_path/../Frameworks"
 
+  TapTickTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/TapTickTests
+    dependencies:
+      - package: TapTickKit
+        product: TapTickKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.taptick.tests
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: true
+
   TapTickUITests:
     type: bundle.ui-testing
     platform: macOS
@@ -75,12 +89,15 @@ schemes:
     build:
       targets:
         TapTick: all
+        TapTickTests: [test]
         TapTickUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
+        - name: TapTickTests
+          parallelizable: true
         - name: TapTickUITests
           parallelizable: false
     archive:

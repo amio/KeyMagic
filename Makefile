@@ -68,7 +68,7 @@ setup: ## Install required tools and generate Xcode project
 # generate so Xcode can resolve TapTickKit.
 _patch-pbxproj:
 	@perl -i -p0e \
-	    's/(isa = XCSwiftPackageProductDependency;\n)(\t+productName = TapTickKit;)/$$1\t\t\tpackage = $(PKG_REF_UUID) \/* XCLocalSwiftPackageReference "." *\/;\n$$2/' \
+	    's/(isa = XCSwiftPackageProductDependency;\n)(\t+productName = TapTickKit;)/$$1\t\t\tpackage = $(PKG_REF_UUID) \/* XCLocalSwiftPackageReference "." *\/;\n$$2/g' \
 	    $(PROJECT)/project.pbxproj
 	@echo "  ✓ patched XCSwiftPackageProductDependency"
 
