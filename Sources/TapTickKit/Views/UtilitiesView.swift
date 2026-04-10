@@ -100,62 +100,41 @@ private struct KeystrokeOverlaySettingsPane: View {
 
     var body: some View {
         Form {
-            statusSection
-            hotkeySection
+            controlSection
             previewSection
             appearanceSection
             positionSection
             timingSection
         }
-        .formStyle(.grouped)
+        .settingsFormStyle()
     }
 
-    private var statusSection: some View {
+    private var controlSection: some View {
         Section {
-            Toggle(
-                "Enable Keystroke Overlay",
-                isOn: Binding(
-                    get: { utilities.keystrokeOverlay.isEnabled },
-                    set: { utilities.setKeystrokeOverlayEnabled($0) }
-                )
-            )
-
-            HStack {
-                Text("Capture Status")
-                Spacer(minLength: 16)
-                StatusPill(
-                    title: utilities.isKeystrokeOverlayCapturing ? "Active" : "Inactive",
-                    color: utilities.isKeystrokeOverlayCapturing ? .green : .secondary
-                )
-            }
-
-            HStack {
-                Text("Input Monitoring")
-                Spacer(minLength: 16)
-                StatusPill(
-                    title: utilities.keystrokeOverlayPermission.title,
-                    color: utilities.keystrokeOverlayPermission == .granted ? .green : .orange
-                )
+            Toggle(isOn: Binding(
+                get: { utilities.keystrokeOverlay.isEnabled },
+                set: { utilities.setKeystrokeOverlayEnabled($0) }
+            )) {
+                HStack(spacing: 8) {
+                    Text("Keystroke Overlay")
+                    StatusPill(title: "Active", color: .green)
+                        .hidden()
+                        .overlay { overlayStatusPill }
+                }
             }
 
             if utilities.keystrokeOverlayPermission != .granted {
-                Button("Request Input Monitoring Access") {
+                Button("Grant Input Monitoring Access") {
                     utilities.requestKeystrokeOverlayPermission()
                 }
                 .controlSize(.small)
 
-                Text("TapTick uses macOS input event listening to observe global keyboard input for this overlay. If you previously denied access, re-enable TapTick in System Settings > Privacy & Security > Input Monitoring.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("If previously denied, re-enable in System Settings › Privacy & Security › Input Monitoring.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-        } header: {
-            Text("Status")
-        }
-    }
 
-    private var hotkeySection: some View {
-        Section {
-            LabeledContent("Toggle Overlay") {
+            LabeledContent("Toggle Hotkey") {
                 HStack(spacing: 8) {
                     HotkeyBindingControl(
                         keyCombo: utilities.keystrokeOverlay.hotkey,
@@ -188,12 +167,15 @@ private struct KeystrokeOverlaySettingsPane: View {
                     )
                 }
             }
+        }
+    }
 
-            Text("This reserved hotkey enables or disables the subtitle overlay without opening TapTick.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } header: {
-            Text("Hotkey")
+    @ViewBuilder
+    private var overlayStatusPill: some View {
+        if utilities.keystrokeOverlay.isEnabled, utilities.isKeystrokeOverlayCapturing {
+            StatusPill(title: "Active", color: .green)
+        } else if utilities.keystrokeOverlayPermission != .granted {
+            StatusPill(title: "Input Monitoring Required", color: .orange)
         }
     }
 

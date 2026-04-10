@@ -109,7 +109,7 @@ struct ShortcutEditView: View {
                 Text("Options")
             }
         }
-        .formStyle(.grouped)
+        .settingsFormStyle()
         .padding()
         .frame(minWidth: 480, minHeight: 400)
         .toolbar {

@@ -21,7 +21,7 @@ struct GeneralSettingsView: View {
             updatesSection
             versionFooterSection
         }
-        .formStyle(.grouped)
+        .settingsFormStyle()
     }
 
     // MARK: - Status
