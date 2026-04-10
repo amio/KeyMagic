@@ -63,7 +63,16 @@ final class KeystrokeOverlayService {
             return permissionStatus
         }
 
+        let wasCapturing = eventTap != nil
         startCaptureIfNeeded()
+        // The toggle hotkey's modifier keys are still held; suppress the
+        // upcoming flagsChanged releases so the overlay doesn't flash "⌥" etc.
+        suppressFlagsUntilRelease = true
+
+        if !wasCapturing, eventTap != nil {
+            presenter.show(text: "Keystroke Overlay On", configuration: configuration)
+        }
+
         return permissionStatus
     }
 

@@ -191,7 +191,7 @@ struct KeystrokeOverlayConfiguration: Codable, Hashable, Sendable {
     static let `default` = KeystrokeOverlayConfiguration(
         isEnabled: false,
         hotkey: defaultHotkey,
-        fontSize: 34,
+        fontSize: 36,
         foregroundColor: RGBAColor(NSColor.white),
         backgroundColor: RGBAColor(
             red: 0.05,
