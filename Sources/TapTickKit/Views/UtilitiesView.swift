@@ -101,8 +101,8 @@ private struct KeystrokeOverlaySettingsPane: View {
     var body: some View {
         Form {
             controlSection
-            previewSection
             appearanceSection
+            previewSection
             positionSection
             timingSection
         }
@@ -215,10 +215,6 @@ private struct KeystrokeOverlaySettingsPane: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(Color.black.opacity(0.06))
                 )
-
-                Text("The live overlay appears near the lower center of the active screen and reuses these style settings.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }
