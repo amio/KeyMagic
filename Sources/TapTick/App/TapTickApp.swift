@@ -216,7 +216,7 @@ struct TapTickApp: App {
                 .frame(minWidth: 890, minHeight: 520)
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 960, height: 620)
+        .defaultSize(width: 980, height: 640)
         .defaultLaunchBehavior(.suppressed)
         .onChange(of: appState.openSettingsTrigger) {
             openWindow(id: "settings")
