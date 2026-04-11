@@ -161,7 +161,6 @@ final class ScreenshotPreviewWindow: NSPanel {
 
     func show() {
         makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
         adaptTitlebarControls()
     }
 
