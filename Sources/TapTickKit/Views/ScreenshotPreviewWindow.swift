@@ -75,9 +75,17 @@ final class AnnotationToolbarModel {
 
 // MARK: - Preview Window
 
-private let canvasMargin: CGFloat = 24
+private let canvasMargin: CGFloat = 16
 /// Height of the standard system title bar.
 private let titleBarHeight: CGFloat = 28
+/// Corner radius of the window's blur background (continuous / squircle curve).
+private let windowCornerRadius: CGFloat = 24
+/// Standard close button center x ≈ 13pt; shift the cluster so it clears the corner tangent.
+private let trafficLightShift: CGFloat = windowCornerRadius - 13   // = 13
+/// Extra padding to push controls away from the window's top edge (accounts for large corner radius).
+private let verticalPadding: CGFloat = 8
+/// Toolbar leading inset: zoom trailing (59) + shift + gap (36).
+private let toolbarLeadingInset: CGFloat = 59 + (windowCornerRadius - 13) + 36
 
 /// NSHostingView subclass that refuses window-drag so toolbar buttons stay interactive.
 private final class NonDraggableHostingView<Content: View>: NSHostingView<Content> {
@@ -89,6 +97,8 @@ final class ScreenshotPreviewWindow: NSPanel {
     var onDismiss: (() -> Void)?
     private let canvasView: AnnotationCanvasView
     private let toolbarModel = AnnotationToolbarModel()
+    /// Retained so it can be shifted alongside the traffic lights in show().
+    private var toolbarHostingView: NSView?
 
     init(image: NSImage) {
         let screenFrame = NSScreen.screenWithMouse?.visibleFrame
@@ -152,6 +162,22 @@ final class ScreenshotPreviewWindow: NSPanel {
     func show() {
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        adaptTitlebarControls()
+    }
+
+    /// Shifts traffic lights and toolbar away from the large rounded corner after AppKit layout.
+    private func adaptTitlebarControls() {
+        guard let titlebarView = standardWindowButton(.closeButton)?.superview else { return }
+        // isFlipped: Y increases downward → positive delta moves away from top.
+        // !isFlipped: Y increases upward  → negative delta moves away from top.
+        let yDelta = verticalPadding * (titlebarView.isFlipped ? 1 : -1)
+
+        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            guard let btn = standardWindowButton(type) else { continue }
+            btn.frame.origin.x += trafficLightShift
+            btn.frame.origin.y += yDelta
+        }
+        toolbarHostingView?.frame.origin.y += yDelta
     }
 
     override func close() {
@@ -200,21 +226,20 @@ final class ScreenshotPreviewWindow: NSPanel {
               let titlebarView = closeButton.superview
         else { return }
 
-        let lastButton = standardWindowButton(.zoomButton)
-            ?? standardWindowButton(.miniaturizeButton)
-            ?? closeButton
-
         let toolbarView = AnnotationToolbar(model: toolbarModel)
         let hostingView = NonDraggableHostingView(rootView: toolbarView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         titlebarView.addSubview(hostingView)
+        toolbarHostingView = hostingView
 
         NSLayoutConstraint.activate([
+            // Fixed inset from the titlebar's left edge — pre-accounts for the traffic light
+            // shift applied in show(), keeping the gap independent of AppKit re-layouts.
             hostingView.leadingAnchor.constraint(
-                equalTo: lastButton.trailingAnchor, constant: 16
+                equalTo: titlebarView.leadingAnchor, constant: toolbarLeadingInset
             ),
             hostingView.trailingAnchor.constraint(
-                equalTo: titlebarView.trailingAnchor, constant: -8
+                equalTo: titlebarView.trailingAnchor, constant: -16
             ),
             hostingView.centerYAnchor.constraint(
                 equalTo: closeButton.centerYAnchor
@@ -232,7 +257,7 @@ final class ScreenshotPreviewWindow: NSPanel {
         blur.state = .active
         blur.wantsLayer = true
         blur.layer?.cornerCurve = .continuous
-        blur.layer?.cornerRadius = 16
+        blur.layer?.cornerRadius = windowCornerRadius
         blur.layer?.masksToBounds = true
         blur.translatesAutoresizingMaskIntoConstraints = false
         rootView.addSubview(blur, positioned: .below, relativeTo: nil)
@@ -247,7 +272,8 @@ final class ScreenshotPreviewWindow: NSPanel {
         // 2. Canvas view centered in the space below title bar with a drop shadow.
         canvasView.translatesAutoresizingMaskIntoConstraints = false
         canvasView.wantsLayer = true
-        canvasView.layer?.cornerRadius = 4
+        canvasView.layer?.cornerRadius = 12
+        canvasView.layer?.cornerCurve = .continuous
         canvasView.layer?.masksToBounds = true
 
         // Shadow container — wrapper needed because masksToBounds clips the shadow.
