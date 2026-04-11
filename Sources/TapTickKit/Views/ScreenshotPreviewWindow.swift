@@ -559,7 +559,7 @@ private struct AnnotationToolbar: View {
 
     private func keycap(_ label: String) -> some View {
         Text(label)
-            .font(.system(size: 11, weight: .medium, design: .default))
+            .font(.system(size: 11, weight: .medium, design: .rounded))
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)

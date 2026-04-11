@@ -574,7 +574,7 @@ private struct ScreenshotToolsSettingsPane: View {
                             Text("Switch freehand / rect")
                         }
                         GridRow {
-                            keycap("⇧ TAB")
+                            keycap("⌥ TAB")
                             Text("Cycle annotation color")
                         }
                         GridRow {
@@ -599,7 +599,7 @@ private struct ScreenshotToolsSettingsPane: View {
 
     private func keycap(_ label: String) -> some View {
         Text(label)
-            .font(.caption.weight(.medium))
+            .font(.system(.caption, design: .rounded, weight: .medium))
             .foregroundStyle(.primary)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
