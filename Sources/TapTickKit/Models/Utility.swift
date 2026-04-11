@@ -51,7 +51,7 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
             title: "Screenshot Tools",
             summary: "Capture screen regions, annotate quickly, and send the result straight to the clipboard.",
             systemImage: "camera.viewfinder",
-            availability: .planned,
+            availability: .available,
             highlights: [
                 "Fast capture flow",
                 "Quick mark-up actions",
@@ -205,11 +205,47 @@ struct KeystrokeOverlayConfiguration: Codable, Hashable, Sendable {
     )
 }
 
+struct ScreenshotToolsConfiguration: Codable, Hashable, Sendable {
+    var isEnabled: Bool
+    var captureToClipboardHotkey: KeyCombo
+    var captureAndMarkHotkey: KeyCombo
+
+    static let defaultCaptureToClipboardHotkey = KeyCombo(
+        keyCode: UInt32(kVK_ANSI_S),
+        modifiers: [.command, .control, .option]
+    )
+
+    static let defaultCaptureAndMarkHotkey = KeyCombo(
+        keyCode: UInt32(kVK_ANSI_A),
+        modifiers: [.command, .control, .option]
+    )
+
+    static let `default` = ScreenshotToolsConfiguration(
+        isEnabled: false,
+        captureToClipboardHotkey: defaultCaptureToClipboardHotkey,
+        captureAndMarkHotkey: defaultCaptureAndMarkHotkey
+    )
+}
+
 struct UtilityConfiguration: Codable, Hashable, Sendable {
     var keystrokeOverlay: KeystrokeOverlayConfiguration
+    var screenshotTools: ScreenshotToolsConfiguration
+
+    init(keystrokeOverlay: KeystrokeOverlayConfiguration, screenshotTools: ScreenshotToolsConfiguration) {
+        self.keystrokeOverlay = keystrokeOverlay
+        self.screenshotTools = screenshotTools
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        keystrokeOverlay = try container.decode(KeystrokeOverlayConfiguration.self, forKey: .keystrokeOverlay)
+        screenshotTools = try container.decodeIfPresent(ScreenshotToolsConfiguration.self, forKey: .screenshotTools)
+            ?? .default
+    }
 
     static let `default` = UtilityConfiguration(
-        keystrokeOverlay: .default
+        keystrokeOverlay: .default,
+        screenshotTools: .default
     )
 }
 

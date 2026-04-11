@@ -6,6 +6,8 @@ struct UtilitiesView: View {
 
     @State private var selectedFeatureID: UtilityID? = .keystrokeOverlay
     @State private var isRecordingKeystrokeOverlayHotkey = false
+    @State private var isRecordingScreenshotCaptureHotkey = false
+    @State private var isRecordingScreenshotMarkHotkey = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -47,7 +49,12 @@ struct UtilitiesView: View {
             KeystrokeOverlaySettingsPane(
                 isRecordingHotkey: $isRecordingKeystrokeOverlayHotkey
             )
-        case .screenshotTools, .windowManager, .largeType:
+        case .screenshotTools:
+            ScreenshotToolsSettingsPane(
+                isRecordingCaptureHotkey: $isRecordingScreenshotCaptureHotkey,
+                isRecordingMarkHotkey: $isRecordingScreenshotMarkHotkey
+            )
+        case .windowManager, .largeType:
             PlannedUtilityPane(feature: selectedFeature)
         }
     }
@@ -416,6 +423,181 @@ private extension Binding where Value == Double {
         )
     }
 }
+
+// MARK: - Screenshot Tools Settings
+
+private struct ScreenshotToolsSettingsPane: View {
+    @Environment(UtilitiesController.self) private var utilities
+    @Environment(HotkeyService.self) private var hotkeyService
+
+    @Binding var isRecordingCaptureHotkey: Bool
+    @Binding var isRecordingMarkHotkey: Bool
+
+    var body: some View {
+        Form {
+            controlSection
+            hotkeysSection
+            usageSection
+        }
+        .settingsFormStyle()
+    }
+
+    // MARK: - Control
+
+    private var controlSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { utilities.screenshotTools.isEnabled },
+                set: { utilities.setScreenshotToolsEnabled($0) }
+            )) {
+                HStack(spacing: 8) {
+                    Text("Screenshot Tools")
+                    StatusPill(
+                        title: utilities.screenshotTools.isEnabled ? "Active" : "Off",
+                        color: utilities.screenshotTools.isEnabled ? .green : .secondary
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - Hotkeys
+
+    private var hotkeysSection: some View {
+        Section("Hotkeys") {
+            LabeledContent("Capture to Clipboard") {
+                HotkeyBindingControl(
+                    keyCombo: utilities.screenshotTools.captureToClipboardHotkey,
+                    isRecording: isRecordingCaptureHotkey,
+                    onStartRecording: {
+                        isRecordingMarkHotkey = false
+                        isRecordingCaptureHotkey = true
+                    },
+                    onRecordKey: { combo in
+                        utilities.updateScreenshotCaptureToClipboardHotkey(combo)
+                        isRecordingCaptureHotkey = false
+                    },
+                    onCancelRecording: {
+                        isRecordingCaptureHotkey = false
+                    },
+                    checkConflict: { combo in
+                        hotkeyService.hasConflict(
+                            keyCombo: combo,
+                            excludingUtilityID: .screenshotTools
+                        )
+                    },
+                    emptyTitle: "Record Hotkey"
+                )
+            }
+
+            LabeledContent("Capture & Mark") {
+                HotkeyBindingControl(
+                    keyCombo: utilities.screenshotTools.captureAndMarkHotkey,
+                    isRecording: isRecordingMarkHotkey,
+                    onStartRecording: {
+                        isRecordingCaptureHotkey = false
+                        isRecordingMarkHotkey = true
+                    },
+                    onRecordKey: { combo in
+                        utilities.updateScreenshotCaptureAndMarkHotkey(combo)
+                        isRecordingMarkHotkey = false
+                    },
+                    onCancelRecording: {
+                        isRecordingMarkHotkey = false
+                    },
+                    checkConflict: { combo in
+                        hotkeyService.hasConflict(
+                            keyCombo: combo,
+                            excludingUtilityID: .screenshotTools
+                        )
+                    },
+                    emptyTitle: "Record Hotkey"
+                )
+            }
+
+            HStack {
+                Spacer()
+                Button("Restore Defaults") {
+                    utilities.restoreDefaultScreenshotHotkeys()
+                }
+                .controlSize(.small)
+                .disabled(
+                    utilities.screenshotTools.captureToClipboardHotkey
+                        == ScreenshotToolsConfiguration.defaultCaptureToClipboardHotkey
+                        && utilities.screenshotTools.captureAndMarkHotkey
+                            == ScreenshotToolsConfiguration.defaultCaptureAndMarkHotkey
+                )
+            }
+        }
+    }
+
+    // MARK: - Usage Guide
+
+    private var usageSection: some View {
+        Section("Usage") {
+            VStack(alignment: .leading, spacing: 10) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Capture to Clipboard")
+                            .font(.body.weight(.medium))
+                        Text("Interactive screen capture → copied straight to clipboard. No preview.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "doc.on.clipboard")
+                        .foregroundStyle(.secondary)
+                }
+
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Capture & Mark")
+                            .font(.body.weight(.medium))
+                        Text("Interactive capture → annotation window. Draw lines or rectangles, then press Return to copy.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "pencil.and.outline")
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Annotation Shortcuts")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 16) {
+                        shortcutHint("Tab", description: "Switch freehand / rect")
+                        shortcutHint("⇧Tab", description: "Cycle color")
+                        shortcutHint("⌘Z", description: "Undo")
+                        shortcutHint("Return", description: "Copy & close")
+                        shortcutHint("Esc", description: "Cancel")
+                    }
+                }
+            }
+        }
+    }
+
+    private func shortcutHint(_ key: String, description: String) -> some View {
+        HStack(spacing: 4) {
+            Text(key)
+                .font(.caption.monospaced().weight(.medium))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(.quaternary)
+                )
+            Text(description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Planned Utility
 
 private struct PlannedUtilityPane: View {
     let feature: UtilityDescriptor

@@ -132,7 +132,7 @@ public final class HotkeyService: @unchecked Sendable {
         for utilityHotkey in utilities?.reservedHotkeys() ?? [] {
             registerCombo(
                 utilityHotkey.combo,
-                action: .toggleUtility(utilityHotkey.featureID),
+                action: .toggleUtility(utilityHotkey.featureID, utilityHotkey.action),
                 registeredCombos: &registeredCombos
             )
         }
@@ -218,8 +218,8 @@ public final class HotkeyService: @unchecked Sendable {
         case .toggleSettingsWindow:
             NotificationCenter.default.post(name: .toggleSettingsWindow, object: nil)
 
-        case .toggleUtility(let featureID):
-            utilities?.handleHotkey(for: featureID)
+        case .toggleUtility(let featureID, let action):
+            utilities?.handleHotkey(for: featureID, action: action)
         }
     }
 
@@ -261,7 +261,7 @@ private struct Registration {
 private enum RegistrationAction {
     case shortcut(Shortcut.ID)
     case toggleSettingsWindow
-    case toggleUtility(UtilityID)
+    case toggleUtility(UtilityID, String)
 }
 
 /// Four-char code used to namespace our hot-key IDs within the system.

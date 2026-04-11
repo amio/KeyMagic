@@ -45,6 +45,7 @@ public final class UtilitiesController: @unchecked Sendable {
 
     private let fileURL: URL
     private let keystrokeOverlayService: KeystrokeOverlayService
+    private let screenshotService = ScreenshotService()
 
     private(set) var keystrokeOverlayPermission: EventListeningPermissionStatus
     private(set) var isKeystrokeOverlayCapturing: Bool
@@ -54,6 +55,11 @@ public final class UtilitiesController: @unchecked Sendable {
     var keystrokeOverlay: KeystrokeOverlayConfiguration {
         get { configuration.keystrokeOverlay }
         set { configuration.keystrokeOverlay = newValue }
+    }
+
+    var screenshotTools: ScreenshotToolsConfiguration {
+        get { configuration.screenshotTools }
+        set { configuration.screenshotTools = newValue }
     }
 
     /// Refresh the on-screen preview HUD using the current settings configuration.
@@ -72,10 +78,15 @@ public final class UtilitiesController: @unchecked Sendable {
         catalog.first(where: { $0.id == featureID }) ?? catalog[0]
     }
 
-    func reservedHotkeys() -> [(featureID: UtilityID, combo: KeyCombo)] {
-        [
-            (.keystrokeOverlay, keystrokeOverlay.hotkey),
+    func reservedHotkeys() -> [(featureID: UtilityID, action: String, combo: KeyCombo)] {
+        var hotkeys: [(featureID: UtilityID, action: String, combo: KeyCombo)] = [
+            (.keystrokeOverlay, "toggle", keystrokeOverlay.hotkey),
         ]
+        if screenshotTools.isEnabled {
+            hotkeys.append((.screenshotTools, "captureClipboard", screenshotTools.captureToClipboardHotkey))
+            hotkeys.append((.screenshotTools, "captureAndMark", screenshotTools.captureAndMarkHotkey))
+        }
+        return hotkeys
     }
 
     func reservedHotkeyConflict(for combo: KeyCombo, excluding featureID: UtilityID? = nil) -> Bool {
@@ -92,6 +103,30 @@ public final class UtilitiesController: @unchecked Sendable {
 
     func restoreDefaultKeystrokeOverlayHotkey() {
         updateKeystrokeOverlayHotkey(KeystrokeOverlayConfiguration.defaultHotkey)
+    }
+
+    // MARK: - Screenshot Tools
+
+    func setScreenshotToolsEnabled(_ isEnabled: Bool) {
+        screenshotTools.isEnabled = isEnabled
+        onReservedHotkeysChanged?()
+    }
+
+    func updateScreenshotCaptureToClipboardHotkey(_ combo: KeyCombo) {
+        guard screenshotTools.captureToClipboardHotkey != combo else { return }
+        screenshotTools.captureToClipboardHotkey = combo
+        onReservedHotkeysChanged?()
+    }
+
+    func updateScreenshotCaptureAndMarkHotkey(_ combo: KeyCombo) {
+        guard screenshotTools.captureAndMarkHotkey != combo else { return }
+        screenshotTools.captureAndMarkHotkey = combo
+        onReservedHotkeysChanged?()
+    }
+
+    func restoreDefaultScreenshotHotkeys() {
+        updateScreenshotCaptureToClipboardHotkey(ScreenshotToolsConfiguration.defaultCaptureToClipboardHotkey)
+        updateScreenshotCaptureAndMarkHotkey(ScreenshotToolsConfiguration.defaultCaptureAndMarkHotkey)
     }
 
     func requestKeystrokeOverlayPermission() {
@@ -125,13 +160,30 @@ public final class UtilitiesController: @unchecked Sendable {
         switch featureID {
         case .keystrokeOverlay:
             setKeystrokeOverlayEnabled(!keystrokeOverlay.isEnabled)
-        case .screenshotTools, .windowManager, .largeType:
+        case .screenshotTools:
+            setScreenshotToolsEnabled(!screenshotTools.isEnabled)
+        case .windowManager, .largeType:
             break
         }
     }
 
-    func handleHotkey(for featureID: UtilityID) {
-        toggleFeature(featureID)
+    func handleHotkey(for featureID: UtilityID, action: String) {
+        switch featureID {
+        case .keystrokeOverlay:
+            toggleFeature(featureID)
+        case .screenshotTools:
+            guard screenshotTools.isEnabled else { return }
+            switch action {
+            case "captureClipboard":
+                screenshotService.captureToClipboard()
+            case "captureAndMark":
+                screenshotService.captureAndMark()
+            default:
+                break
+            }
+        case .windowManager, .largeType:
+            break
+        }
     }
 
     private func applyKeystrokeOverlayConfiguration(promptForPermission: Bool) {
