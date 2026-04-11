@@ -135,21 +135,12 @@ private struct KeystrokeOverlaySettingsPane: View {
             )) {
                 HStack(spacing: 8) {
                     Text("Keystroke Overlay")
-                    StatusPill(title: "Active", color: .green)
-                        .hidden()
-                        .overlay { overlayStatusPill }
+                    overlayStatusSlot
                 }
             }
 
             if utilities.keystrokeOverlayPermission != .granted {
-                Button("Grant Input Monitoring Access") {
-                    utilities.requestKeystrokeOverlayPermission()
-                }
-                .controlSize(.small)
-
-                Text("If previously denied, re-enable in System Settings › Privacy & Security › Input Monitoring.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                permissionAccessRow
             }
 
             LabeledContent("Toggle Hotkey") {
@@ -195,6 +186,44 @@ private struct KeystrokeOverlaySettingsPane: View {
         } else if utilities.keystrokeOverlayPermission != .granted {
             StatusPill(title: "Input Monitoring Required", color: .orange)
         }
+    }
+
+    private var overlayStatusSlot: some View {
+        StatusPill(title: "Input Monitoring Required", color: .orange)
+            .hidden()
+            .overlay(alignment: .leading) {
+                overlayStatusPill
+            }
+    }
+
+    private var permissionAccessRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                grantInputMonitoringButton
+                permissionRecoveryText
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 8) {
+                grantInputMonitoringButton
+                permissionRecoveryText
+            }
+        }
+    }
+
+    private var grantInputMonitoringButton: some View {
+        Button("Grant Input Monitoring Access") {
+            utilities.requestKeystrokeOverlayPermission()
+        }
+        .controlSize(.small)
+        .fixedSize()
+    }
+
+    private var permissionRecoveryText: some View {
+        Text("If previously denied, re-enable in System Settings › Privacy & Security › Input Monitoring.")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var previewSection: some View {
@@ -416,11 +445,13 @@ private struct StatusPill: View {
         Text(title)
             .font(.caption.weight(.semibold))
             .foregroundStyle(color)
+            .lineLimit(1)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .background(
                 Capsule()
                     .fill(color.opacity(0.12))
             )
+            .fixedSize(horizontal: true, vertical: true)
     }
 }
