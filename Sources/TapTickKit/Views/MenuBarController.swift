@@ -9,6 +9,7 @@ import AppKit
 /// - Dynamic show/hide via UserDefaults KVO for `"showMenuBarIcon"`
 @MainActor
 public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Sendable {
+    private static let menuBarIconName = NSImage.Name("MenuBarIcon")
     private var statusItem: NSStatusItem?
     private let store: ShortcutStore
     private let hotkeyService: HotkeyService
@@ -70,10 +71,8 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            button.image = NSImage(
-                systemSymbolName: "keyboard.badge.ellipsis",
-                accessibilityDescription: "TapTick"
-            )
+            button.image = menuBarImage()
+            button.imageScaling = .scaleProportionallyDown
         }
         let menu = buildMenu()
         menu.delegate = self
@@ -261,6 +260,19 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         configured.size = size
         configured.isTemplate = true
         return configured
+    }
+
+    /// Load the processed menu bar icon asset and fall back to the previous SF Symbol if needed.
+    private func menuBarImage() -> NSImage? {
+        let size = NSSize(width: 18, height: 18)
+        if let image = NSImage(named: Self.menuBarIconName)?.copy() as? NSImage {
+            image.size = size
+            image.isTemplate = true
+            image.accessibilityDescription = "TapTick"
+            return image
+        }
+
+        return symbolImage("keyboard.badge.ellipsis", size: size)
     }
 
     // MARK: - Actions
