@@ -344,7 +344,7 @@ private final class KeystrokeOverlayPresenter {
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
-            panel.alphaValue = 0
+            panel.animator().alphaValue = 0
         } completionHandler: {
             Task { @MainActor in
                 self.panel.orderOut(nil)
@@ -378,10 +378,7 @@ private final class KeystrokeOverlayPresenter {
         panel.orderFrontRegardless()
         layoutPanel()
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            panel.alphaValue = 1
-        }
+        animatePanelAlpha(to: 1, duration: 0.12)
     }
 
     private func restoreVisiblePanel() {
@@ -397,10 +394,7 @@ private final class KeystrokeOverlayPresenter {
             guard Task.isCancelled == false else { return }
 
             await MainActor.run {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = configuration.fadeOutDuration
-                    self.panel.alphaValue = 0
-                }
+                self.animatePanelAlpha(to: 0, duration: configuration.fadeOutDuration)
             }
 
             try? await Task.sleep(nanoseconds: configuration.fadeOutDuration.nanoseconds)
@@ -411,6 +405,16 @@ private final class KeystrokeOverlayPresenter {
                 self.coordinator.finishPresentation()
                 self.panel.orderOut(nil)
             }
+        }
+    }
+
+    private func animatePanelAlpha(
+        to alphaValue: CGFloat,
+        duration: TimeInterval
+    ) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            panel.animator().alphaValue = alphaValue
         }
     }
 
