@@ -32,6 +32,12 @@
     <key>SUFeedURL</key>
     <string>https://amio.github.io/TapTick/appcast.xml</string>
 
+    <!-- Keep update discovery user-controlled in TapTick settings instead of exposing
+         Sparkle's "automatically download and install in the future" checkbox
+         on the update-found alert. -->
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
+
     <!-- Sparkle auto-update: EdDSA (ed25519) public key for verifying update signatures.
          Generate a keypair with: ./bin/generate_keys (from Sparkle distribution).
          Replace this placeholder with your actual public key. -->

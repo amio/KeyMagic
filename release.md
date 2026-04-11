@@ -245,7 +245,8 @@ TapTick uses [Sparkle 2](https://sparkle-project.org/) for automatic updates.
 1. The app checks `https://amio.github.io/TapTick/appcast.xml` for new versions
    (by default every 24 hours, configurable by the user).
 2. If a newer version is found, Sparkle shows its native update UI with release
-   notes, download progress, and a restart prompt.
+   notes, download progress, and a restart prompt. TapTick disables Sparkle's
+   automatic-download/install opt-in checkbox so update policy stays in the app settings.
 3. The DMG is downloaded from GitHub Releases, verified against the EdDSA
    signature in the appcast, extracted, and the app is replaced + relaunched.
 
