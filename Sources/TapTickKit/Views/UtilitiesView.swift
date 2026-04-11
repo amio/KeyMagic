@@ -535,12 +535,12 @@ private struct ScreenshotToolsSettingsPane: View {
 
     private var usageSection: some View {
         Section("Usage") {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Capture to Clipboard")
                             .font(.body.weight(.medium))
-                        Text("Interactive screen capture → copied straight to clipboard. No preview.")
+                        Text("Select a region — copied straight to clipboard, no preview.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -553,7 +553,7 @@ private struct ScreenshotToolsSettingsPane: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Capture & Mark")
                             .font(.body.weight(.medium))
-                        Text("Interactive capture → annotation window. Draw lines or rectangles, then press Return to copy.")
+                        Text("Select a region — opens annotation window. Draw, then press ↩ to copy.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -568,32 +568,45 @@ private struct ScreenshotToolsSettingsPane: View {
                     Text("Annotation Shortcuts")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    HStack(spacing: 16) {
-                        shortcutHint("Tab", description: "Switch freehand / rect")
-                        shortcutHint("⇧Tab", description: "Cycle color")
-                        shortcutHint("⌘Z", description: "Undo")
-                        shortcutHint("Return", description: "Copy & close")
-                        shortcutHint("Esc", description: "Cancel")
+                    Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 5) {
+                        GridRow {
+                            keycap("TAB")
+                            Text("Switch freehand / rect")
+                        }
+                        GridRow {
+                            keycap("⇧ TAB")
+                            Text("Cycle annotation color")
+                        }
+                        GridRow {
+                            keycap("⌘ Z")
+                            Text("Undo")
+                        }
+                        GridRow {
+                            keycap("↩")
+                            Text("Copy & close")
+                        }
+                        GridRow {
+                            keycap("ESC")
+                            Text("Cancel")
+                        }
                     }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
     }
 
-    private func shortcutHint(_ key: String, description: String) -> some View {
-        HStack(spacing: 4) {
-            Text(key)
-                .font(.caption.monospaced().weight(.medium))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(.quaternary)
-                )
-            Text(description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+    private func keycap(_ label: String) -> some View {
+        Text(label)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(.quaternary)
+            )
     }
 }
 
