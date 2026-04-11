@@ -361,9 +361,13 @@ final class AnnotationCanvasView: NSView {
 
         composited.unlockFocus()
 
+        guard let tiffData = composited.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else { return }
+
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects([composited])
+        pasteboard.setData(pngData, forType: .png)
     }
 
     // MARK: - Drawing
