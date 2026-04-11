@@ -23,21 +23,12 @@ public final class UtilitiesController: @unchecked Sendable {
         self.keystrokeOverlayPermission = .unknown
         self.isKeystrokeOverlayCapturing = false
 
-        let screenshotService = ScreenshotService()
-        screenshotService.lastAnnotationMode = loadedConfig.screenshotTools.lastAnnotationMode
-        screenshotService.lastAnnotationColorIndex = loadedConfig.screenshotTools.lastAnnotationColorIndex
-        self.screenshotService = screenshotService
-
-        // Phase 2: all stored properties initialized — safe to capture self.
+        // All stored properties initialized — safe to capture self.
         keystrokeOverlayService.onPermissionChange = { [weak self] status in
             self?.keystrokeOverlayPermission = status
         }
         keystrokeOverlayService.onCaptureStateChange = { [weak self] isCapturing in
             self?.isKeystrokeOverlayCapturing = isCapturing
-        }
-        screenshotService.onAnnotationSettingsChanged = { [weak self] mode, colorIndex in
-            self?.screenshotTools.lastAnnotationMode = mode
-            self?.screenshotTools.lastAnnotationColorIndex = colorIndex
         }
     }
 
@@ -53,7 +44,7 @@ public final class UtilitiesController: @unchecked Sendable {
 
     private let fileURL: URL
     private let keystrokeOverlayService: KeystrokeOverlayService
-    private let screenshotService: ScreenshotService
+    private let screenshotService: ScreenshotService = ScreenshotService()
 
     private(set) var keystrokeOverlayPermission: EventListeningPermissionStatus
     private(set) var isKeystrokeOverlayCapturing: Bool
@@ -185,7 +176,16 @@ public final class UtilitiesController: @unchecked Sendable {
             case "captureClipboard":
                 screenshotService.captureToClipboard()
             case "captureAndMark":
-                screenshotService.captureAndMark()
+                screenshotService.captureAndMark(
+                    initialMode: screenshotTools.lastAnnotationMode,
+                    initialColorIndex: screenshotTools.lastAnnotationColorIndex,
+                    onSettingsChanged: { [weak self] mode, colorIndex in
+                        Task { @MainActor [weak self] in
+                            self?.screenshotTools.lastAnnotationMode = mode
+                            self?.screenshotTools.lastAnnotationColorIndex = colorIndex
+                        }
+                    }
+                )
             default:
                 break
             }

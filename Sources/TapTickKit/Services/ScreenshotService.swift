@@ -6,12 +6,6 @@ import Foundation
 final class ScreenshotService {
     private var previewWindow: ScreenshotPreviewWindow?
 
-    var lastAnnotationMode: AnnotationMode = .freehand
-    var lastAnnotationColorIndex: Int = 0
-
-    /// Called whenever the user changes draw mode or color in the annotation window.
-    var onAnnotationSettingsChanged: ((AnnotationMode, Int) -> Void)?
-
     /// Interactive capture → clipboard (no preview UI).
     func captureToClipboard() {
         let task = Process()
@@ -22,7 +16,15 @@ final class ScreenshotService {
     }
 
     /// Interactive capture → temp file → annotation preview window.
-    func captureAndMark() {
+    /// - Parameters:
+    ///   - initialMode: The draw mode to restore from the last session.
+    ///   - initialColorIndex: The palette index to restore from the last session.
+    ///   - onSettingsChanged: Called whenever the user changes mode or color; persist as needed.
+    func captureAndMark(
+        initialMode: AnnotationMode,
+        initialColorIndex: Int,
+        onSettingsChanged: @escaping @Sendable (AnnotationMode, Int) -> Void
+    ) {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("taptick_screenshot_\(UUID().uuidString).png")
 
@@ -30,45 +32,58 @@ final class ScreenshotService {
         task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         task.arguments = ["-i", tempURL.path]
 
-        // Run screencapture asynchronously to avoid blocking the main thread
         task.terminationHandler = { [weak self, tempURL] _ in
             Task { @MainActor [weak self] in
-                self?.handleCaptureCompletion(tempURL: tempURL)
+                self?.handleCaptureCompletion(
+                    tempURL: tempURL,
+                    initialMode: initialMode,
+                    initialColorIndex: initialColorIndex,
+                    onSettingsChanged: onSettingsChanged
+                )
             }
         }
         try? task.run()
     }
 
-    private func handleCaptureCompletion(tempURL: URL) {
+    private func handleCaptureCompletion(
+        tempURL: URL,
+        initialMode: AnnotationMode,
+        initialColorIndex: Int,
+        onSettingsChanged: @escaping @Sendable (AnnotationMode, Int) -> Void
+    ) {
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         guard FileManager.default.fileExists(atPath: tempURL.path),
               let image = NSImage(contentsOf: tempURL)
         else {
-            // User cancelled the capture
+            // User cancelled the capture.
             return
         }
 
-        showPreviewWindow(image: image)
+        showPreviewWindow(
+            image: image,
+            initialMode: initialMode,
+            initialColorIndex: initialColorIndex,
+            onSettingsChanged: onSettingsChanged
+        )
     }
 
-    private func showPreviewWindow(image: NSImage) {
+    private func showPreviewWindow(
+        image: NSImage,
+        initialMode: AnnotationMode,
+        initialColorIndex: Int,
+        onSettingsChanged: @escaping @Sendable (AnnotationMode, Int) -> Void
+    ) {
         previewWindow?.close()
 
         let window = ScreenshotPreviewWindow(
             image: image,
-            initialMode: lastAnnotationMode,
-            initialColorIndex: lastAnnotationColorIndex
+            initialMode: initialMode,
+            initialColorIndex: initialColorIndex
         )
         previewWindow = window
 
-        window.onAnnotationSettingsChanged = { [weak self] mode, colorIndex in
-            guard let self else { return }
-            lastAnnotationMode = mode
-            lastAnnotationColorIndex = colorIndex
-            onAnnotationSettingsChanged?(mode, colorIndex)
-        }
-
+        window.onAnnotationSettingsChanged = onSettingsChanged
         window.onDismiss = { [weak self] in
             self?.previewWindow = nil
         }
