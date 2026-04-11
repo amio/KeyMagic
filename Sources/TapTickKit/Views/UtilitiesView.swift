@@ -58,37 +58,54 @@ private struct UtilityRow: View {
     var isOdd: Bool = false
     var isSelected: Bool = false
 
+    private let iconColumnWidth: CGFloat = 22
+
     var body: some View {
         ListRowContainer(isOdd: isOdd, accentBackground: isSelected ? Color.accentColor.opacity(0.10) : .clear, verticalPadding: 8) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: feature.systemImage)
-                    .font(.title3)
-                    .foregroundStyle(feature.availability == .available ? Color.accentColor : Color.secondary)
-                    .frame(width: 24)
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+                GridRow(alignment: .center) {
+                    utilityIcon
+                    titleRow
+                }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text(feature.title)
-                            .font(.headline)
-
-                        Text(feature.availability.badgeTitle)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(feature.availability == .available ? .green : .secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule()
-                                    .fill(feature.availability == .available ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
-                            )
-                    }
-
-                    Text(feature.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                GridRow {
+                    Color.clear
+                        .frame(width: iconColumnWidth, height: 1)
+                    summaryRow
                 }
             }
         }
+    }
+
+    private var utilityIcon: some View {
+        Image(systemName: feature.systemImage)
+            .font(.title3)
+            .foregroundStyle(feature.availability == .available ? Color.accentColor : Color.secondary)
+            .frame(width: iconColumnWidth)
+    }
+
+    private var titleRow: some View {
+        HStack(spacing: 8) {
+            Text(feature.title)
+                .font(.headline)
+
+            Text(feature.availability.badgeTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(feature.availability == .available ? .green : .secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(feature.availability == .available ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
+                )
+        }
+    }
+
+    private var summaryRow: some View {
+        Text(feature.summary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
     }
 }
 
