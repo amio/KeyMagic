@@ -48,6 +48,26 @@ struct UtilitiesControllerTests {
         #expect(coordinator.activeIntent == nil)
     }
 
+    @Test("Denied keystroke overlay permission opens Input Monitoring recovery")
+    @MainActor
+    func deniedPermissionOpensSettingsRecovery() {
+        var openedURLs: [URL] = []
+        let service = KeystrokeOverlayService(
+            preflightPermissionAccess: { false },
+            requestPermissionAccess: { false },
+            openURL: {
+                openedURLs.append($0)
+                return true
+            }
+        )
+
+        let status = service.requestPermission()
+
+        #expect(status == .denied)
+        #expect(openedURLs.count == 1)
+        #expect(openedURLs[0].absoluteString == "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+    }
+
     private func makeDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("TapTickUtilities-\(UUID().uuidString)")

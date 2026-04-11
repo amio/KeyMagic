@@ -10,6 +10,9 @@ final class KeystrokeOverlayService {
     var onCaptureStateChange: ((Bool) -> Void)?
 
     private let presenter = KeystrokeOverlayPresenter()
+    private let preflightPermissionAccess: () -> Bool
+    private let requestPermissionAccess: () -> Bool
+    private let openURL: (URL) -> Bool
 
     private var configuration = KeystrokeOverlayConfiguration.default
     private var eventTap: CFMachPort?
@@ -22,16 +25,29 @@ final class KeystrokeOverlayService {
     /// Timestamp of the last event presentation, used as the merge-window reference.
     private var lastShowTimestamp: CFAbsoluteTime = 0
 
+    init(
+        preflightPermissionAccess: @escaping () -> Bool = CGPreflightListenEventAccess,
+        requestPermissionAccess: @escaping () -> Bool = CGRequestListenEventAccess,
+        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    ) {
+        self.preflightPermissionAccess = preflightPermissionAccess
+        self.requestPermissionAccess = requestPermissionAccess
+        self.openURL = openURL
+    }
+
     func refreshPermissionStatus() -> EventListeningPermissionStatus {
         notifyPermissionStatus(currentPermissionStatus())
     }
 
     func requestPermission() -> EventListeningPermissionStatus {
-        if CGPreflightListenEventAccess() {
+        if preflightPermissionAccess() {
             return notifyPermissionStatus(.granted)
         }
 
-        let granted = CGRequestListenEventAccess()
+        let granted = requestPermissionAccess()
+        if !granted {
+            openInputMonitoringSettings()
+        }
         return notifyPermissionStatus(granted ? .granted : .denied)
     }
 
@@ -143,8 +159,23 @@ final class KeystrokeOverlayService {
     }
 
     private func currentPermissionStatus() -> EventListeningPermissionStatus {
-        CGPreflightListenEventAccess() ? .granted : .denied
+        preflightPermissionAccess() ? .granted : .denied
     }
+
+    @discardableResult
+    private func openInputMonitoringSettings() -> Bool {
+        for candidate in Self.inputMonitoringSettingsURLs {
+            if openURL(candidate) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static let inputMonitoringSettingsURLs: [URL] = [
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!,
+        URL(string: "x-apple.systempreferences:com.apple.preference.security")!,
+    ]
 
     fileprivate func handleEvent(type: CGEventType, keyCode: UInt32, modifiers: KeyCombo.Modifiers) {
         switch type {
