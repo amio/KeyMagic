@@ -31,7 +31,8 @@ public struct SettingsView: View {
             List(Tab.allCases, id: \.self, selection: $selectedTab) { tab in
                 Label(tab.rawValue, systemImage: tab.systemImage)
             }
-            .navigationSplitViewColumnWidth(180)
+            .frame(minWidth: 180, idealWidth: 180, maxWidth: 180)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
             .listStyle(.sidebar)
         } detail: {
             switch selectedTab {
