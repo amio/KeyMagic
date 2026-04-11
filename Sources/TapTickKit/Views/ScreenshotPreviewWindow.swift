@@ -249,15 +249,18 @@ final class ScreenshotPreviewWindow: NSPanel {
     private func buildContentHierarchy(displaySize: NSSize) {
         guard let rootView = contentView else { return }
 
+        // Clip the window shape here so NSVisualEffectView's internal blending
+        // machinery is never disturbed by external layer surgery.
+        rootView.wantsLayer = true
+        rootView.layer?.cornerRadius = windowCornerRadius
+        rootView.layer?.cornerCurve = .continuous
+        rootView.layer?.masksToBounds = true
+
         // 1. Blurred background filling the entire window behind the title bar.
         let blur = NSVisualEffectView()
-        blur.material = .sidebar
+        blur.material = .menu
         blur.blendingMode = .behindWindow
         blur.state = .active
-        blur.wantsLayer = true
-        blur.layer?.cornerCurve = .continuous
-        blur.layer?.cornerRadius = windowCornerRadius
-        blur.layer?.masksToBounds = true
         blur.translatesAutoresizingMaskIntoConstraints = false
         rootView.addSubview(blur, positioned: .below, relativeTo: nil)
 
