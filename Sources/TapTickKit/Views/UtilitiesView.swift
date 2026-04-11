@@ -61,6 +61,8 @@ struct UtilitiesView: View {
 }
 
 private struct UtilityRow: View {
+    @Environment(UtilitiesController.self) private var utilities
+
     let feature: UtilityDescriptor
     var isOdd: Bool = false
     var isSelected: Bool = false
@@ -96,15 +98,31 @@ private struct UtilityRow: View {
             Text(feature.title)
                 .font(.headline)
 
-            Text(feature.availability.badgeTitle)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(feature.availability == .available ? .green : .secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule()
-                        .fill(feature.availability == .available ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
-                )
+            featureStatusPill
+        }
+    }
+
+    @ViewBuilder
+    private var featureStatusPill: some View {
+        switch feature.availability {
+        case .planned:
+            StatusPill(title: "Planned", color: .secondary)
+        case .available:
+            StatusPill(
+                title: isFeatureActive ? "Active" : "Off",
+                color: isFeatureActive ? .green : .secondary
+            )
+        }
+    }
+
+    private var isFeatureActive: Bool {
+        switch feature.id {
+        case .keystrokeOverlay:
+            utilities.keystrokeOverlay.isEnabled
+        case .screenshotTools:
+            utilities.screenshotTools.isEnabled
+        case .windowManager, .largeType:
+            false
         }
     }
 

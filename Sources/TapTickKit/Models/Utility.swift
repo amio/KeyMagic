@@ -14,15 +14,6 @@ enum UtilityID: String, CaseIterable, Codable, Hashable, Identifiable, Sendable 
 enum UtilityAvailability: String, Codable, Hashable, Sendable {
     case available
     case planned
-
-    var badgeTitle: String {
-        switch self {
-        case .available:
-            "Live"
-        case .planned:
-            "Planned"
-        }
-    }
 }
 
 struct UtilityDescriptor: Identifiable, Hashable, Sendable {
