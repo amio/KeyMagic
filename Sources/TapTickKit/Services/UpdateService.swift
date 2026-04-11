@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import Sparkle
@@ -30,7 +31,9 @@ public final class UpdateService: @unchecked Sendable {
     // MARK: - Private
 
     private let updaterController: SPUStandardUpdaterController
+    private let userDriverDelegate: UpdateUserDriverDelegate
     private var observation: NSKeyValueObservation?
+    private var userInitiatedFocusSession = false
 
     // MARK: - Init
 
@@ -48,11 +51,13 @@ public final class UpdateService: @unchecked Sendable {
         let shouldStart = true
         #endif
 
+        userDriverDelegate = UpdateUserDriverDelegate()
         updaterController = SPUStandardUpdaterController(
             startingUpdater: shouldStart,
             updaterDelegate: nil,
-            userDriverDelegate: nil
+            userDriverDelegate: userDriverDelegate
         )
+        userDriverDelegate.owner = self
 
         // Observe Sparkle's KVO-compliant `canCheckForUpdates` property
         // and mirror it into our @Observable state.
@@ -72,6 +77,54 @@ public final class UpdateService: @unchecked Sendable {
     /// Trigger a user-initiated check for updates.
     /// Sparkle will display its own UI for progress, release notes, and installation.
     public func checkForUpdates() {
+        userInitiatedFocusSession = true
+        bringAppToFrontForInteractiveUpdate()
         updaterController.checkForUpdates(nil)
+    }
+
+    fileprivate func handleWillShowModalAlert() {
+        guard userInitiatedFocusSession else { return }
+        bringAppToFrontForInteractiveUpdate()
+    }
+
+    fileprivate func handleWillShowUpdate(state: SPUUserUpdateState) {
+        guard state.userInitiated else { return }
+        bringAppToFrontForInteractiveUpdate()
+    }
+
+    fileprivate func handleWillFinishUpdateSession() {
+        userInitiatedFocusSession = false
+    }
+
+    /// Sparkle uses `NSApp.activate()` on macOS 14+, which is too gentle for TapTick's
+    /// accessory/menu-bar lifecycle. Reuse the same stronger activation path as settings.
+    private func bringAppToFrontForInteractiveUpdate() {
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+private final class UpdateUserDriverDelegate: NSObject, SPUStandardUserDriverDelegate {
+    weak var owner: UpdateService?
+
+    func standardUserDriverWillShowModalAlert() {
+        Task { @MainActor [weak owner] in
+            owner?.handleWillShowModalAlert()
+        }
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate _: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        Task { @MainActor [weak owner] in
+            owner?.handleWillShowUpdate(state: state)
+        }
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        Task { @MainActor [weak owner] in
+            owner?.handleWillFinishUpdateSession()
+        }
     }
 }
