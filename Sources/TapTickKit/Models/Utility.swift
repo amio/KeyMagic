@@ -205,10 +205,12 @@ struct KeystrokeOverlayConfiguration: Codable, Hashable, Sendable {
     )
 }
 
-struct ScreenshotToolsConfiguration: Codable, Hashable, Sendable {
+struct ScreenshotToolsConfiguration: Hashable, Sendable {
     var isEnabled: Bool
     var captureToClipboardHotkey: KeyCombo
     var captureAndMarkHotkey: KeyCombo
+    var lastAnnotationMode: AnnotationMode
+    var lastAnnotationColorIndex: Int
 
     static let defaultCaptureToClipboardHotkey = KeyCombo(
         keyCode: UInt32(kVK_ANSI_N),
@@ -223,8 +225,27 @@ struct ScreenshotToolsConfiguration: Codable, Hashable, Sendable {
     static let `default` = ScreenshotToolsConfiguration(
         isEnabled: false,
         captureToClipboardHotkey: defaultCaptureToClipboardHotkey,
-        captureAndMarkHotkey: defaultCaptureAndMarkHotkey
+        captureAndMarkHotkey: defaultCaptureAndMarkHotkey,
+        lastAnnotationMode: .freehand,
+        lastAnnotationColorIndex: 0
     )
+}
+
+// Backward-compatible Codable: new fields default gracefully when absent from older JSON.
+extension ScreenshotToolsConfiguration: Codable {
+    enum CodingKeys: String, CodingKey {
+        case isEnabled, captureToClipboardHotkey, captureAndMarkHotkey
+        case lastAnnotationMode, lastAnnotationColorIndex
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try c.decode(Bool.self, forKey: .isEnabled)
+        captureToClipboardHotkey = try c.decode(KeyCombo.self, forKey: .captureToClipboardHotkey)
+        captureAndMarkHotkey = try c.decode(KeyCombo.self, forKey: .captureAndMarkHotkey)
+        lastAnnotationMode = try c.decodeIfPresent(AnnotationMode.self, forKey: .lastAnnotationMode) ?? .freehand
+        lastAnnotationColorIndex = try c.decodeIfPresent(Int.self, forKey: .lastAnnotationColorIndex) ?? 0
+    }
 }
 
 struct UtilityConfiguration: Codable, Hashable, Sendable {

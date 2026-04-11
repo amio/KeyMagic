@@ -6,6 +6,12 @@ import Foundation
 final class ScreenshotService {
     private var previewWindow: ScreenshotPreviewWindow?
 
+    var lastAnnotationMode: AnnotationMode = .freehand
+    var lastAnnotationColorIndex: Int = 0
+
+    /// Called whenever the user changes draw mode or color in the annotation window.
+    var onAnnotationSettingsChanged: ((AnnotationMode, Int) -> Void)?
+
     /// Interactive capture → clipboard (no preview UI).
     func captureToClipboard() {
         let task = Process()
@@ -47,11 +53,22 @@ final class ScreenshotService {
     }
 
     private func showPreviewWindow(image: NSImage) {
-        // Close any existing preview window
         previewWindow?.close()
 
-        let window = ScreenshotPreviewWindow(image: image)
+        let window = ScreenshotPreviewWindow(
+            image: image,
+            initialMode: lastAnnotationMode,
+            initialColorIndex: lastAnnotationColorIndex
+        )
         previewWindow = window
+
+        window.onAnnotationSettingsChanged = { [weak self] mode, colorIndex in
+            guard let self else { return }
+            lastAnnotationMode = mode
+            lastAnnotationColorIndex = colorIndex
+            onAnnotationSettingsChanged?(mode, colorIndex)
+        }
+
         window.onDismiss = { [weak self] in
             self?.previewWindow = nil
         }

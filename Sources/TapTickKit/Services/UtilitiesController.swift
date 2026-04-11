@@ -12,24 +12,32 @@ public final class UtilitiesController: @unchecked Sendable {
 
         try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
 
-        self.fileURL = baseDirectory.appendingPathComponent("utilities.json")
+        let fileURL = baseDirectory.appendingPathComponent("utilities.json")
+        let loadedConfig = Self.loadConfiguration(from: fileURL) ?? .default
+
+        // Phase 1: initialize all stored properties before touching self.
+        self.fileURL = fileURL
         self.catalog = UtilityDescriptor.catalog
-
-        if let configuration = Self.loadConfiguration(from: self.fileURL) {
-            self.configuration = configuration
-        } else {
-            self.configuration = .default
-        }
-
+        self.configuration = loadedConfig
         self.keystrokeOverlayService = KeystrokeOverlayService()
         self.keystrokeOverlayPermission = .unknown
         self.isKeystrokeOverlayCapturing = false
 
+        let screenshotService = ScreenshotService()
+        screenshotService.lastAnnotationMode = loadedConfig.screenshotTools.lastAnnotationMode
+        screenshotService.lastAnnotationColorIndex = loadedConfig.screenshotTools.lastAnnotationColorIndex
+        self.screenshotService = screenshotService
+
+        // Phase 2: all stored properties initialized — safe to capture self.
         keystrokeOverlayService.onPermissionChange = { [weak self] status in
             self?.keystrokeOverlayPermission = status
         }
         keystrokeOverlayService.onCaptureStateChange = { [weak self] isCapturing in
             self?.isKeystrokeOverlayCapturing = isCapturing
+        }
+        screenshotService.onAnnotationSettingsChanged = { [weak self] mode, colorIndex in
+            self?.screenshotTools.lastAnnotationMode = mode
+            self?.screenshotTools.lastAnnotationColorIndex = colorIndex
         }
     }
 
@@ -45,7 +53,7 @@ public final class UtilitiesController: @unchecked Sendable {
 
     private let fileURL: URL
     private let keystrokeOverlayService: KeystrokeOverlayService
-    private let screenshotService = ScreenshotService()
+    private let screenshotService: ScreenshotService
 
     private(set) var keystrokeOverlayPermission: EventListeningPermissionStatus
     private(set) var isKeystrokeOverlayCapturing: Bool

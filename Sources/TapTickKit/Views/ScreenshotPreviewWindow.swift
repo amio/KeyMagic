@@ -4,7 +4,7 @@ import SwiftUI
 
 // MARK: - Data Types
 
-enum AnnotationMode: Sendable, CaseIterable {
+enum AnnotationMode: String, Sendable, CaseIterable, Codable {
     case freehand
     case rectangle
 
@@ -47,10 +47,17 @@ struct Annotation {
 @Observable
 @MainActor
 final class AnnotationToolbarModel {
-    var currentMode: AnnotationMode = .freehand
-    var colorIndex: Int = 0
+    var currentMode: AnnotationMode
+    var colorIndex: Int
     /// Callback fired by the Copy button in the toolbar.
     var onDone: (() -> Void)?
+    /// Fired whenever the user changes draw mode or color, so callers can persist the selection.
+    var onSettingsChanged: ((AnnotationMode, Int) -> Void)?
+
+    init(mode: AnnotationMode = .freehand, colorIndex: Int = 0) {
+        self.currentMode = mode
+        self.colorIndex = colorIndex
+    }
 
     var currentColor: NSColor {
         AnnotationPalette.colors[colorIndex].color
@@ -66,10 +73,12 @@ final class AnnotationToolbarModel {
 
     func toggleMode() {
         currentMode = currentMode == .freehand ? .rectangle : .freehand
+        onSettingsChanged?(currentMode, colorIndex)
     }
 
     func cycleColor() {
         colorIndex = (colorIndex + 1) % AnnotationPalette.colors.count
+        onSettingsChanged?(currentMode, colorIndex)
     }
 }
 
@@ -95,12 +104,13 @@ private final class NonDraggableHostingView<Content: View>: NSHostingView<Conten
 @MainActor
 final class ScreenshotPreviewWindow: NSPanel {
     var onDismiss: (() -> Void)?
+    var onAnnotationSettingsChanged: ((AnnotationMode, Int) -> Void)?
     private let canvasView: AnnotationCanvasView
-    private let toolbarModel = AnnotationToolbarModel()
+    private let toolbarModel: AnnotationToolbarModel
     /// Retained so it can be shifted alongside the traffic lights in show().
     private var toolbarHostingView: NSView?
 
-    init(image: NSImage) {
+    init(image: NSImage, initialMode: AnnotationMode = .freehand, initialColorIndex: Int = 0) {
         let screenFrame = NSScreen.screenWithMouse?.visibleFrame
             ?? NSScreen.main?.visibleFrame ?? .zero
 
@@ -126,11 +136,13 @@ final class ScreenshotPreviewWindow: NSPanel {
             height: windowHeight
         )
 
+        let toolbarModel = AnnotationToolbarModel(mode: initialMode, colorIndex: initialColorIndex)
         canvasView = AnnotationCanvasView(
             image: image,
             toolbarModel: toolbarModel,
             frame: NSRect(origin: .zero, size: displaySize)
         )
+        self.toolbarModel = toolbarModel
 
         super.init(
             contentRect: contentRect,
@@ -150,6 +162,9 @@ final class ScreenshotPreviewWindow: NSPanel {
 
         toolbarModel.onDone = { [weak self] in
             self?.commitAndClose()
+        }
+        toolbarModel.onSettingsChanged = { [weak self] mode, colorIndex in
+            self?.onAnnotationSettingsChanged?(mode, colorIndex)
         }
 
         installTitlebarAccessory()
