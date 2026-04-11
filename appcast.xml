@@ -3,6 +3,15 @@
     <channel>
         <title>KeyMagic</title>
         <item>
+            <title>1.2.4</title>
+            <pubDate>Sat, 11 Apr 2026 11:37:16 +0000</pubDate>
+            <link>https://amio.github.io/TapTick/</link>
+            <sparkle:version>27</sparkle:version>
+            <sparkle:shortVersionString>1.2.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/amio/TapTick/releases/download/v1.2.4/TapTick-1.2.4.dmg" length="3449829" type="application/octet-stream" sparkle:edSignature="y1aSLsKUHFxjrJFydJesxNMDY+iVSOJJYuKxN2eXNEzAxK/qgjz6oLey6/4urh+G/RQCbm+ZDu/8svhkH2E6Dw=="/>
+        </item>
+        <item>
             <title>1.2.3</title>
             <pubDate>Fri, 10 Apr 2026 13:30:02 +0000</pubDate>
             <link>https://amio.github.io/TapTick/</link>
@@ -19,15 +28,6 @@
             <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/amio/TapTick/releases/download/v1.2.2/TapTick-1.2.2.dmg" length="3445139" type="application/octet-stream" sparkle:edSignature="sAipvbjgwSgRa8IZeGcJCEU5isICLj4+3F0Z/CZ14w2sjsTh/nGVe8Abo0ZkmJcbCUjZX7ftvEfdWypQFL3sCQ=="/>
-        </item>
-        <item>
-            <title>1.2.1</title>
-            <pubDate>Fri, 10 Apr 2026 03:23:25 +0000</pubDate>
-            <link>https://amio.github.io/TapTick/</link>
-            <sparkle:version>24</sparkle:version>
-            <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/amio/TapTick/releases/download/v1.2.1/TapTick-1.2.1.dmg" length="3444194" type="application/octet-stream" sparkle:edSignature="EnmihD1Oowb8r875ZUsafrRksp3HpCGhl3Diabyj4Xqk5LmZGegEQn6wqXyNitt7Y5DG+l6xbn93NShyMTwsDA=="/>
         </item>
     </channel>
 </rss>
