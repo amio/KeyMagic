@@ -211,12 +211,12 @@ struct ScreenshotToolsConfiguration: Codable, Hashable, Sendable {
     var captureAndMarkHotkey: KeyCombo
 
     static let defaultCaptureToClipboardHotkey = KeyCombo(
-        keyCode: UInt32(kVK_ANSI_S),
+        keyCode: UInt32(kVK_ANSI_N),
         modifiers: [.command, .control, .option]
     )
 
     static let defaultCaptureAndMarkHotkey = KeyCombo(
-        keyCode: UInt32(kVK_ANSI_A),
+        keyCode: UInt32(kVK_ANSI_M),
         modifiers: [.command, .control, .option]
     )
 
