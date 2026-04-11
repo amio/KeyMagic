@@ -18,9 +18,18 @@ public struct SettingsView: View {
         var systemImage: String {
             switch self {
             case .general:      return "gearshape"
-            case .applications: return "app.badge.checkmark"
+            case .applications: return "sparkles.rectangle.stack"
             case .scripts:      return "terminal"
-            case .utilities:    return "sparkles.rectangle.stack"
+            case .utilities:    return "wrench.and.screwdriver"
+            }
+        }
+
+        var iconPointSize: CGFloat {
+            switch self {
+            case .utilities:
+                12
+            case .general, .applications, .scripts:
+                14
             }
         }
     }
@@ -29,7 +38,13 @@ public struct SettingsView: View {
     public var body: some View {
         NavigationSplitView {
             List(Tab.allCases, id: \.self, selection: $selectedTab) { tab in
-                Label(tab.rawValue, systemImage: tab.systemImage)
+                HStack(spacing: 12) {
+                    Image(systemName: tab.systemImage)
+                        .font(.system(size: tab.iconPointSize, weight: .regular))
+                        .frame(width: 22)
+
+                    Text(tab.rawValue)
+                }
             }
             .frame(minWidth: 180, idealWidth: 180, maxWidth: 180)
             .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
