@@ -141,46 +141,70 @@ private struct KeystrokeOverlaySettingsPane: View {
     @Binding var isRecordingHotkey: Bool
 
     var body: some View {
-        Form {
-            controlSection
-            appearanceSection
-            previewSection
-            positionSection
-            timingSection
+        ScrollView {
+            VStack(spacing: 0) {
+                paneHeader
+                Form {
+                    controlSection
+                    appearanceSection
+                    previewSection
+                    positionSection
+                    timingSection
+                }
+                .settingsFormStyle()
+                .scrollDisabled(true)
+                .fixedSize(horizontal: false, vertical: true)
+                .onChange(of: utilities.keystrokeOverlay.fontSize) {
+                    refreshLivePreview()
+                }
+                .onChange(of: utilities.keystrokeOverlay.foregroundColor) {
+                    refreshLivePreview()
+                }
+                .onChange(of: utilities.keystrokeOverlay.backgroundColor) {
+                    refreshLivePreview()
+                }
+                .onChange(of: utilities.keystrokeOverlay.verticalPosition) {
+                    refreshLivePreview()
+                }
+                .onChange(of: utilities.keystrokeOverlay.holdDuration) {
+                    refreshLivePreview()
+                }
+                .onChange(of: utilities.keystrokeOverlay.fadeOutDuration) {
+                    refreshLivePreview()
+                }
+            }
         }
-        .settingsFormStyle()
-        .onChange(of: utilities.keystrokeOverlay.fontSize) {
-            refreshLivePreview()
+    }
+
+    // MARK: - Header
+
+    private var paneHeader: some View {
+        let d = utilities.descriptor(for: .keystrokeOverlay)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                Label(d.title, systemImage: d.systemImage)
+                    .font(.title2.weight(.semibold))
+                Spacer()
+                Toggle(isOn: Binding(
+                    get: { utilities.keystrokeOverlay.isEnabled },
+                    set: { utilities.setKeystrokeOverlayEnabled($0) }
+                )) { EmptyView() }
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+            }
+            Text(d.summary)
+                .font(.body)
+                .foregroundStyle(.secondary)
         }
-        .onChange(of: utilities.keystrokeOverlay.foregroundColor) {
-            refreshLivePreview()
-        }
-        .onChange(of: utilities.keystrokeOverlay.backgroundColor) {
-            refreshLivePreview()
-        }
-        .onChange(of: utilities.keystrokeOverlay.verticalPosition) {
-            refreshLivePreview()
-        }
-        .onChange(of: utilities.keystrokeOverlay.holdDuration) {
-            refreshLivePreview()
-        }
-        .onChange(of: utilities.keystrokeOverlay.fadeOutDuration) {
-            refreshLivePreview()
-        }
+        .padding(.horizontal, 28)
+        .padding(.top, 28)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var controlSection: some View {
         Section {
-            Toggle(isOn: Binding(
-                get: { utilities.keystrokeOverlay.isEnabled },
-                set: { utilities.setKeystrokeOverlayEnabled($0) }
-            )) {
-                HStack(spacing: 8) {
-                    Text("Keystroke Overlay")
-                    overlayStatusSlot
-                }
-            }
-
             if utilities.keystrokeOverlayPermission != .granted {
                 permissionAccessRow
             }
@@ -219,23 +243,6 @@ private struct KeystrokeOverlaySettingsPane: View {
                 }
             }
         }
-    }
-
-    @ViewBuilder
-    private var overlayStatusPill: some View {
-        if utilities.keystrokeOverlay.isEnabled, utilities.isKeystrokeOverlayCapturing {
-            StatusPill(title: "Active", color: .green)
-        } else if utilities.keystrokeOverlayPermission != .granted {
-            StatusPill(title: "Input Monitoring Required", color: .orange)
-        }
-    }
-
-    private var overlayStatusSlot: some View {
-        StatusPill(title: "Input Monitoring Required", color: .orange)
-            .hidden()
-            .overlay(alignment: .leading) {
-                overlayStatusPill
-            }
     }
 
     private var permissionAccessRow: some View {
@@ -452,31 +459,45 @@ private struct ScreenshotToolsSettingsPane: View {
     @Binding var isRecordingMarkHotkey: Bool
 
     var body: some View {
-        Form {
-            controlSection
-            hotkeysSection
-            usageSection
-        }
-        .settingsFormStyle()
-    }
-
-    // MARK: - Control
-
-    private var controlSection: some View {
-        Section {
-            Toggle(isOn: Binding(
-                get: { utilities.screenshotTools.isEnabled },
-                set: { utilities.setScreenshotToolsEnabled($0) }
-            )) {
-                HStack(spacing: 8) {
-                    Text("Screenshot Tools")
-                    StatusPill(
-                        title: utilities.screenshotTools.isEnabled ? "Active" : "Off",
-                        color: utilities.screenshotTools.isEnabled ? .green : .secondary
-                    )
+        ScrollView {
+            VStack(spacing: 0) {
+                paneHeader
+                Form {
+                    hotkeysSection
+                    usageSection
                 }
+                .settingsFormStyle()
+                .scrollDisabled(true)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    // MARK: - Header
+
+    private var paneHeader: some View {
+        let d = utilities.descriptor(for: .screenshotTools)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                Label(d.title, systemImage: d.systemImage)
+                    .font(.title2.weight(.semibold))
+                Spacer()
+                Toggle(isOn: Binding(
+                    get: { utilities.screenshotTools.isEnabled },
+                    set: { utilities.setScreenshotToolsEnabled($0) }
+                )) { EmptyView() }
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+            }
+            Text(d.summary)
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 28)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Hotkeys
