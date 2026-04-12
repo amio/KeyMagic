@@ -12,3 +12,6 @@
 
 **Principle**: Align Runtime Semantics With Product Contracts
 **Cases**: (a) Replaced application shortcut visibility toggling with launch-or-focus activation so the executor matches the launcher behavior promised by the Applications UI and README. (b) Refined application shortcuts to hide only the frontmost activatable app instance while keeping Launch Services fallback for background and helper-process states.
+
+**Principle**: Match Surface Area To User Decisions
+**Cases**: (a) Reduced the About panel to app identity, version, update controls, and the author link so the screen only presents information a user can act on there. (b) Reworked the About layout into a centered brand block with inline update rows and compact external links so secondary controls no longer dominate the page.
