@@ -3,7 +3,8 @@ import Observation
 
 /// Manages persistence and in-memory state of all user-defined shortcuts.
 ///
-/// Local data lives in `~/Library/Application Support/TapTick/shortcuts.json`.
+/// Local data lives in a variant-specific Application Support directory
+/// (`TapTick` for release, `TapTick Dev` for Debug).
 /// When iCloud sync is enabled, every local mutation is also pushed to the cloud,
 /// and remote changes are merged in automatically via `CloudSyncService`.
 @Observable
@@ -23,7 +24,10 @@ public final class ShortcutStore: @unchecked Sendable {
     public init(directory: URL? = nil, cloudSync: CloudSyncService? = nil) {
         let dir = directory ?? FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
-        ).first!.appendingPathComponent("TapTick", isDirectory: true)
+        ).first!.appendingPathComponent(
+            TapTickRuntimeConfiguration.current.appSupportDirectoryName,
+            isDirectory: true
+        )
 
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.fileURL = dir.appendingPathComponent("shortcuts.json")

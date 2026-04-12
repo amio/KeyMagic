@@ -77,15 +77,17 @@
 - **Utilities**: Native utilities live outside the user shortcut model, with their own persisted settings, reserved hotkeys, and permission-aware runtime services. Each utility can register multiple named hotkey actions (featureID + action string) through `UtilitiesController.reservedHotkeys()`, and permission-gated utilities own both the initial request and the System Settings recovery path.
 - **Screenshot Tools**: Two capture flows — "Capture to Clipboard" (`screencapture -ic`, no UI) and "Capture & Mark" (`screencapture -i` to temp file → borderless annotation window with freehand/rect drawing → Return copies composited image to clipboard). Default hotkeys ⌃⌥⌘N / ⌃⌥⌘M. Tab toggles draw mode, ⌥Tab cycles annotation color through a six-color palette.
 - **Shortcuts**: Each `Shortcut` has a `KeyCombo`, a `ShortcutAction` (launch app / run inline script / run script file), and metadata (`isEnabled`, `createdAt`, `modifiedAt`, `lastTriggeredAt`).
+- **Runtime Identity**: The Debug app is intentionally isolated as `TapTick Dev` (`com.taptick.app.dev`) while release remains `TapTick` (`com.taptick.app`), so macOS permissions and local app-support storage match the actual signing identity instead of pretending to be shared.
 - **Installed App Discovery**: The Applications tab keeps the first discovered app snapshot in a shared in-memory catalog for the rest of the session, while later tab visits trigger silent background refreshes instead of returning to a loading-only state.
 - **iCloud Sync**: Optional, uses ubiquity container `iCloud.com.taptick.app`; last-writer-wins merge by UUID + `modifiedAt`; currently disabled pending provisioning profile.
-- **Persistence**: User shortcuts persist to `~/Library/Application Support/TapTick/shortcuts.json` with optional cloud mirror at `iCloud.com.taptick.app/Documents/shortcuts.json`; utility settings persist locally in `~/Library/Application Support/TapTick/utilities.json`.
+- **Persistence**: User shortcuts and utility settings persist under a variant-specific Application Support directory (`TapTick` for release, `TapTick Dev` for Debug); optional cloud sync still targets `iCloud.com.taptick.app/Documents/shortcuts.json`.
 
 ## Component Map
 
 - **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, `AppState` (shared singleton owning all services, the utilities controller, and the settings window reference), `AppDelegate` (lifecycle, startup wiring, settings-window toggle, menu bar init, hotkey bootstrap), Settings Window scene.
 - **Hotkey engine**: `Sources/TapTickKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, reserved settings-window/built-in hotkeys, shortcut conflict checks, and recorder suspension.
-- **Data layer**: `Sources/TapTickKit/Services/ShortcutStore.swift` — CRUD, disk I/O, cloud sync coordination.
+- **Runtime identity**: `project.yml`, `Resources/Info.plist`, and `Sources/TapTickKit/Services/TapTickRuntimeConfiguration.swift` — define Debug vs release bundle identity, display name, and variant-specific Application Support routing.
+- **Data layer**: `Sources/TapTickKit/Services/ShortcutStore.swift` — CRUD, disk I/O, cloud sync coordination, and runtime-aware local storage routing.
 - **Utility runtime**: `Sources/TapTickKit/Services/UtilitiesController.swift` and `Sources/TapTickKit/Services/KeystrokeOverlayService.swift` — utility persistence, keystroke overlay permission flow, Input Monitoring settings recovery, global key capture, and floating HUD presentation. `Sources/TapTickKit/Services/ScreenshotService.swift` — orchestrates `screencapture` CLI for two modes (clipboard-only and capture-and-mark) and manages the annotation preview window lifecycle.
 - **Cloud sync**: `Sources/TapTickKit/Services/CloudSyncService.swift` — NSMetadataQuery monitoring, upload/download, merge algorithm.
 - **Action execution**: `Sources/TapTickKit/Services/ShortcutExecutor.swift` — app toggle/launch, inline script, script file.
@@ -94,4 +96,4 @@
 - **Applications catalog UI**: `Sources/TapTickKit/Views/ApplicationsView.swift` — shared discovered-app cache, background rescan policy, unavailable-app section, and per-app hotkey binding rows.
 - **Hotkey input UI**: `Sources/TapTickKit/Views/Components/HotkeyBindingControl.swift` owns the compact shared hotkey recording/binding interaction reused by settings surfaces.
 - **Menu bar UI**: `Sources/TapTickKit/Views/MenuBarController.swift` — native `NSStatusItem` + `NSMenu`; Observation-driven rebuild on shortcut changes; UserDefaults KVO show/hide; native key equivalent glyphs.
-- **Bundle IDs**: App `com.taptick.app`; iCloud container `iCloud.com.taptick.app`.
+- **Bundle IDs**: Debug app `com.taptick.app.dev`; release app `com.taptick.app`; iCloud container `iCloud.com.taptick.app`.

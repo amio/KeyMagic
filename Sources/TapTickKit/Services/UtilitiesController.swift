@@ -8,7 +8,10 @@ public final class UtilitiesController: @unchecked Sendable {
         let baseDirectory = directory ?? FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
-        ).first!.appendingPathComponent("TapTick", isDirectory: true)
+        ).first!.appendingPathComponent(
+            TapTickRuntimeConfiguration.current.appSupportDirectoryName,
+            isDirectory: true
+        )
 
         try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
 

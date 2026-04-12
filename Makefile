@@ -5,6 +5,7 @@
 PROJECT   := TapTick.xcodeproj
 SCHEME    := TapTick
 BUILD_DIR := build
+DEBUG_APP_NAME := TapTick Dev
 
 # Keychain profile name created via:
 #   xcrun notarytool store-credentials "TapTick" --apple-id ... --team-id ... --password ...
@@ -106,11 +107,11 @@ release: ## Build app — Release (via xcodebuild)
 run: ## Build (Debug) and run app from the CLI
 	@$(MAKE) --no-print-directory build
 	@echo "→ Launching app..."
-	@APP_PATH="$(BUILD_DIR)/Build/Products/Debug/TapTick.app"; \
+	@APP_PATH="$(BUILD_DIR)/Build/Products/Debug/$(DEBUG_APP_NAME).app"; \
 	if [ -d "$$APP_PATH" ]; then \
 	    open "$$APP_PATH"; \
 	else \
-	    BIN="$$APP_PATH/Contents/MacOS/TapTick"; \
+	    BIN="$$APP_PATH/Contents/MacOS/$(DEBUG_APP_NAME)"; \
 	    if [ -x "$$BIN" ]; then \
 	        exec "$$BIN"; \
 	    else \

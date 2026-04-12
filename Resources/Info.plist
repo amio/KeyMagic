@@ -3,11 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>TapTick</string>
+    <string>$(TAPTICK_DISPLAY_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>TapTick</string>
+    <string>$(TAPTICK_DISPLAY_NAME)</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>TapTickAppSupportDirectoryName</key>
+    <string>$(TAPTICK_APP_SUPPORT_DIRECTORY_NAME)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleShortVersionString</key>

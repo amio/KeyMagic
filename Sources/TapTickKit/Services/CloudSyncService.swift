@@ -40,7 +40,10 @@ public final class CloudSyncService: @unchecked Sendable {
     private static let containerID = "iCloud.com.taptick.app"
     private static let fileName = "shortcuts.json"
 
-    private let logger = Logger(subsystem: "com.taptick.app", category: "CloudSync")
+    private let logger = Logger(
+        subsystem: TapTickRuntimeConfiguration.current.bundleIdentifier,
+        category: "CloudSync"
+    )
     private var metadataQuery: NSMetadataQuery?
     private var containerURL: URL?
 

@@ -53,6 +53,9 @@ To re-enable iCloud for distribution, see the [iCloud section](#re-enabling-iclo
 ### 1. Local Debug Build (daily development)
 
 No signing setup required. Xcode manages everything automatically.
+The debug variant deliberately launches as `TapTick Dev.app` with bundle
+identifier `com.taptick.app.dev`, so its TCC permissions and local state stay
+separate from the notarized release app.
 
 ```bash
 make build      # Debug build via xcodebuild
