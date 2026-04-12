@@ -337,6 +337,9 @@ final class AnnotationCanvasView: NSView {
     private var currentPoints: [NSPoint] = []
     private var isDrawing = false
     private let lineWidth: CGFloat = 3.0
+    private let minimumPointSpacing: CGFloat = 1.5
+    private let freehandSmoothingPasses = 2
+    private let freehandNeighborWeight: CGFloat = 0.2
 
     init(image: NSImage, toolbarModel: AnnotationToolbarModel, frame: NSRect) {
         self.image = image
@@ -426,14 +429,7 @@ final class AnnotationCanvasView: NSView {
 
         switch annotation.mode {
         case .freehand:
-            let path = NSBezierPath()
-            path.lineWidth = scaledWidth
-            path.lineCapStyle = .round
-            path.lineJoinStyle = .round
-            path.move(to: scaledPoints[0])
-            for point in scaledPoints.dropFirst() {
-                path.line(to: point)
-            }
+            let path = freehandPath(for: scaledPoints, lineWidth: scaledWidth)
             path.stroke()
 
         case .rectangle:
@@ -451,6 +447,125 @@ final class AnnotationCanvasView: NSView {
         }
     }
 
+    private func freehandPath(for points: [NSPoint], lineWidth: CGFloat) -> NSBezierPath {
+        let smoothedPoints = smoothedFreehandPoints(points)
+        let path = NSBezierPath()
+        path.lineWidth = lineWidth
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+
+        guard let first = smoothedPoints.first else { return path }
+        path.move(to: first)
+
+        guard smoothedPoints.count > 1 else { return path }
+        guard smoothedPoints.count > 2 else {
+            path.line(to: smoothedPoints[1])
+            return path
+        }
+
+        for index in 0 ..< (smoothedPoints.count - 1) {
+            let previous = index > 0 ? smoothedPoints[index - 1] : smoothedPoints[index]
+            let current = smoothedPoints[index]
+            let next = smoothedPoints[index + 1]
+            let nextNext = index + 2 < smoothedPoints.count ? smoothedPoints[index + 2] : next
+
+            let controlPoint1 = NSPoint(
+                x: current.x + (next.x - previous.x) / 6,
+                y: current.y + (next.y - previous.y) / 6
+            )
+            let controlPoint2 = NSPoint(
+                x: next.x - (nextNext.x - current.x) / 6,
+                y: next.y - (nextNext.y - current.y) / 6
+            )
+
+            path.curve(to: next, controlPoint1: controlPoint1, controlPoint2: controlPoint2)
+        }
+
+        return path
+    }
+
+    private func smoothedFreehandPoints(_ points: [NSPoint]) -> [NSPoint] {
+        guard points.count > 2 else { return points }
+
+        var smoothedPoints = points
+
+        for _ in 0 ..< freehandSmoothingPasses {
+            smoothedPoints = smoothPointPass(smoothedPoints)
+        }
+
+        return smoothedPoints
+    }
+
+    private func smoothPointPass(_ points: [NSPoint]) -> [NSPoint] {
+        guard points.count > 2 else { return points }
+
+        let centerWeight = 1 - (freehandNeighborWeight * 2)
+        var smoothedPoints = [points[0]]
+        smoothedPoints.reserveCapacity(points.count)
+
+        for index in 1 ..< (points.count - 1) {
+            let previous = points[index - 1]
+            let current = points[index]
+            let next = points[index + 1]
+
+            smoothedPoints.append(NSPoint(
+                x: previous.x * freehandNeighborWeight
+                    + current.x * centerWeight
+                    + next.x * freehandNeighborWeight,
+                y: previous.y * freehandNeighborWeight
+                    + current.y * centerWeight
+                    + next.y * freehandNeighborWeight
+            ))
+        }
+
+        smoothedPoints.append(points[points.count - 1])
+        return smoothedPoints
+    }
+
+    private func appendCurrentPoint(_ point: NSPoint) {
+        guard let lastPoint = currentPoints.last else {
+            currentPoints.append(point)
+            return
+        }
+
+        let dx = point.x - lastPoint.x
+        let dy = point.y - lastPoint.y
+        let distanceSquared = dx * dx + dy * dy
+        let minimumSpacingSquared = minimumPointSpacing * minimumPointSpacing
+
+        guard distanceSquared >= minimumSpacingSquared else { return }
+        currentPoints.append(point)
+    }
+
+    private func shouldCommitCurrentAnnotation() -> Bool {
+        switch toolbarModel.currentMode {
+        case .freehand:
+            return strokeLength(for: currentPoints) > 3
+        case .rectangle:
+            guard let first = currentPoints.first,
+                  let last = currentPoints.last else { return false }
+            let dx = last.x - first.x
+            let dy = last.y - first.y
+            return sqrt(dx * dx + dy * dy) > 3
+        }
+    }
+
+    private func strokeLength(for points: [NSPoint]) -> CGFloat {
+        guard points.count > 1 else { return 0 }
+
+        var length: CGFloat = 0
+
+        for index in 1 ..< points.count {
+            let previous = points[index - 1]
+            let current = points[index]
+            let dx = current.x - previous.x
+            let dy = current.y - previous.y
+            length += sqrt(dx * dx + dy * dy)
+        }
+
+        return length
+    }
+
     // MARK: - Mouse Handling
 
     override func mouseDown(with event: NSEvent) {
@@ -465,7 +580,7 @@ final class AnnotationCanvasView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard isDrawing else { return }
         let point = convert(event.locationInWindow, from: nil)
-        currentPoints.append(point)
+        appendCurrentPoint(point)
         needsDisplay = true
     }
 
@@ -473,19 +588,18 @@ final class AnnotationCanvasView: NSView {
         guard isDrawing else { return }
         isDrawing = false
 
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.contains(point) {
+            appendCurrentPoint(point)
+        }
+
         guard currentPoints.count >= 2 else {
             currentPoints.removeAll()
             needsDisplay = true
             return
         }
 
-        let first = currentPoints[0]
-        let last = currentPoints[currentPoints.count - 1]
-        let dx = last.x - first.x
-        let dy = last.y - first.y
-        let distance = sqrt(dx * dx + dy * dy)
-
-        if distance > 3 {
+        if shouldCommitCurrentAnnotation() {
             annotations.append(Annotation(
                 mode: toolbarModel.currentMode,
                 points: currentPoints,
