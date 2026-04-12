@@ -1,14 +1,20 @@
 import Cocoa
 import Foundation
 
-/// Executes shortcut actions (launch/toggle apps, run scripts).
-final class ShortcutExecutor: Sendable {
+/// Executes shortcut actions (launch/focus apps, run scripts).
+@MainActor
+final class ShortcutExecutor {
+    private let applicationLauncher: ApplicationLauncher
+
+    init(applicationLauncher: ApplicationLauncher = .live) {
+        self.applicationLauncher = applicationLauncher
+    }
 
     /// Execute the given action.
     func execute(action: ShortcutAction) {
         switch action {
         case .launchApp(let bundleIdentifier, _):
-            toggleApp(bundleIdentifier: bundleIdentifier)
+            launchOrFocusApp(bundleIdentifier: bundleIdentifier)
         case .runScript(let script, let shell):
             runInlineScript(script: script, shell: shell)
         case .runScriptFile(let path, let shell):
@@ -16,43 +22,41 @@ final class ShortcutExecutor: Sendable {
         }
     }
 
-    // MARK: - Toggle App Visibility
+    // MARK: - Launch / Focus Apps
 
-    private func toggleApp(bundleIdentifier: String) {
-        // Check if the app is already running
-        let runningApps = NSWorkspace.shared.runningApplications.filter {
-            $0.bundleIdentifier == bundleIdentifier
-        }
+    private func launchOrFocusApp(bundleIdentifier: String) {
+        if let app = preferredRunningApplication(bundleIdentifier: bundleIdentifier) {
+            app.unhide()
 
-        if let app = runningApps.first {
-            // App is running — toggle visibility
-            if app.isActive {
-                // Currently frontmost, hide it
-                app.hide()
-            } else if app.isHidden {
-                // Hidden, unhide and activate
-                app.unhide()
-                app.activate()
-            } else {
-                // Visible but not frontmost, bring to front
-                app.activate()
-            }
-        } else {
-            // App not running — launch it
-            guard let url = NSWorkspace.shared.urlForApplication(
-                withBundleIdentifier: bundleIdentifier
-            ) else {
-                print("TapTick: App not found: \(bundleIdentifier)")
+            let didActivate = app.activate([.activateAllWindows])
+            if didActivate {
                 return
             }
 
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
+            print("TapTick: Failed to activate running app: \(bundleIdentifier)")
+        }
 
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
-                if let error {
-                    print("TapTick: Failed to launch app: \(error)")
-                }
+        launchApp(bundleIdentifier: bundleIdentifier)
+    }
+
+    private func preferredRunningApplication(bundleIdentifier: String) -> RunningApplicationHandle? {
+        let runningApps = applicationLauncher.runningApplications(bundleIdentifier)
+
+        // Bundle IDs can own background helpers as well as the user-facing app process.
+        // Prefer a window-capable instance and let Launch Services recover otherwise.
+        return runningApps.first { $0.activationPolicy == .regular }
+            ?? runningApps.first { $0.activationPolicy == .accessory }
+    }
+
+    private func launchApp(bundleIdentifier: String) {
+        guard let url = applicationLauncher.applicationURL(bundleIdentifier) else {
+            print("TapTick: App not found: \(bundleIdentifier)")
+            return
+        }
+
+        applicationLauncher.openApplication(url) { error in
+            if let error {
+                print("TapTick: Failed to launch app: \(error)")
             }
         }
     }
@@ -82,7 +86,7 @@ final class ShortcutExecutor: Sendable {
     private func runScriptFile(path: String, shell: ShortcutAction.ShellType) {
         let expandedPath = NSString(string: path).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expandedPath) else {
-                print("TapTick: Script file not found: \(expandedPath)")
+            print("TapTick: Script file not found: \(expandedPath)")
             return
         }
 
@@ -103,5 +107,53 @@ final class ShortcutExecutor: Sendable {
                 print("TapTick: Failed to run script file: \(error)")
             }
         }
+    }
+}
+
+/** Lightweight handle for a running app process so launch/focus behavior is testable. */
+struct RunningApplicationHandle {
+    let activationPolicy: NSApplication.ActivationPolicy
+    let unhide: () -> Void
+    let activate: (NSApplication.ActivationOptions) -> Bool
+}
+
+/** Owns the Launch Services boundary used for application shortcuts. */
+struct ApplicationLauncher {
+    let runningApplications: (String) -> [RunningApplicationHandle]
+    let applicationURL: (String) -> URL?
+    let openApplication: (URL, @escaping @Sendable (Error?) -> Void) -> Void
+
+    @MainActor
+    static let live = ApplicationLauncher(
+        runningApplications: { bundleIdentifier in
+            NSWorkspace.shared.runningApplications
+                .filter { $0.bundleIdentifier == bundleIdentifier }
+                .map { RunningApplicationHandle($0) }
+        },
+        applicationURL: { bundleIdentifier in
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+        },
+        openApplication: { url, completion in
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+                completion(error)
+            }
+        }
+    )
+}
+
+private extension RunningApplicationHandle {
+    init(_ application: NSRunningApplication) {
+        self.init(
+            activationPolicy: application.activationPolicy,
+            unhide: {
+                application.unhide()
+            },
+            activate: { options in
+                application.activate(options: options)
+            }
+        )
     }
 }
