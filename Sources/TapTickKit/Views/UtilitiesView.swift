@@ -621,15 +621,11 @@ private struct ScreenshotToolsSettingsPane: View {
                         .foregroundStyle(.secondary)
                     Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 5) {
                         GridRow {
-                            keycap("TAB")
-                            Text("Switch freehand / rect")
-                        }
-                        GridRow {
                             keycap("⌥")
-                            Text("Temporarily swap freehand / rect while held")
+                            Text("Tap to switch freehand / rect, hold to swap temporarily")
                         }
                         GridRow {
-                            keycap("⌥ TAB")
+                            keycap("TAB")
                             Text("Cycle annotation color")
                         }
                         GridRow {

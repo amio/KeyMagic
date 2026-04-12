@@ -130,6 +130,11 @@ final class ScreenshotPreviewWindow: NSPanel {
     private let toolbarModel: AnnotationToolbarModel
     /// Retained so it can be shifted alongside the traffic lights in show().
     private var toolbarHostingView: NSView?
+    private var isOptionPressed = false
+    private var didUseOptionPressAsModifier = false
+    private var didActivateTemporaryModeSwitch = false
+    private var optionHoldActivationWorkItem: DispatchWorkItem?
+    private let optionHoldThreshold: TimeInterval = 0.22
 
     init(image: NSImage, initialMode: AnnotationMode = .freehand, initialColorIndex: Int = 0) {
         let screenFrame = NSScreen.screenWithMouse?.visibleFrame
@@ -216,7 +221,7 @@ final class ScreenshotPreviewWindow: NSPanel {
     }
 
     override func close() {
-        toolbarModel.setTemporaryModeSwitchActive(false)
+        resetOptionModeInteraction()
         onDismiss?()
         super.close()
     }
@@ -227,13 +232,13 @@ final class ScreenshotPreviewWindow: NSPanel {
         let keyCode = Int(event.keyCode)
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        switch keyCode {
-        case kVK_Tab where flags.contains(.option):
-            toolbarModel.cycleColor()
-            canvasView.needsDisplay = true
+        if isOptionPressed {
+            didUseOptionPressAsModifier = true
+        }
 
+        switch keyCode {
         case kVK_Tab:
-            toolbarModel.toggleMode()
+            toolbarModel.cycleColor()
             canvasView.needsDisplay = true
 
         case kVK_Return:
@@ -252,13 +257,21 @@ final class ScreenshotPreviewWindow: NSPanel {
 
     override func flagsChanged(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        toolbarModel.setTemporaryModeSwitchActive(flags.contains(.option))
-        canvasView.needsDisplay = true
+        let isOptionActive = flags.contains(.option)
+
+        if isOptionActive == isOptionPressed {
+            return
+        }
+
+        if isOptionActive {
+            beginOptionModeInteraction()
+        } else {
+            endOptionModeInteraction()
+        }
     }
 
     override func resignKey() {
-        toolbarModel.setTemporaryModeSwitchActive(false)
-        canvasView.needsDisplay = true
+        resetOptionModeInteraction()
         super.resignKey()
     }
 
@@ -267,6 +280,50 @@ final class ScreenshotPreviewWindow: NSPanel {
     private func commitAndClose() {
         canvasView.copyToClipboard()
         close()
+    }
+
+    private func beginOptionModeInteraction() {
+        isOptionPressed = true
+        didUseOptionPressAsModifier = false
+        didActivateTemporaryModeSwitch = false
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isOptionPressed else { return }
+            self.didActivateTemporaryModeSwitch = true
+            self.toolbarModel.setTemporaryModeSwitchActive(true)
+            self.canvasView.needsDisplay = true
+        }
+
+        optionHoldActivationWorkItem?.cancel()
+        optionHoldActivationWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + optionHoldThreshold, execute: workItem)
+    }
+
+    private func endOptionModeInteraction() {
+        optionHoldActivationWorkItem?.cancel()
+        optionHoldActivationWorkItem = nil
+
+        if didActivateTemporaryModeSwitch {
+            toolbarModel.setTemporaryModeSwitchActive(false)
+            canvasView.needsDisplay = true
+        } else if !didUseOptionPressAsModifier {
+            toolbarModel.toggleMode()
+            canvasView.needsDisplay = true
+        }
+
+        isOptionPressed = false
+        didUseOptionPressAsModifier = false
+        didActivateTemporaryModeSwitch = false
+    }
+
+    private func resetOptionModeInteraction() {
+        optionHoldActivationWorkItem?.cancel()
+        optionHoldActivationWorkItem = nil
+        toolbarModel.setTemporaryModeSwitchActive(false)
+        isOptionPressed = false
+        didUseOptionPressAsModifier = false
+        didActivateTemporaryModeSwitch = false
+        canvasView.needsDisplay = true
     }
 
     private func installTitlebarAccessory() {
@@ -661,11 +718,11 @@ private struct AnnotationToolbar: View {
             HStack(spacing: 24) {
                 HStack(spacing: 6) {
                     modeSwitch
-                    keycap("TAB")
+                    keycap("⌥")
                 }
                 HStack(spacing: 6) {
                     colorIndicator
-                    keycap("⌥ TAB")
+                    keycap("TAB")
                 }
             }
 
