@@ -24,12 +24,25 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
     let availability: UtilityAvailability
     let highlights: [String]
 
+    var directoryIconPointSize: CGFloat {
+        switch id {
+        case .windowManager:
+            13
+        case .keystrokeOverlay:
+            14
+        case .largeType:
+            15
+        case .screenshotTools:
+            16
+        }
+    }
+
     static let catalog: [UtilityDescriptor] = [
         UtilityDescriptor(
             id: .keystrokeOverlay,
             title: "Keystroke Overlay",
             summary: "Show the current key chord in a subtitle-style HUD near the bottom of the screen.",
-            systemImage: "keyboard",
+            systemImage: "keyboard.badge.eye",
             availability: .available,
             highlights: [
                 "Global toggle hotkey",
@@ -53,7 +66,7 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
             id: .windowManager,
             title: "Window Manager",
             summary: "Resize, snap, and reposition windows with native layouts and shortcut-driven commands.",
-            systemImage: "uiwindow.split.2x1",
+            systemImage: "rectangle.3.offgrid",
             availability: .planned,
             highlights: [
                 "Preset layouts",
@@ -65,7 +78,7 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
             id: .largeType,
             title: "Large Type",
             summary: "Project large temporary text on screen for quick glanceable display, similar to Alfred.",
-            systemImage: "textformat.size.larger",
+            systemImage: "character.textbox",
             availability: .planned,
             highlights: [
                 "Huge readable text",

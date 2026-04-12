@@ -88,7 +88,7 @@ private struct UtilityRow: View {
 
     private var utilityIcon: some View {
         Image(systemName: feature.systemImage)
-            .font(.title3)
+            .font(.system(size: feature.directoryIconPointSize, weight: .regular))
             .foregroundStyle(feature.availability == .available ? Color.accentColor : Color.secondary)
             .frame(width: iconColumnWidth)
     }
