@@ -1,7 +1,7 @@
 import Cocoa
 import Foundation
 
-/// Executes shortcut actions (launch/focus apps, run scripts).
+/// Executes shortcut actions (toggle app visibility/focus, run scripts).
 @MainActor
 final class ShortcutExecutor {
     private let applicationLauncher: ApplicationLauncher
@@ -14,7 +14,7 @@ final class ShortcutExecutor {
     func execute(action: ShortcutAction) {
         switch action {
         case .launchApp(let bundleIdentifier, _):
-            launchOrFocusApp(bundleIdentifier: bundleIdentifier)
+            toggleOrLaunchApp(bundleIdentifier: bundleIdentifier)
         case .runScript(let script, let shell):
             runInlineScript(script: script, shell: shell)
         case .runScriptFile(let path, let shell):
@@ -22,10 +22,22 @@ final class ShortcutExecutor {
         }
     }
 
-    // MARK: - Launch / Focus Apps
+    // MARK: - Toggle App Visibility / Focus
 
-    private func launchOrFocusApp(bundleIdentifier: String) {
-        if let app = preferredRunningApplication(bundleIdentifier: bundleIdentifier) {
+    private func toggleOrLaunchApp(bundleIdentifier: String) {
+        let runningApps = applicationLauncher.runningApplications(bundleIdentifier)
+
+        if let app = activeRunningApplication(in: runningApps) {
+            let didHide = app.hide()
+            if didHide {
+                return
+            }
+
+            print("TapTick: Failed to hide active app: \(bundleIdentifier)")
+            return
+        }
+
+        if let app = preferredRunningApplication(in: runningApps) {
             app.unhide()
 
             let didActivate = app.activate([.activateAllWindows])
@@ -39,9 +51,17 @@ final class ShortcutExecutor {
         launchApp(bundleIdentifier: bundleIdentifier)
     }
 
-    private func preferredRunningApplication(bundleIdentifier: String) -> RunningApplicationHandle? {
-        let runningApps = applicationLauncher.runningApplications(bundleIdentifier)
+    private func activeRunningApplication(
+        in runningApps: [RunningApplicationHandle]
+    ) -> RunningApplicationHandle? {
+        runningApps.first {
+            $0.isActive && ($0.activationPolicy == .regular || $0.activationPolicy == .accessory)
+        }
+    }
 
+    private func preferredRunningApplication(
+        in runningApps: [RunningApplicationHandle]
+    ) -> RunningApplicationHandle? {
         // Bundle IDs can own background helpers as well as the user-facing app process.
         // Prefer a window-capable instance and let Launch Services recover otherwise.
         return runningApps.first { $0.activationPolicy == .regular }
@@ -113,6 +133,8 @@ final class ShortcutExecutor {
 /** Lightweight handle for a running app process so launch/focus behavior is testable. */
 struct RunningApplicationHandle {
     let activationPolicy: NSApplication.ActivationPolicy
+    let isActive: Bool
+    let hide: () -> Bool
     let unhide: () -> Void
     let activate: (NSApplication.ActivationOptions) -> Bool
 }
@@ -148,6 +170,10 @@ private extension RunningApplicationHandle {
     init(_ application: NSRunningApplication) {
         self.init(
             activationPolicy: application.activationPolicy,
+            isActive: application.isActive,
+            hide: {
+                application.hide()
+            },
             unhide: {
                 application.unhide()
             },

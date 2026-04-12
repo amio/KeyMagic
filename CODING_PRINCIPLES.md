@@ -11,4 +11,4 @@
 **Cases**: (a) Removed root-level compiler byproducts and a standalone scratch app from version control, then pinned them in `.gitignore` so the repo only tracks files that participate in the product graph.
 
 **Principle**: Align Runtime Semantics With Product Contracts
-**Cases**: (a) Replaced application shortcut visibility toggling with launch-or-focus activation so the executor matches the launcher behavior promised by the Applications UI and README.
+**Cases**: (a) Replaced application shortcut visibility toggling with launch-or-focus activation so the executor matches the launcher behavior promised by the Applications UI and README. (b) Refined application shortcuts to hide only the frontmost activatable app instance while keeping Launch Services fallback for background and helper-process states.
