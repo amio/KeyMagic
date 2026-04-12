@@ -208,6 +208,9 @@ struct TapTickApp: App {
                 .environment(appState.loginItemManager)
                 .environment(appState.cloudSync)
                 .environment(appState.updateService)
+                .background(SettingsWindowEscapeShortcut {
+                    appState.settingsWindow?.orderOut(nil)
+                })
                 .background(SettingsWindowObserver { window in
                     guard let window else { return }
                     window.identifier = settingsWindowIdentifier
@@ -234,6 +237,20 @@ struct TapTickApp: App {
 }
 
 private let settingsWindowIdentifier = NSUserInterfaceItemIdentifier("TapTick.settingsWindow")
+
+private struct SettingsWindowEscapeShortcut: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Button("Dismiss Settings", action: onDismiss)
+            .keyboardShortcut(.cancelAction)
+            .labelsHidden()
+            .frame(width: 0, height: 0)
+            .opacity(0.001)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
 
 /// Captures the underlying NSWindow for the SwiftUI settings scene once it exists.
 private struct SettingsWindowObserver: NSViewRepresentable {
