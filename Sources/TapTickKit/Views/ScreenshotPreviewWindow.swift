@@ -17,7 +17,7 @@ enum AnnotationMode: String, Sendable, CaseIterable, Codable {
 
     var systemImage: String {
         switch self {
-        case .freehand: "pencil.tip"
+        case .freehand: "scribble"
         case .rectangle: "rectangle"
         }
     }
