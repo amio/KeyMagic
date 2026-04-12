@@ -505,67 +505,79 @@ private struct ScreenshotToolsSettingsPane: View {
     private var hotkeysSection: some View {
         Section("Hotkeys") {
             LabeledContent("Capture to Clipboard") {
-                HotkeyBindingControl(
-                    keyCombo: utilities.screenshotTools.captureToClipboardHotkey,
-                    isRecording: isRecordingCaptureHotkey,
-                    onStartRecording: {
-                        isRecordingMarkHotkey = false
-                        isRecordingCaptureHotkey = true
-                    },
-                    onRecordKey: { combo in
-                        utilities.updateScreenshotCaptureToClipboardHotkey(combo)
-                        isRecordingCaptureHotkey = false
-                    },
-                    onCancelRecording: {
-                        isRecordingCaptureHotkey = false
-                    },
-                    checkConflict: { combo in
-                        hotkeyService.hasConflict(
-                            keyCombo: combo,
-                            excludingUtilityID: .screenshotTools
+                HStack(spacing: 8) {
+                    HotkeyBindingControl(
+                        keyCombo: utilities.screenshotTools.captureToClipboardHotkey,
+                        isRecording: isRecordingCaptureHotkey,
+                        onStartRecording: {
+                            isRecordingMarkHotkey = false
+                            isRecordingCaptureHotkey = true
+                        },
+                        onRecordKey: { combo in
+                            utilities.updateScreenshotCaptureToClipboardHotkey(combo)
+                            isRecordingCaptureHotkey = false
+                        },
+                        onCancelRecording: {
+                            isRecordingCaptureHotkey = false
+                        },
+                        checkConflict: { combo in
+                            hotkeyService.hasConflict(
+                                keyCombo: combo,
+                                excludingUtilityID: .screenshotTools
+                            )
+                        },
+                        emptyTitle: "Record Hotkey"
+                    )
+
+                    Button("Default") {
+                        utilities.updateScreenshotCaptureToClipboardHotkey(
+                            ScreenshotToolsConfiguration.defaultCaptureToClipboardHotkey
                         )
-                    },
-                    emptyTitle: "Record Hotkey"
-                )
+                    }
+                    .controlSize(.small)
+                    .disabled(
+                        utilities.screenshotTools.captureToClipboardHotkey
+                            == ScreenshotToolsConfiguration.defaultCaptureToClipboardHotkey
+                    )
+                }
             }
 
             LabeledContent("Capture & Mark") {
-                HotkeyBindingControl(
-                    keyCombo: utilities.screenshotTools.captureAndMarkHotkey,
-                    isRecording: isRecordingMarkHotkey,
-                    onStartRecording: {
-                        isRecordingCaptureHotkey = false
-                        isRecordingMarkHotkey = true
-                    },
-                    onRecordKey: { combo in
-                        utilities.updateScreenshotCaptureAndMarkHotkey(combo)
-                        isRecordingMarkHotkey = false
-                    },
-                    onCancelRecording: {
-                        isRecordingMarkHotkey = false
-                    },
-                    checkConflict: { combo in
-                        hotkeyService.hasConflict(
-                            keyCombo: combo,
-                            excludingUtilityID: .screenshotTools
-                        )
-                    },
-                    emptyTitle: "Record Hotkey"
-                )
-            }
+                HStack(spacing: 8) {
+                    HotkeyBindingControl(
+                        keyCombo: utilities.screenshotTools.captureAndMarkHotkey,
+                        isRecording: isRecordingMarkHotkey,
+                        onStartRecording: {
+                            isRecordingCaptureHotkey = false
+                            isRecordingMarkHotkey = true
+                        },
+                        onRecordKey: { combo in
+                            utilities.updateScreenshotCaptureAndMarkHotkey(combo)
+                            isRecordingMarkHotkey = false
+                        },
+                        onCancelRecording: {
+                            isRecordingMarkHotkey = false
+                        },
+                        checkConflict: { combo in
+                            hotkeyService.hasConflict(
+                                keyCombo: combo,
+                                excludingUtilityID: .screenshotTools
+                            )
+                        },
+                        emptyTitle: "Record Hotkey"
+                    )
 
-            HStack {
-                Spacer()
-                Button("Restore Defaults") {
-                    utilities.restoreDefaultScreenshotHotkeys()
-                }
-                .controlSize(.small)
-                .disabled(
-                    utilities.screenshotTools.captureToClipboardHotkey
-                        == ScreenshotToolsConfiguration.defaultCaptureToClipboardHotkey
-                        && utilities.screenshotTools.captureAndMarkHotkey
+                    Button("Default") {
+                        utilities.updateScreenshotCaptureAndMarkHotkey(
+                            ScreenshotToolsConfiguration.defaultCaptureAndMarkHotkey
+                        )
+                    }
+                    .controlSize(.small)
+                    .disabled(
+                        utilities.screenshotTools.captureAndMarkHotkey
                             == ScreenshotToolsConfiguration.defaultCaptureAndMarkHotkey
-                )
+                    )
+                }
             }
         }
     }
