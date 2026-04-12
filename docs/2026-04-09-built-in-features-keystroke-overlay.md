@@ -38,7 +38,7 @@ That model breaks down for system-native utilities that need dedicated permissio
 
 - Show at least these entries:
   - Keystroke Overlay
-  - Screenshot Tools
+  - Capture & Mark
   - Window Manager
   - Large Type
 - Only Keystroke Overlay is active in this task.

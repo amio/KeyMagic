@@ -585,13 +585,13 @@ private struct ScreenshotToolsSettingsPane: View {
     // MARK: - Usage Guide
 
     private var usageSection: some View {
-        Section("Usage") {
+        Section("How It Works") {
             VStack(alignment: .leading, spacing: 12) {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Capture to Clipboard")
                             .font(.body.weight(.medium))
-                        Text("Select a region — copied straight to clipboard, no preview.")
+                        Text("Select a region and copy it right away, with no preview window.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -604,7 +604,7 @@ private struct ScreenshotToolsSettingsPane: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Capture & Mark")
                             .font(.body.weight(.medium))
-                        Text("Select a region — opens annotation window. Draw, then press ↩ to copy.")
+                        Text("Select a region to open the mark-up preview, annotate, then press ↩ to copy.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -616,7 +616,7 @@ private struct ScreenshotToolsSettingsPane: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Annotation Shortcuts")
+                    Text("Preview Shortcuts")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 5) {
@@ -626,15 +626,15 @@ private struct ScreenshotToolsSettingsPane: View {
                         }
                         GridRow {
                             keycap("TAB")
-                            Text("Cycle annotation color")
+                            Text("Cycle annotation colors")
                         }
                         GridRow {
                             keycap("⌘ Z")
-                            Text("Undo")
+                            Text("Undo the last mark")
                         }
                         GridRow {
                             keycap("↩")
-                            Text("Copy & close")
+                            Text("Copy and close")
                         }
                         GridRow {
                             keycap("ESC")

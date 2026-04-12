@@ -52,13 +52,13 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
         ),
         UtilityDescriptor(
             id: .screenshotTools,
-            title: "Screenshot Tools",
-            summary: "Capture screen regions, annotate quickly, and send the result straight to the clipboard.",
+            title: "Capture & Mark",
+            summary: "Capture a region, mark it up in a polished preview, and copy the result immediately.",
             systemImage: "camera.viewfinder",
             availability: .available,
             highlights: [
-                "Fast capture flow",
-                "Quick mark-up actions",
+                "Instant clipboard capture",
+                "Refined mark-up preview",
                 "Clipboard-first output",
             ]
         ),
