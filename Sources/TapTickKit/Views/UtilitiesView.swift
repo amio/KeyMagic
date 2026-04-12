@@ -625,6 +625,10 @@ private struct ScreenshotToolsSettingsPane: View {
                             Text("Switch freehand / rect")
                         }
                         GridRow {
+                            keycap("⌥")
+                            Text("Temporarily swap freehand / rect while held")
+                        }
+                        GridRow {
                             keycap("⌥ TAB")
                             Text("Cycle annotation color")
                         }

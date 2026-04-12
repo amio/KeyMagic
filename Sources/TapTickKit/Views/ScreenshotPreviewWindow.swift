@@ -21,6 +21,13 @@ enum AnnotationMode: String, Sendable, CaseIterable, Codable {
         case .rectangle: "rectangle"
         }
     }
+
+    var toggled: AnnotationMode {
+        switch self {
+        case .freehand: .rectangle
+        case .rectangle: .freehand
+        }
+    }
 }
 
 struct AnnotationPalette: Sendable {
@@ -47,7 +54,8 @@ struct Annotation {
 @Observable
 @MainActor
 final class AnnotationToolbarModel {
-    var currentMode: AnnotationMode
+    private(set) var selectedMode: AnnotationMode
+    private var temporaryModeOverride: AnnotationMode?
     var colorIndex: Int
     /// Callback fired by the Copy button in the toolbar.
     var onDone: (() -> Void)?
@@ -55,8 +63,12 @@ final class AnnotationToolbarModel {
     var onSettingsChanged: ((AnnotationMode, Int) -> Void)?
 
     init(mode: AnnotationMode = .freehand, colorIndex: Int = 0) {
-        self.currentMode = mode
+        self.selectedMode = mode
         self.colorIndex = colorIndex
+    }
+
+    var currentMode: AnnotationMode {
+        temporaryModeOverride ?? selectedMode
     }
 
     var currentColor: NSColor {
@@ -72,13 +84,22 @@ final class AnnotationToolbarModel {
     }
 
     func toggleMode() {
-        currentMode = currentMode == .freehand ? .rectangle : .freehand
-        onSettingsChanged?(currentMode, colorIndex)
+        setSelectedMode(selectedMode.toggled)
+    }
+
+    func setSelectedMode(_ mode: AnnotationMode) {
+        guard selectedMode != mode else { return }
+        selectedMode = mode
+        onSettingsChanged?(selectedMode, colorIndex)
     }
 
     func cycleColor() {
         colorIndex = (colorIndex + 1) % AnnotationPalette.colors.count
-        onSettingsChanged?(currentMode, colorIndex)
+        onSettingsChanged?(selectedMode, colorIndex)
+    }
+
+    func setTemporaryModeSwitchActive(_ isActive: Bool) {
+        temporaryModeOverride = isActive ? selectedMode.toggled : nil
     }
 }
 
@@ -195,6 +216,7 @@ final class ScreenshotPreviewWindow: NSPanel {
     }
 
     override func close() {
+        toolbarModel.setTemporaryModeSwitchActive(false)
         onDismiss?()
         super.close()
     }
@@ -226,6 +248,18 @@ final class ScreenshotPreviewWindow: NSPanel {
         default:
             super.keyDown(with: event)
         }
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        toolbarModel.setTemporaryModeSwitchActive(flags.contains(.option))
+        canvasView.needsDisplay = true
+    }
+
+    override func resignKey() {
+        toolbarModel.setTemporaryModeSwitchActive(false)
+        canvasView.needsDisplay = true
+        super.resignKey()
     }
 
     // MARK: - Private
@@ -335,6 +369,7 @@ final class AnnotationCanvasView: NSView {
     private let image: NSImage
     private var annotations: [Annotation] = []
     private var currentPoints: [NSPoint] = []
+    private var currentStrokeMode: AnnotationMode?
     private var isDrawing = false
     private let lineWidth: CGFloat = 3.0
     private let minimumPointSpacing: CGFloat = 1.5
@@ -404,7 +439,7 @@ final class AnnotationCanvasView: NSView {
 
         if isDrawing, currentPoints.count >= 2 {
             let preview = Annotation(
-                mode: toolbarModel.currentMode,
+                mode: currentStrokeMode ?? toolbarModel.currentMode,
                 points: currentPoints,
                 color: toolbarModel.currentColor,
                 lineWidth: lineWidth
@@ -538,7 +573,7 @@ final class AnnotationCanvasView: NSView {
     }
 
     private func shouldCommitCurrentAnnotation() -> Bool {
-        switch toolbarModel.currentMode {
+        switch currentStrokeMode ?? toolbarModel.currentMode {
         case .freehand:
             return strokeLength(for: currentPoints) > 3
         case .rectangle:
@@ -573,6 +608,7 @@ final class AnnotationCanvasView: NSView {
         guard bounds.contains(point) else { return }
 
         isDrawing = true
+        currentStrokeMode = toolbarModel.currentMode
         currentPoints = [point]
         needsDisplay = true
     }
@@ -594,6 +630,7 @@ final class AnnotationCanvasView: NSView {
         }
 
         guard currentPoints.count >= 2 else {
+            currentStrokeMode = nil
             currentPoints.removeAll()
             needsDisplay = true
             return
@@ -601,13 +638,14 @@ final class AnnotationCanvasView: NSView {
 
         if shouldCommitCurrentAnnotation() {
             annotations.append(Annotation(
-                mode: toolbarModel.currentMode,
+                mode: currentStrokeMode ?? toolbarModel.currentMode,
                 points: currentPoints,
                 color: toolbarModel.currentColor,
                 lineWidth: lineWidth
             ))
         }
 
+        currentStrokeMode = nil
         currentPoints.removeAll()
         needsDisplay = true
     }
@@ -671,7 +709,7 @@ private struct AnnotationToolbar: View {
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture { model.currentMode = mode }
+            .onTapGesture { model.setSelectedMode(mode) }
     }
 
     // MARK: - Color Indicator
