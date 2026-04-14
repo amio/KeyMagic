@@ -140,6 +140,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    func dismissSettingsWindow() {
+        guard let window = currentSettingsWindow(), window.isVisible else {
+            return
+        }
+
+        // Keep the NSWindow instance alive so reopen stays synchronous, but hand focus
+        // back to the app that was frontmost before TapTick activated its settings UI.
+        window.orderOut(nil)
+        restorePreviousActiveApp()
+    }
+
     private func openSettingsWindow() {
         NSApp.activate(ignoringOtherApps: true)
         if let window = currentSettingsWindow() {
@@ -159,16 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (i.e. the user is actively looking at it). If the window is merely visible but
         // behind another app, the first press should bring it to front, not close it.
         if let window = currentSettingsWindow(), window.isVisible, window.isKeyWindow {
-            // orderOut instead of close keeps the NSWindow instance alive so the next
-            // open can use makeKeyAndOrderFront directly without the SwiftUI scene hop.
-            window.orderOut(nil)
-            // Restore focus to wherever the user was before we took it.
-            // Guard against restoring to TapTick itself (no visible window would remain).
-            let app = previousActiveApp
-            previousActiveApp = nil
-            if app?.bundleIdentifier != Bundle.main.bundleIdentifier {
-                app?.activate()
-            }
+            dismissSettingsWindow()
             return
         }
 
@@ -176,6 +178,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is still the user's previous app at this point — capture it before activate().
         previousActiveApp = NSWorkspace.shared.frontmostApplication
         openSettingsWindow()
+    }
+
+    private func restorePreviousActiveApp() {
+        let app = previousActiveApp
+        previousActiveApp = nil
+
+        // Guard against restoring to TapTick itself when the settings window was opened
+        // from a TapTick-owned interaction such as a Dock launch.
+        if app?.bundleIdentifier != Bundle.main.bundleIdentifier {
+            app?.activate()
+        }
     }
 
     private func currentSettingsWindow() -> NSWindow? {
@@ -209,7 +222,7 @@ struct TapTickApp: App {
                 .environment(appState.cloudSync)
                 .environment(appState.updateService)
                 .background(SettingsWindowEscapeShortcut {
-                    appState.settingsWindow?.orderOut(nil)
+                    appDelegate.dismissSettingsWindow()
                 })
                 .background(SettingsWindowObserver { window in
                     guard let window else { return }
