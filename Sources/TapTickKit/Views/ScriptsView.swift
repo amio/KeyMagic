@@ -6,6 +6,7 @@ import SwiftUI
 struct ScriptsView: View {
     @Environment(ShortcutStore.self) private var store
     @Environment(HotkeyService.self) private var hotkeyService
+    @Environment(ScriptLogStore.self) private var logStore
 
     @State private var selectedID: UUID?
     @State private var showingDeleteConfirmation = false
@@ -146,12 +147,27 @@ struct ScriptsView: View {
             ScriptEditView(
                 shortcut: shortcut,
                 isRunning: runningShortcutID == shortcut.id,
+                hasLog: logStore.logs[shortcut.id] != nil,
                 onSave: { updated in
                     store.update(updated)
                     hotkeyService.restart(store: store)
                 },
                 onRun: { script, shell in
                     testRun(id: shortcut.id, script: script, shell: shell)
+                },
+                onShowLog: {
+                    if let log = logStore.logs[shortcut.id] {
+                        var text = log.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if text.isEmpty && !log.succeeded {
+                            text = "Script failed with exit code \(log.exitCode)"
+                        } else if !log.succeeded {
+                            text += "\n\n[Exit code: \(log.exitCode)]"
+                        } else if text.isEmpty {
+                            text = "(No output)"
+                        }
+                        runOutput = text
+                        showingRunOutput = true
+                    }
                 },
                 onDelete: {
                     deletingShortcutID = shortcut.id
@@ -202,16 +218,24 @@ struct ScriptsView: View {
 
         let action = ShortcutAction.runScript(script: script, shell: shell)
         Task.detached {
-            let output = await Self.executeForOutput(action: action)
-            await MainActor.run {
-                runOutput = output
+            let result = await Self.executeForOutput(action: action)
+            await MainActor.run { [logStore] in
+                logStore.record(ScriptExecutionLog(
+                    shortcutID: id,
+                    output: result.output,
+                    exitCode: result.exitCode,
+                    timestamp: Date()
+                ))
+                runOutput = result.displayText
                 runningShortcutID = nil
                 showingRunOutput = true
             }
         }
     }
 
-    private static func executeForOutput(action: ShortcutAction) async -> String {
+    private static func executeForOutput(
+        action: ShortcutAction
+    ) async -> (output: String, exitCode: Int32, displayText: String) {
         let process = Process()
         let pipe = Pipe()
 
@@ -224,7 +248,7 @@ struct ScriptsView: View {
             process.executableURL = URL(fileURLWithPath: shell.rawValue)
             process.arguments = [expandedPath]
         case .launchApp:
-            return "Error: Not a script action."
+            return ("", -1, "Error: Not a script action.")
         }
 
         process.standardOutput = pipe
@@ -236,14 +260,18 @@ struct ScriptsView: View {
 
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             let output = String(data: data, encoding: .utf8) ?? ""
-
             let status = process.terminationStatus
+
+            var display = output
             if status != 0 {
-                return output + "\n[Exit code: \(status)]"
+                display = output + "\n[Exit code: \(status)]"
+            } else if output.isEmpty {
+                display = "(No output)"
             }
-            return output.isEmpty ? "(No output)" : output
+            return (output, status, display)
         } catch {
-            return "Error: \(error.localizedDescription)"
+            let msg = "Error: \(error.localizedDescription)"
+            return (msg, -1, msg)
         }
     }
 }
@@ -308,8 +336,10 @@ private struct ScriptRow: View {
 struct ScriptEditView: View {
     let shortcut: Shortcut
     let isRunning: Bool
+    let hasLog: Bool
     let onSave: (Shortcut) -> Void
     let onRun: (String, ShortcutAction.ShellType) -> Void
+    let onShowLog: () -> Void
     let onDelete: () -> Void
 
     @State private var name = ""
@@ -522,6 +552,16 @@ struct ScriptEditView: View {
             .disabled(scriptContent.isEmpty || isRunning)
             .controlSize(.small)
             .help("Test run this script")
+
+            // Last execution output — shows the log from the most recent hotkey trigger
+            Button {
+                onShowLog()
+            } label: {
+                Label("Output", systemImage: "doc.text")
+            }
+            .disabled(!hasLog)
+            .controlSize(.small)
+            .help("View last execution output")
         }
     }
 

@@ -18,6 +18,8 @@ final class AppState: ObservableObject {
     let hotkeyService = HotkeyService()
     let loginItemManager = LoginItemManager()
     let updateService = UpdateService()
+    let scriptLogStore = ScriptLogStore()
+    let scriptOutputPresenter = ScriptOutputPresenter()
 
     /// Native NSStatusItem + NSMenu controller — retained for the lifetime of the app.
     var menuBarController: MenuBarController?
@@ -102,6 +104,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotkeyService.restart(store: store)
         }
         appState.utilities.bootstrap()
+
+        appState.hotkeyService.onScriptCompleted = { [weak logStore = appState.scriptLogStore, weak presenter = appState.scriptOutputPresenter] log in
+            logStore?.record(log)
+
+            let output = log.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !output.isEmpty {
+                presenter?.show(text: output, isError: !log.succeeded)
+            } else if !log.succeeded {
+                presenter?.show(text: "Script failed with exit code \(log.exitCode)", isError: true)
+            }
+        }
+
         appState.hotkeyService.start(
             store: appState.store,
             utilities: appState.utilities
@@ -221,6 +235,7 @@ struct TapTickApp: App {
                 .environment(appState.loginItemManager)
                 .environment(appState.cloudSync)
                 .environment(appState.updateService)
+                .environment(appState.scriptLogStore)
                 .background(SettingsWindowEscapeShortcut {
                     appDelegate.dismissSettingsWindow()
                 })

@@ -28,6 +28,11 @@ public final class HotkeyService: @unchecked Sendable {
     private var executor: ShortcutExecutor?
     private var eventHandlerRef: EventHandlerRef?
 
+    /// Forwarded to each new `ShortcutExecutor` created by `start()`.
+    public var onScriptCompleted: (@MainActor @Sendable (ScriptExecutionLog) -> Void)? {
+        didSet { executor?.onScriptCompleted = onScriptCompleted }
+    }
+
     static let settingsWindowHotkeyDefaultsKey = "settingsWindowHotkey"
     static let defaultSettingsWindowHotkey = KeyCombo(
         keyCode: UInt32(kVK_ANSI_Comma),
@@ -43,6 +48,7 @@ public final class HotkeyService: @unchecked Sendable {
             self.utilities = utilities
         }
         self.executor = ShortcutExecutor()
+        executor?.onScriptCompleted = onScriptCompleted
         rebuildRegistrations(store: store)
     }
 
@@ -62,7 +68,7 @@ public final class HotkeyService: @unchecked Sendable {
     func trigger(shortcut: Shortcut, store: ShortcutStore) {
         store.markTriggered(id: shortcut.id)
         let exec = executor ?? ShortcutExecutor()
-        exec.execute(action: shortcut.action)
+        exec.execute(action: shortcut.action, shortcutID: shortcut.id)
     }
 
     /// Returns true when a combo conflicts with either a user shortcut or the reserved settings hotkey.
@@ -213,7 +219,7 @@ public final class HotkeyService: @unchecked Sendable {
             else { return }
 
             store.markTriggered(id: shortcut.id)
-            executor?.execute(action: shortcut.action)
+            executor?.execute(action: shortcut.action, shortcutID: shortcut.id)
 
         case .toggleSettingsWindow:
             NotificationCenter.default.post(name: .toggleSettingsWindow, object: nil)

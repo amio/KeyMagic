@@ -46,3 +46,9 @@ clean          Remove build artifacts (keeps .xcodeproj)
 reset          Full reset — also removes .xcodeproj (run 'make gen' afterwards)
 ci             Full CI pipeline: lint → unit tests → release build
 ```
+
+Repository utility scripts:
+
+```
+scripts/focused-app-memory.sh  Print the current frontmost app memory usage, including all descendant processes
+```

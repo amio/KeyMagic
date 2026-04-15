@@ -6,19 +6,22 @@ import Foundation
 final class ShortcutExecutor {
     private let applicationLauncher: ApplicationLauncher
 
+    /// Called on the main actor after a script finishes with its captured output.
+    var onScriptCompleted: (@MainActor @Sendable (ScriptExecutionLog) -> Void)?
+
     init(applicationLauncher: ApplicationLauncher = .live) {
         self.applicationLauncher = applicationLauncher
     }
 
-    /// Execute the given action.
-    func execute(action: ShortcutAction) {
+    /// Execute the given action, optionally associating it with a shortcut for logging.
+    func execute(action: ShortcutAction, shortcutID: UUID? = nil) {
         switch action {
         case .launchApp(let bundleIdentifier, _):
             toggleOrLaunchApp(bundleIdentifier: bundleIdentifier)
         case .runScript(let script, let shell):
-            runInlineScript(script: script, shell: shell)
+            runInlineScript(script: script, shell: shell, shortcutID: shortcutID)
         case .runScriptFile(let path, let shell):
-            runScriptFile(path: path, shell: shell)
+            runScriptFile(path: path, shell: shell, shortcutID: shortcutID)
         }
     }
 
@@ -83,48 +86,117 @@ final class ShortcutExecutor {
 
     // MARK: - Run Script
 
-    private func runInlineScript(script: String, shell: ShortcutAction.ShellType) {
+    private func runInlineScript(
+        script: String,
+        shell: ShortcutAction.ShellType,
+        shortcutID: UUID?
+    ) {
+        let callback = onScriptCompleted
         Task.detached(priority: .userInitiated) {
             let process = Process()
+            let pipe = Pipe()
             process.executableURL = URL(fileURLWithPath: shell.rawValue)
             process.arguments = ["-c", script]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
+            process.standardOutput = pipe
+            process.standardError = pipe
 
             do {
                 try process.run()
                 process.waitUntilExit()
-                if process.terminationStatus != 0 {
-                    print("TapTick: Script exited with code \(process.terminationStatus)")
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                let exitCode = process.terminationStatus
+
+                if exitCode != 0 {
+                    print("TapTick: Script exited with code \(exitCode)")
+                }
+
+                if let shortcutID, let callback {
+                    let log = ScriptExecutionLog(
+                        shortcutID: shortcutID,
+                        output: output,
+                        exitCode: exitCode,
+                        timestamp: Date()
+                    )
+                    await callback(log)
                 }
             } catch {
                 print("TapTick: Failed to run script: \(error)")
+                if let shortcutID, let callback {
+                    let log = ScriptExecutionLog(
+                        shortcutID: shortcutID,
+                        output: "Error: \(error.localizedDescription)",
+                        exitCode: -1,
+                        timestamp: Date()
+                    )
+                    await callback(log)
+                }
             }
         }
     }
 
-    private func runScriptFile(path: String, shell: ShortcutAction.ShellType) {
+    private func runScriptFile(
+        path: String,
+        shell: ShortcutAction.ShellType,
+        shortcutID: UUID?
+    ) {
         let expandedPath = NSString(string: path).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expandedPath) else {
             print("TapTick: Script file not found: \(expandedPath)")
+            if let shortcutID, let callback = onScriptCompleted {
+                let log = ScriptExecutionLog(
+                    shortcutID: shortcutID,
+                    output: "Script file not found: \(expandedPath)",
+                    exitCode: -1,
+                    timestamp: Date()
+                )
+                callback(log)
+            }
             return
         }
 
+        let callback = onScriptCompleted
         Task.detached(priority: .userInitiated) {
             let process = Process()
+            let pipe = Pipe()
             process.executableURL = URL(fileURLWithPath: shell.rawValue)
             process.arguments = [expandedPath]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
+            process.standardOutput = pipe
+            process.standardError = pipe
 
             do {
                 try process.run()
                 process.waitUntilExit()
-                if process.terminationStatus != 0 {
-                    print("TapTick: Script exited with code \(process.terminationStatus)")
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                let exitCode = process.terminationStatus
+
+                if exitCode != 0 {
+                    print("TapTick: Script file exited with code \(exitCode)")
+                }
+
+                if let shortcutID, let callback {
+                    let log = ScriptExecutionLog(
+                        shortcutID: shortcutID,
+                        output: output,
+                        exitCode: exitCode,
+                        timestamp: Date()
+                    )
+                    await callback(log)
                 }
             } catch {
                 print("TapTick: Failed to run script file: \(error)")
+                if let shortcutID, let callback {
+                    let log = ScriptExecutionLog(
+                        shortcutID: shortcutID,
+                        output: "Error: \(error.localizedDescription)",
+                        exitCode: -1,
+                        timestamp: Date()
+                    )
+                    await callback(log)
+                }
             }
         }
     }
