@@ -16,13 +16,13 @@ public final class ScriptOutputPresenter {
     /// Duration of the fade-out animation.
     private let fadeOutDuration: TimeInterval = 0.4
 
-    public func show(text: String, isError: Bool) {
-        let display = Self.formatForSubtitle(text)
+    public func show(log: ScriptExecutionLog) {
+        guard let display = log.subtitleText else { return }
         guard !display.isEmpty else { return }
 
         hideTask?.cancel()
         model.text = display
-        model.isError = isError
+        model.isError = !log.succeeded
 
         if isShowing {
             panel.alphaValue = 1
@@ -109,23 +109,6 @@ public final class ScriptOutputPresenter {
             ?? NSScreen.main
     }
 
-    // MARK: - Text Formatting
-
-    /// Keep only the last few non-empty lines, capped by character count.
-    static func formatForSubtitle(_ text: String, maxLines: Int = 3, maxLength: Int = 200) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-
-        let lines = trimmed.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        let tail = Array(lines.suffix(maxLines))
-        var result = tail.joined(separator: "\n")
-
-        if result.count > maxLength {
-            result = "…" + String(result.suffix(maxLength - 1))
-        }
-
-        return result
-    }
 }
 
 // MARK: - Presentation Model
@@ -146,7 +129,6 @@ private struct ScriptOutputSubtitleView: View {
         Text(model.text)
             .font(.system(size: 14, weight: .medium, design: .monospaced))
             .foregroundStyle(.white)
-            .lineLimit(3)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -155,7 +137,7 @@ private struct ScriptOutputSubtitleView: View {
                     .fill(model.isError ? Color.red.opacity(0.7) : Color.black.opacity(0.72))
             }
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: 600)
+            .frame(maxWidth: 720)
             .padding(20)
     }
 }

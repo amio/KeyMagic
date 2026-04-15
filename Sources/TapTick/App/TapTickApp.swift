@@ -107,13 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         appState.hotkeyService.onScriptCompleted = { [weak logStore = appState.scriptLogStore, weak presenter = appState.scriptOutputPresenter] log in
             logStore?.record(log)
-
-            let output = log.output.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !output.isEmpty {
-                presenter?.show(text: output, isError: !log.succeeded)
-            } else if !log.succeeded {
-                presenter?.show(text: "Script failed with exit code \(log.exitCode)", isError: true)
-            }
+            presenter?.show(log: log)
         }
 
         appState.hotkeyService.start(

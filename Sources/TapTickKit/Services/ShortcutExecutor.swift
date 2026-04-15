@@ -18,10 +18,8 @@ final class ShortcutExecutor {
         switch action {
         case .launchApp(let bundleIdentifier, _):
             toggleOrLaunchApp(bundleIdentifier: bundleIdentifier)
-        case .runScript(let script, let shell):
-            runInlineScript(script: script, shell: shell, shortcutID: shortcutID)
-        case .runScriptFile(let path, let shell):
-            runScriptFile(path: path, shell: shell, shortcutID: shortcutID)
+        case .runScript, .runScriptFile:
+            runScript(action: action, shortcutID: shortcutID)
         }
     }
 
@@ -86,118 +84,68 @@ final class ShortcutExecutor {
 
     // MARK: - Run Script
 
-    private func runInlineScript(
-        script: String,
-        shell: ShortcutAction.ShellType,
-        shortcutID: UUID?
-    ) {
+    private func runScript(action: ShortcutAction, shortcutID: UUID?) {
         let callback = onScriptCompleted
         Task.detached(priority: .userInitiated) {
-            let process = Process()
-            let pipe = Pipe()
-            process.executableURL = URL(fileURLWithPath: shell.rawValue)
-            process.arguments = ["-c", script]
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                let exitCode = process.terminationStatus
-
-                if exitCode != 0 {
-                    print("TapTick: Script exited with code \(exitCode)")
-                }
-
-                if let shortcutID, let callback {
-                    let log = ScriptExecutionLog(
-                        shortcutID: shortcutID,
-                        output: output,
-                        exitCode: exitCode,
-                        timestamp: Date()
-                    )
-                    await callback(log)
-                }
-            } catch {
-                print("TapTick: Failed to run script: \(error)")
-                if let shortcutID, let callback {
-                    let log = ScriptExecutionLog(
-                        shortcutID: shortcutID,
-                        output: "Error: \(error.localizedDescription)",
-                        exitCode: -1,
-                        timestamp: Date()
-                    )
-                    await callback(log)
-                }
+            let result = await Self.executeScript(action: action)
+            if let shortcutID, let callback {
+                let log = ScriptExecutionLog(
+                    shortcutID: shortcutID,
+                    output: result.output,
+                    exitCode: result.exitCode,
+                    timestamp: Date()
+                )
+                await callback(log)
             }
         }
     }
 
-    private func runScriptFile(
-        path: String,
-        shell: ShortcutAction.ShellType,
-        shortcutID: UUID?
-    ) {
-        let expandedPath = NSString(string: path).expandingTildeInPath
-        guard FileManager.default.fileExists(atPath: expandedPath) else {
-            print("TapTick: Script file not found: \(expandedPath)")
-            if let shortcutID, let callback = onScriptCompleted {
-                let log = ScriptExecutionLog(
-                    shortcutID: shortcutID,
-                    output: "Script file not found: \(expandedPath)",
-                    exitCode: -1,
-                    timestamp: Date()
-                )
-                callback(log)
-            }
-            return
-        }
+    static func executeScript(action: ShortcutAction) async -> ScriptExecutionResult {
+        let process = Process()
+        let pipe = Pipe()
 
-        let callback = onScriptCompleted
-        Task.detached(priority: .userInitiated) {
-            let process = Process()
-            let pipe = Pipe()
+        switch action {
+        case .runScript(let script, let shell):
+            process.executableURL = URL(fileURLWithPath: shell.rawValue)
+            process.arguments = ["-c", script]
+        case .runScriptFile(let path, let shell):
+            let expandedPath = NSString(string: path).expandingTildeInPath
+            guard FileManager.default.fileExists(atPath: expandedPath) else {
+                print("TapTick: Script file not found: \(expandedPath)")
+                return ScriptExecutionResult(
+                    output: "Script file not found: \(expandedPath)",
+                    exitCode: -1
+                )
+            }
+
             process.executableURL = URL(fileURLWithPath: shell.rawValue)
             process.arguments = [expandedPath]
-            process.standardOutput = pipe
-            process.standardError = pipe
+        case .launchApp:
+            return ScriptExecutionResult(output: "Error: Not a script action.", exitCode: -1)
+        }
 
-            do {
-                try process.run()
-                process.waitUntilExit()
+        process.standardOutput = pipe
+        process.standardError = pipe
 
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                let exitCode = process.terminationStatus
+        do {
+            try process.run()
+            process.waitUntilExit()
 
-                if exitCode != 0 {
-                    print("TapTick: Script file exited with code \(exitCode)")
-                }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            let exitCode = process.terminationStatus
 
-                if let shortcutID, let callback {
-                    let log = ScriptExecutionLog(
-                        shortcutID: shortcutID,
-                        output: output,
-                        exitCode: exitCode,
-                        timestamp: Date()
-                    )
-                    await callback(log)
-                }
-            } catch {
-                print("TapTick: Failed to run script file: \(error)")
-                if let shortcutID, let callback {
-                    let log = ScriptExecutionLog(
-                        shortcutID: shortcutID,
-                        output: "Error: \(error.localizedDescription)",
-                        exitCode: -1,
-                        timestamp: Date()
-                    )
-                    await callback(log)
-                }
+            if exitCode != 0 {
+                print("TapTick: Script exited with code \(exitCode)")
             }
+
+            return ScriptExecutionResult(output: output, exitCode: exitCode)
+        } catch {
+            print("TapTick: Failed to run script: \(error)")
+            return ScriptExecutionResult(
+                output: "Error: \(error.localizedDescription)",
+                exitCode: -1
+            )
         }
     }
 }

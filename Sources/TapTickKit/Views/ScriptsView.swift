@@ -11,9 +11,8 @@ struct ScriptsView: View {
     @State private var selectedID: UUID?
     @State private var showingDeleteConfirmation = false
     @State private var deletingShortcutID: UUID?
-    @State private var runOutput: String?
+    @State private var presentedLog: ScriptExecutionLog?
     @State private var runningShortcutID: UUID?
-    @State private var showingRunOutput = false
     @State private var recordingShortcutID: UUID?
 
     /// Only script-type shortcuts (runScript / runScriptFile).
@@ -54,8 +53,8 @@ struct ScriptsView: View {
                 .keyboardShortcut("n", modifiers: .command)
             }
         }
-        .sheet(isPresented: $showingRunOutput) {
-            RunOutputView(output: runOutput ?? "")
+        .sheet(item: $presentedLog) { log in
+            RunOutputView(log: log)
         }
         .confirmationDialog(
             "Delete Script?",
@@ -157,16 +156,7 @@ struct ScriptsView: View {
                 },
                 onShowLog: {
                     if let log = logStore.logs[shortcut.id] {
-                        var text = log.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if text.isEmpty && !log.succeeded {
-                            text = "Script failed with exit code \(log.exitCode)"
-                        } else if !log.succeeded {
-                            text += "\n\n[Exit code: \(log.exitCode)]"
-                        } else if text.isEmpty {
-                            text = "(No output)"
-                        }
-                        runOutput = text
-                        showingRunOutput = true
+                        presentedLog = log
                     }
                 },
                 onDelete: {
@@ -214,64 +204,22 @@ struct ScriptsView: View {
 
     private func testRun(id: UUID, script: String, shell: ShortcutAction.ShellType) {
         runningShortcutID = id
-        runOutput = nil
+        presentedLog = nil
 
         let action = ShortcutAction.runScript(script: script, shell: shell)
         Task.detached {
-            let result = await Self.executeForOutput(action: action)
+            let result = await ShortcutExecutor.executeScript(action: action)
+            let log = ScriptExecutionLog(
+                shortcutID: id,
+                output: result.output,
+                exitCode: result.exitCode,
+                timestamp: Date()
+            )
             await MainActor.run { [logStore] in
-                logStore.record(ScriptExecutionLog(
-                    shortcutID: id,
-                    output: result.output,
-                    exitCode: result.exitCode,
-                    timestamp: Date()
-                ))
-                runOutput = result.displayText
+                logStore.record(log)
+                presentedLog = log
                 runningShortcutID = nil
-                showingRunOutput = true
             }
-        }
-    }
-
-    private static func executeForOutput(
-        action: ShortcutAction
-    ) async -> (output: String, exitCode: Int32, displayText: String) {
-        let process = Process()
-        let pipe = Pipe()
-
-        switch action {
-        case .runScript(let script, let shell):
-            process.executableURL = URL(fileURLWithPath: shell.rawValue)
-            process.arguments = ["-c", script]
-        case .runScriptFile(let path, let shell):
-            let expandedPath = NSString(string: path).expandingTildeInPath
-            process.executableURL = URL(fileURLWithPath: shell.rawValue)
-            process.arguments = [expandedPath]
-        case .launchApp:
-            return ("", -1, "Error: Not a script action.")
-        }
-
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            let status = process.terminationStatus
-
-            var display = output
-            if status != 0 {
-                display = output + "\n[Exit code: \(status)]"
-            } else if output.isEmpty {
-                display = "(No output)"
-            }
-            return (output, status, display)
-        } catch {
-            let msg = "Error: \(error.localizedDescription)"
-            return (msg, -1, msg)
         }
     }
 }
@@ -671,7 +619,7 @@ struct ScriptEditView: View {
 // MARK: - Run Output View
 
 private struct RunOutputView: View {
-    let output: String
+    let log: ScriptExecutionLog
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -688,7 +636,7 @@ private struct RunOutputView: View {
             Divider()
 
             ScrollView {
-                Text(output)
+                Text(log.displayText)
                     .font(.system(.body, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
