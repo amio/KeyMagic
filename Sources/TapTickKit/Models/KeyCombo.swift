@@ -13,19 +13,19 @@ struct KeyCombo: Codable, Hashable, Sendable {
     struct Modifiers: OptionSet, Codable, Hashable, Sendable {
         let rawValue: UInt32
 
-        static let command  = Modifiers(rawValue: 1 << 0)
-        static let option   = Modifiers(rawValue: 1 << 1)
-        static let control  = Modifiers(rawValue: 1 << 2)
-        static let shift    = Modifiers(rawValue: 1 << 3)
+        static let command = Modifiers(rawValue: 1 << 0)
+        static let option = Modifiers(rawValue: 1 << 1)
+        static let control = Modifiers(rawValue: 1 << 2)
+        static let shift = Modifiers(rawValue: 1 << 3)
         static let function_ = Modifiers(rawValue: 1 << 4)
 
         /// All modifier flags currently set, as an array.
         var activeModifiers: [Modifiers] {
             var result: [Modifiers] = []
-            if contains(.control)  { result.append(.control) }
-            if contains(.option)   { result.append(.option) }
-            if contains(.shift)    { result.append(.shift) }
-            if contains(.command)  { result.append(.command) }
+            if contains(.control) { result.append(.control) }
+            if contains(.option) { result.append(.option) }
+            if contains(.shift) { result.append(.shift) }
+            if contains(.command) { result.append(.command) }
             if contains(.function_) { result.append(.function_) }
             return result
         }
@@ -34,10 +34,10 @@ struct KeyCombo: Codable, Hashable, Sendable {
         /// where no key has been pressed yet — avoids appending a raw modifier keyCode.
         var displayString: String {
             var parts: [String] = []
-            if contains(.control)   { parts.append("⌃") }
-            if contains(.option)    { parts.append("⌥") }
-            if contains(.shift)     { parts.append("⇧") }
-            if contains(.command)   { parts.append("⌘") }
+            if contains(.control) { parts.append("⌃") }
+            if contains(.option) { parts.append("⌥") }
+            if contains(.shift) { parts.append("⇧") }
+            if contains(.command) { parts.append("⌘") }
             if contains(.function_) { parts.append("fn") }
             return parts.joined()
         }
@@ -47,8 +47,8 @@ struct KeyCombo: Codable, Hashable, Sendable {
     var displayString: String {
         var parts: [String] = []
         if modifiers.contains(.control) { parts.append("⌃") }
-        if modifiers.contains(.option)  { parts.append("⌥") }
-        if modifiers.contains(.shift)   { parts.append("⇧") }
+        if modifiers.contains(.option) { parts.append("⌥") }
+        if modifiers.contains(.shift) { parts.append("⇧") }
         if modifiers.contains(.command) { parts.append("⌘") }
         if modifiers.contains(.function_) { parts.append("fn") }
         parts.append(KeyCodeMapping.keyName(for: keyCode))
@@ -105,15 +105,15 @@ struct KeyCombo: Codable, Hashable, Sendable {
         case kVK_ANSI_9: return "9"
 
         // Function keys — Unicode Private Use Area values that AppKit recognises
-        case kVK_F1:  return String(UnicodeScalar(NSF1FunctionKey)!)
-        case kVK_F2:  return String(UnicodeScalar(NSF2FunctionKey)!)
-        case kVK_F3:  return String(UnicodeScalar(NSF3FunctionKey)!)
-        case kVK_F4:  return String(UnicodeScalar(NSF4FunctionKey)!)
-        case kVK_F5:  return String(UnicodeScalar(NSF5FunctionKey)!)
-        case kVK_F6:  return String(UnicodeScalar(NSF6FunctionKey)!)
-        case kVK_F7:  return String(UnicodeScalar(NSF7FunctionKey)!)
-        case kVK_F8:  return String(UnicodeScalar(NSF8FunctionKey)!)
-        case kVK_F9:  return String(UnicodeScalar(NSF9FunctionKey)!)
+        case kVK_F1: return String(UnicodeScalar(NSF1FunctionKey)!)
+        case kVK_F2: return String(UnicodeScalar(NSF2FunctionKey)!)
+        case kVK_F3: return String(UnicodeScalar(NSF3FunctionKey)!)
+        case kVK_F4: return String(UnicodeScalar(NSF4FunctionKey)!)
+        case kVK_F5: return String(UnicodeScalar(NSF5FunctionKey)!)
+        case kVK_F6: return String(UnicodeScalar(NSF6FunctionKey)!)
+        case kVK_F7: return String(UnicodeScalar(NSF7FunctionKey)!)
+        case kVK_F8: return String(UnicodeScalar(NSF8FunctionKey)!)
+        case kVK_F9: return String(UnicodeScalar(NSF9FunctionKey)!)
         case kVK_F10: return String(UnicodeScalar(NSF10FunctionKey)!)
         case kVK_F11: return String(UnicodeScalar(NSF11FunctionKey)!)
         case kVK_F12: return String(UnicodeScalar(NSF12FunctionKey)!)
@@ -127,35 +127,35 @@ struct KeyCombo: Codable, Hashable, Sendable {
         case kVK_F20: return String(UnicodeScalar(NSF20FunctionKey)!)
 
         // Navigation / editing
-        case kVK_Return:        return "\r"
-        case kVK_Tab:           return String(UnicodeScalar(NSTabCharacter)!)
-        case kVK_Space:         return " "
-        case kVK_Delete:        return String(UnicodeScalar(NSBackspaceCharacter)!)
+        case kVK_Return: return "\r"
+        case kVK_Tab: return String(UnicodeScalar(NSTabCharacter)!)
+        case kVK_Space: return " "
+        case kVK_Delete: return String(UnicodeScalar(NSBackspaceCharacter)!)
         case kVK_ForwardDelete: return String(UnicodeScalar(NSDeleteFunctionKey)!)
-        case kVK_Escape:        return String(UnicodeScalar(0x1B)!)
-        case kVK_Home:          return String(UnicodeScalar(NSHomeFunctionKey)!)
-        case kVK_End:           return String(UnicodeScalar(NSEndFunctionKey)!)
-        case kVK_PageUp:        return String(UnicodeScalar(NSPageUpFunctionKey)!)
-        case kVK_PageDown:      return String(UnicodeScalar(NSPageDownFunctionKey)!)
+        case kVK_Escape: return String(UnicodeScalar(0x1B)!)
+        case kVK_Home: return String(UnicodeScalar(NSHomeFunctionKey)!)
+        case kVK_End: return String(UnicodeScalar(NSEndFunctionKey)!)
+        case kVK_PageUp: return String(UnicodeScalar(NSPageUpFunctionKey)!)
+        case kVK_PageDown: return String(UnicodeScalar(NSPageDownFunctionKey)!)
 
         // Arrows
-        case kVK_UpArrow:    return String(UnicodeScalar(NSUpArrowFunctionKey)!)
-        case kVK_DownArrow:  return String(UnicodeScalar(NSDownArrowFunctionKey)!)
-        case kVK_LeftArrow:  return String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+        case kVK_UpArrow: return String(UnicodeScalar(NSUpArrowFunctionKey)!)
+        case kVK_DownArrow: return String(UnicodeScalar(NSDownArrowFunctionKey)!)
+        case kVK_LeftArrow: return String(UnicodeScalar(NSLeftArrowFunctionKey)!)
         case kVK_RightArrow: return String(UnicodeScalar(NSRightArrowFunctionKey)!)
 
         // Symbols
-        case kVK_ANSI_Minus:        return "-"
-        case kVK_ANSI_Equal:        return "="
-        case kVK_ANSI_LeftBracket:  return "["
+        case kVK_ANSI_Minus: return "-"
+        case kVK_ANSI_Equal: return "="
+        case kVK_ANSI_LeftBracket: return "["
         case kVK_ANSI_RightBracket: return "]"
-        case kVK_ANSI_Backslash:    return "\\"
-        case kVK_ANSI_Semicolon:    return ";"
-        case kVK_ANSI_Quote:        return "'"
-        case kVK_ANSI_Comma:        return ","
-        case kVK_ANSI_Period:       return "."
-        case kVK_ANSI_Slash:        return "/"
-        case kVK_ANSI_Grave:        return "`"
+        case kVK_ANSI_Backslash: return "\\"
+        case kVK_ANSI_Semicolon: return ";"
+        case kVK_ANSI_Quote: return "'"
+        case kVK_ANSI_Comma: return ","
+        case kVK_ANSI_Period: return "."
+        case kVK_ANSI_Slash: return "/"
+        case kVK_ANSI_Grave: return "`"
 
         default: return ""
         }
@@ -173,20 +173,20 @@ extension KeyCombo.Modifiers {
     /// Convert to Carbon modifier flags for use with RegisterEventHotKey.
     var carbonModifiers: UInt32 {
         var flags: UInt32 = 0
-        if contains(.command)   { flags |= UInt32(cmdKey) }
-        if contains(.option)    { flags |= UInt32(optionKey) }
-        if contains(.control)   { flags |= UInt32(controlKey) }
-        if contains(.shift)     { flags |= UInt32(shiftKey) }
+        if contains(.command) { flags |= UInt32(cmdKey) }
+        if contains(.option) { flags |= UInt32(optionKey) }
+        if contains(.control) { flags |= UInt32(controlKey) }
+        if contains(.shift) { flags |= UInt32(shiftKey) }
         return flags
     }
 
     /// Convert to `NSEvent.ModifierFlags` for `NSMenuItem.keyEquivalentModifierMask`.
     var nsEventModifierFlags: NSEvent.ModifierFlags {
         var flags: NSEvent.ModifierFlags = []
-        if contains(.command)   { flags.insert(.command) }
-        if contains(.option)    { flags.insert(.option) }
-        if contains(.control)   { flags.insert(.control) }
-        if contains(.shift)     { flags.insert(.shift) }
+        if contains(.command) { flags.insert(.command) }
+        if contains(.option) { flags.insert(.option) }
+        if contains(.control) { flags.insert(.control) }
+        if contains(.shift) { flags.insert(.shift) }
         if contains(.function_) { flags.insert(.function) }
         return flags
     }
@@ -198,10 +198,10 @@ extension KeyCombo.Modifiers {
     /// Convert from NSEvent modifier flags (used by KeyRecorderView during shortcut recording).
     init(nsEventFlags flags: NSEvent.ModifierFlags) {
         var mods: KeyCombo.Modifiers = []
-        if flags.contains(.command)  { mods.insert(.command) }
-        if flags.contains(.option)   { mods.insert(.option) }
-        if flags.contains(.control)  { mods.insert(.control) }
-        if flags.contains(.shift)    { mods.insert(.shift) }
+        if flags.contains(.command) { mods.insert(.command) }
+        if flags.contains(.option) { mods.insert(.option) }
+        if flags.contains(.control) { mods.insert(.control) }
+        if flags.contains(.shift) { mods.insert(.shift) }
         if flags.contains(.function) { mods.insert(.function_) }
         self = mods
     }

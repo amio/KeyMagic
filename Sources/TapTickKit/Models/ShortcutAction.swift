@@ -21,8 +21,8 @@ enum ShortcutAction: Codable, Hashable, Sendable {
         var displayName: String {
             switch self {
             case .bash: return "bash"
-            case .zsh:  return "zsh"
-            case .sh:   return "sh"
+            case .zsh: return "zsh"
+            case .sh: return "sh"
             case .fish: return "fish"
             }
         }
@@ -46,8 +46,8 @@ enum ShortcutAction: Codable, Hashable, Sendable {
     /// System symbol name for the action type.
     var systemImage: String {
         switch self {
-        case .launchApp:     return "app.badge.checkmark"
-        case .runScript:     return "terminal"
+        case .launchApp: return "app.badge.checkmark"
+        case .runScript: return "terminal"
         case .runScriptFile: return "doc.text"
         }
     }

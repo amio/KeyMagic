@@ -5,13 +5,15 @@ import Observation
 @MainActor
 public final class UtilitiesController: @unchecked Sendable {
     public init(directory: URL? = nil) {
-        let baseDirectory = directory ?? FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first!.appendingPathComponent(
-            TapTickRuntimeConfiguration.current.appSupportDirectoryName,
-            isDirectory: true
-        )
+        let baseDirectory =
+            directory
+            ?? FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first!.appendingPathComponent(
+                TapTickRuntimeConfiguration.current.appSupportDirectoryName,
+                isDirectory: true
+            )
 
         try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
 
@@ -82,7 +84,7 @@ public final class UtilitiesController: @unchecked Sendable {
 
     func reservedHotkeys() -> [(featureID: UtilityID, action: String, combo: KeyCombo)] {
         var hotkeys: [(featureID: UtilityID, action: String, combo: KeyCombo)] = [
-            (.keystrokeOverlay, "toggle", keystrokeOverlay.hotkey),
+            (.keystrokeOverlay, "toggle", keystrokeOverlay.hotkey)
         ]
         if screenshotTools.isEnabled {
             hotkeys.append((.screenshotTools, "captureClipboard", screenshotTools.captureToClipboardHotkey))
@@ -144,7 +146,8 @@ public final class UtilitiesController: @unchecked Sendable {
             return
         }
 
-        let permission = promptForPermission
+        let permission =
+            promptForPermission
             ? keystrokeOverlayService.requestPermission()
             : keystrokeOverlayService.refreshPermissionStatus()
 

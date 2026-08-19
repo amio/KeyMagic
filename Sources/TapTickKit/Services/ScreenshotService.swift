@@ -54,7 +54,7 @@ final class ScreenshotService {
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         guard FileManager.default.fileExists(atPath: tempURL.path),
-              let image = NSImage(contentsOf: tempURL)
+            let image = NSImage(contentsOf: tempURL)
         else {
             // User cancelled the capture.
             return

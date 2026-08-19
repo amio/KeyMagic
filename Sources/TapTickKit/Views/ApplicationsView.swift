@@ -361,10 +361,13 @@ private struct AppRow: View {
     @ViewBuilder
     private var enabledCell: some View {
         if shortcut != nil {
-            Toggle("", isOn: Binding(
-                get: { shortcut?.isEnabled ?? false },
-                set: { _ in onToggleEnabled() }
-            ))
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { shortcut?.isEnabled ?? false },
+                    set: { _ in onToggleEnabled() }
+                )
+            )
             .labelsHidden()
             .toggleStyle(.switch)
             .controlSize(.small)

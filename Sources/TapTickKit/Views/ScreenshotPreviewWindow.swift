@@ -111,7 +111,7 @@ private let titleBarHeight: CGFloat = 28
 /// Corner radius of the window's blur background (continuous / squircle curve).
 private let windowCornerRadius: CGFloat = 24
 /// Standard close button center x ≈ 13pt; shift the cluster so it clears the corner tangent.
-private let trafficLightShift: CGFloat = windowCornerRadius - 13   // = 13
+private let trafficLightShift: CGFloat = windowCornerRadius - 13  // = 13
 /// Extra padding to push controls away from the window's top edge (accounts for large corner radius).
 private let verticalPadding: CGFloat = 8
 /// Toolbar leading inset: zoom trailing (59) + shift + gap (36).
@@ -137,7 +137,8 @@ final class ScreenshotPreviewWindow: NSPanel {
     private let optionHoldThreshold: TimeInterval = 0.22
 
     init(image: NSImage, initialMode: AnnotationMode = .freehand, initialColorIndex: Int = 0) {
-        let screenFrame = NSScreen.screenWithMouse?.visibleFrame
+        let screenFrame =
+            NSScreen.screenWithMouse?.visibleFrame
             ?? NSScreen.main?.visibleFrame ?? .zero
 
         let chromeHeight = titleBarHeight + canvasMargin * 2
@@ -328,7 +329,7 @@ final class ScreenshotPreviewWindow: NSPanel {
 
     private func installTitlebarAccessory() {
         guard let closeButton = standardWindowButton(.closeButton),
-              let titlebarView = closeButton.superview
+            let titlebarView = closeButton.superview
         else { return }
 
         let toolbarView = AnnotationToolbar(model: toolbarModel)
@@ -475,8 +476,9 @@ final class AnnotationCanvasView: NSView {
         composited.unlockFocus()
 
         guard let tiffData = composited.tiffRepresentation,
-              let bitmapRep = NSBitmapImageRep(data: tiffData),
-              let pngData = bitmapRep.representation(using: .png, properties: [:]) else { return }
+            let bitmapRep = NSBitmapImageRep(data: tiffData),
+            let pngData = bitmapRep.representation(using: .png, properties: [:])
+        else { return }
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -555,7 +557,7 @@ final class AnnotationCanvasView: NSView {
             return path
         }
 
-        for index in 0 ..< (smoothedPoints.count - 1) {
+        for index in 0..<(smoothedPoints.count - 1) {
             let previous = index > 0 ? smoothedPoints[index - 1] : smoothedPoints[index]
             let current = smoothedPoints[index]
             let next = smoothedPoints[index + 1]
@@ -581,7 +583,7 @@ final class AnnotationCanvasView: NSView {
 
         var smoothedPoints = points
 
-        for _ in 0 ..< freehandSmoothingPasses {
+        for _ in 0..<freehandSmoothingPasses {
             smoothedPoints = smoothPointPass(smoothedPoints)
         }
 
@@ -595,19 +597,20 @@ final class AnnotationCanvasView: NSView {
         var smoothedPoints = [points[0]]
         smoothedPoints.reserveCapacity(points.count)
 
-        for index in 1 ..< (points.count - 1) {
+        for index in 1..<(points.count - 1) {
             let previous = points[index - 1]
             let current = points[index]
             let next = points[index + 1]
 
-            smoothedPoints.append(NSPoint(
-                x: previous.x * freehandNeighborWeight
-                    + current.x * centerWeight
-                    + next.x * freehandNeighborWeight,
-                y: previous.y * freehandNeighborWeight
-                    + current.y * centerWeight
-                    + next.y * freehandNeighborWeight
-            ))
+            smoothedPoints.append(
+                NSPoint(
+                    x: previous.x * freehandNeighborWeight
+                        + current.x * centerWeight
+                        + next.x * freehandNeighborWeight,
+                    y: previous.y * freehandNeighborWeight
+                        + current.y * centerWeight
+                        + next.y * freehandNeighborWeight
+                ))
         }
 
         smoothedPoints.append(points[points.count - 1])
@@ -635,7 +638,8 @@ final class AnnotationCanvasView: NSView {
             return strokeLength(for: currentPoints) > 3
         case .rectangle:
             guard let first = currentPoints.first,
-                  let last = currentPoints.last else { return false }
+                let last = currentPoints.last
+            else { return false }
             let dx = last.x - first.x
             let dy = last.y - first.y
             return sqrt(dx * dx + dy * dy) > 3
@@ -647,7 +651,7 @@ final class AnnotationCanvasView: NSView {
 
         var length: CGFloat = 0
 
-        for index in 1 ..< points.count {
+        for index in 1..<points.count {
             let previous = points[index - 1]
             let current = points[index]
             let dx = current.x - previous.x
@@ -694,12 +698,13 @@ final class AnnotationCanvasView: NSView {
         }
 
         if shouldCommitCurrentAnnotation() {
-            annotations.append(Annotation(
-                mode: currentStrokeMode ?? toolbarModel.currentMode,
-                points: currentPoints,
-                color: toolbarModel.currentColor,
-                lineWidth: lineWidth
-            ))
+            annotations.append(
+                Annotation(
+                    mode: currentStrokeMode ?? toolbarModel.currentMode,
+                    points: currentPoints,
+                    color: toolbarModel.currentColor,
+                    lineWidth: lineWidth
+                ))
         }
 
         currentStrokeMode = nil

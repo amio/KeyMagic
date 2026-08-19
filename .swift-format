@@ -1,0 +1,12 @@
+{
+  "indentation": {
+    "spaces": 4
+  },
+  "lineLength": 120,
+  "respectsExistingLineBreaks": true,
+  "rules": {
+    "NoBlockComments": false,
+    "UseTripleSlashForDocumentationComments": false
+  },
+  "version": 1
+}

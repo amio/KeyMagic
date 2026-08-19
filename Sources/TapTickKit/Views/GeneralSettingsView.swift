@@ -2,243 +2,243 @@ import SwiftUI
 
 /// General settings pane for operational app behavior such as startup, sync, and hotkeys.
 struct GeneralSettingsView: View {
-  @Environment(HotkeyService.self) private var hotkeyService
-  @Environment(LoginItemManager.self) private var loginItemManager
-  @Environment(ShortcutStore.self) private var store
-  @Environment(CloudSyncService.self) private var cloudSync
+    @Environment(HotkeyService.self) private var hotkeyService
+    @Environment(LoginItemManager.self) private var loginItemManager
+    @Environment(ShortcutStore.self) private var store
+    @Environment(CloudSyncService.self) private var cloudSync
 
-  @AppStorage("showDockIcon") private var showDockIcon = true
-  @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
-  @State private var isRecordingSettingsWindowHotkey = false
+    @AppStorage("showDockIcon") private var showDockIcon = true
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+    @State private var isRecordingSettingsWindowHotkey = false
 
-  var body: some View {
-    Form {
-      statusSection
-      startupSection
-      globalHotkeysSection
-      dataAndSyncSection
+    var body: some View {
+        Form {
+            statusSection
+            startupSection
+            globalHotkeysSection
+            dataAndSyncSection
+        }
+        .settingsFormStyle()
     }
-    .settingsFormStyle()
-  }
 
-  // MARK: - Status
+    // MARK: - Status
 
-  private var statusSection: some View {
-    Section {
-      LabeledContent("Hotkey Listener") {
-        HStack(spacing: 8) {
-          Circle()
-            .fill(hotkeyService.isListening ? .green : .red)
-            .frame(width: 8, height: 8)
-          Text(hotkeyService.isListening ? "Active" : "Inactive")
+    private var statusSection: some View {
+        Section {
+            LabeledContent("Hotkey Listener") {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(hotkeyService.isListening ? .green : .red)
+                        .frame(width: 8, height: 8)
+                    Text(hotkeyService.isListening ? "Active" : "Inactive")
 
-          if !hotkeyService.isListening {
-            Button("Start") {
-              hotkeyService.start(store: store)
+                    if !hotkeyService.isListening {
+                        Button("Start") {
+                            hotkeyService.start(store: store)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-          }
+        } header: {
+            Text("Status")
         }
-      }
-    } header: {
-      Text("Status")
     }
-  }
 
-  // MARK: - Startup & Appearance
+    // MARK: - Startup & Appearance
 
-  private var startupSection: some View {
-    Section {
-      Toggle(
-        "Launch at Login",
-        isOn: Binding(
-          get: { loginItemManager.isEnabled },
-          set: { _ in loginItemManager.toggle() }
-        ))
+    private var startupSection: some View {
+        Section {
+            Toggle(
+                "Launch at Login",
+                isOn: Binding(
+                    get: { loginItemManager.isEnabled },
+                    set: { _ in loginItemManager.toggle() }
+                ))
 
-      Toggle("Show Dock Icon", isOn: $showDockIcon)
-        .onChange(of: showDockIcon) { _, newValue in
-          applyDockIconPolicy(visible: newValue)
+            Toggle("Show Dock Icon", isOn: $showDockIcon)
+                .onChange(of: showDockIcon) { _, newValue in
+                    applyDockIconPolicy(visible: newValue)
+                }
+
+            Toggle("Show Menu Bar Icon", isOn: $showMenuBarIcon)
+        } header: {
+            Text("Startup & Appearance")
         }
-
-      Toggle("Show Menu Bar Icon", isOn: $showMenuBarIcon)
-    } header: {
-      Text("Startup & Appearance")
     }
-  }
 
-  // MARK: - Global Hotkeys
+    // MARK: - Global Hotkeys
 
-  private var globalHotkeysSection: some View {
-    Section {
-      LabeledContent("Toggle Settings Window") {
-        HStack(spacing: 8) {
-          HotkeyBindingControl(
-            keyCombo: hotkeyService.settingsWindowHotkey,
-            isRecording: isRecordingSettingsWindowHotkey,
-            onStartRecording: {
-              isRecordingSettingsWindowHotkey = true
-            },
-            onRecordKey: { combo in
-              hotkeyService.updateSettingsWindowHotkey(combo)
-              isRecordingSettingsWindowHotkey = false
-            },
-            onCancelRecording: {
-              isRecordingSettingsWindowHotkey = false
-            },
-            checkConflict: { combo in
-              hotkeyService.hasConflict(
-                keyCombo: combo,
-                excludingSettingsWindowHotkey: true
-              )
-            },
-            emptyTitle: "Record Hotkey"
-          )
+    private var globalHotkeysSection: some View {
+        Section {
+            LabeledContent("Toggle Settings Window") {
+                HStack(spacing: 8) {
+                    HotkeyBindingControl(
+                        keyCombo: hotkeyService.settingsWindowHotkey,
+                        isRecording: isRecordingSettingsWindowHotkey,
+                        onStartRecording: {
+                            isRecordingSettingsWindowHotkey = true
+                        },
+                        onRecordKey: { combo in
+                            hotkeyService.updateSettingsWindowHotkey(combo)
+                            isRecordingSettingsWindowHotkey = false
+                        },
+                        onCancelRecording: {
+                            isRecordingSettingsWindowHotkey = false
+                        },
+                        checkConflict: { combo in
+                            hotkeyService.hasConflict(
+                                keyCombo: combo,
+                                excludingSettingsWindowHotkey: true
+                            )
+                        },
+                        emptyTitle: "Record Hotkey"
+                    )
 
-          Button("Default") {
-            hotkeyService.restoreDefaultSettingsWindowHotkey()
-          }
-          .controlSize(.small)
-          .disabled(hotkeyService.settingsWindowHotkey == HotkeyService.defaultSettingsWindowHotkey)
-        }
-      }
-
-      Text("Shows or hides the TapTick settings window from anywhere.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    } header: {
-      Text("Global Hotkeys")
-    }
-  }
-
-  // MARK: - Data & Sync
-
-  private var appShortcutCount: Int {
-    store.shortcuts.filter {
-      if case .launchApp = $0.action { return true }
-      return false
-    }.count
-  }
-
-  private var scriptShortcutCount: Int {
-    store.shortcuts.filter {
-      switch $0.action {
-      case .runScript, .runScriptFile: return true
-      case .launchApp: return false
-      }
-    }.count
-  }
-
-  /// Single section combining shortcut counts, import/export, and iCloud sync.
-  private var dataAndSyncSection: some View {
-    Section {
-      // Shortcut counts + Export/Import in one row
-      LabeledContent {
-        HStack(spacing: 8) {
-          Button("Export...") { exportShortcuts() }
-          Button("Import...") { importShortcuts() }
-        }
-      } label: {
-        Text(
-          "\(appShortcutCount) app\(appShortcutCount == 1 ? "" : "s"), \(scriptShortcutCount) script\(scriptShortcutCount == 1 ? "" : "s")"
-        )
-        .foregroundStyle(.secondary)
-      }
-
-      // iCloud sync toggle or unavailable notice
-      if cloudSync.isAvailable {
-        Toggle(
-          "Sync via iCloud",
-          isOn: Binding(
-            get: { cloudSync.isEnabled },
-            set: { newValue in
-              cloudSync.isEnabled = newValue
-              if newValue { store.performFullSync() }
+                    Button("Default") {
+                        hotkeyService.restoreDefaultSettingsWindowHotkey()
+                    }
+                    .controlSize(.small)
+                    .disabled(hotkeyService.settingsWindowHotkey == HotkeyService.defaultSettingsWindowHotkey)
+                }
             }
-          ))
 
-        if cloudSync.isEnabled {
-          LabeledContent("Status") {
-            HStack(spacing: 8) {
-              if cloudSync.isSyncing {
-                ProgressView().controlSize(.small)
-                Text("Syncing...")
-              } else {
-                Circle().fill(.green).frame(width: 8, height: 8)
-                Text("Up to date")
-              }
-            }
-          }
-
-          if let lastSync = cloudSync.lastSyncDate {
-            LabeledContent("Last Synced") {
-              Text(lastSync, style: .relative).foregroundStyle(.secondary)
-            }
-          }
-
-          if let error = cloudSync.lastError {
-            Label(error, systemImage: "exclamationmark.triangle")
-              .foregroundStyle(.orange)
-              .font(.caption)
-          }
-
-          Button("Sync Now") { store.performFullSync() }.controlSize(.small)
+            Text("Shows or hides the TapTick settings window from anywhere.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("Global Hotkeys")
         }
-      } else {
-        LabeledContent("iCloud") {
-          HStack(spacing: 8) {
-            Circle().fill(.orange).frame(width: 8, height: 8)
-            Text("Not Available")
-          }
+    }
+
+    // MARK: - Data & Sync
+
+    private var appShortcutCount: Int {
+        store.shortcuts.filter {
+            if case .launchApp = $0.action { return true }
+            return false
+        }.count
+    }
+
+    private var scriptShortcutCount: Int {
+        store.shortcuts.filter {
+            switch $0.action {
+            case .runScript, .runScriptFile: return true
+            case .launchApp: return false
+            }
+        }.count
+    }
+
+    /// Single section combining shortcut counts, import/export, and iCloud sync.
+    private var dataAndSyncSection: some View {
+        Section {
+            // Shortcut counts + Export/Import in one row
+            LabeledContent {
+                HStack(spacing: 8) {
+                    Button("Export...") { exportShortcuts() }
+                    Button("Import...") { importShortcuts() }
+                }
+            } label: {
+                Text(
+                    "\(appShortcutCount) app\(appShortcutCount == 1 ? "" : "s"), \(scriptShortcutCount) script\(scriptShortcutCount == 1 ? "" : "s")"
+                )
+                .foregroundStyle(.secondary)
+            }
+
+            // iCloud sync toggle or unavailable notice
+            if cloudSync.isAvailable {
+                Toggle(
+                    "Sync via iCloud",
+                    isOn: Binding(
+                        get: { cloudSync.isEnabled },
+                        set: { newValue in
+                            cloudSync.isEnabled = newValue
+                            if newValue { store.performFullSync() }
+                        }
+                    ))
+
+                if cloudSync.isEnabled {
+                    LabeledContent("Status") {
+                        HStack(spacing: 8) {
+                            if cloudSync.isSyncing {
+                                ProgressView().controlSize(.small)
+                                Text("Syncing...")
+                            } else {
+                                Circle().fill(.green).frame(width: 8, height: 8)
+                                Text("Up to date")
+                            }
+                        }
+                    }
+
+                    if let lastSync = cloudSync.lastSyncDate {
+                        LabeledContent("Last Synced") {
+                            Text(lastSync, style: .relative).foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let error = cloudSync.lastError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    }
+
+                    Button("Sync Now") { store.performFullSync() }.controlSize(.small)
+                }
+            } else {
+                LabeledContent("iCloud") {
+                    HStack(spacing: 8) {
+                        Circle().fill(.orange).frame(width: 8, height: 8)
+                        Text("Not Available")
+                    }
+                }
+                Text("Sign in to iCloud in System Settings to enable sync across your Macs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Data & Sync")
         }
-        Text("Sign in to iCloud in System Settings to enable sync across your Macs.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-    } header: {
-      Text("Data & Sync")
     }
-  }
 
-  // MARK: - Dock Icon
+    // MARK: - Dock Icon
 
-  private func applyDockIconPolicy(visible: Bool) {
-    if visible {
-      NSApp.setActivationPolicy(.regular)
-    } else {
-      NSApp.setActivationPolicy(.accessory)
-      // Ensure window stays visible after switching to accessory
-      DispatchQueue.main.async {
-        NSApp.activate(ignoringOtherApps: true)
-      }
+    private func applyDockIconPolicy(visible: Bool) {
+        if visible {
+            NSApp.setActivationPolicy(.regular)
+        } else {
+            NSApp.setActivationPolicy(.accessory)
+            // Ensure window stays visible after switching to accessory
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
-  }
 
-  // MARK: - Export / Import
+    // MARK: - Export / Import
 
-  private func exportShortcuts() {
-    guard let data = try? store.exportData() else { return }
+    private func exportShortcuts() {
+        guard let data = try? store.exportData() else { return }
 
-    let panel = NSSavePanel()
-    panel.allowedContentTypes = [.json]
-    panel.nameFieldStringValue = "taptick-shortcuts.json"
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "taptick-shortcuts.json"
 
-    if panel.runModal() == .OK, let url = panel.url {
-      try? data.write(to: url)
+        if panel.runModal() == .OK, let url = panel.url {
+            try? data.write(to: url)
+        }
     }
-  }
 
-  private func importShortcuts() {
-    let panel = NSOpenPanel()
-    panel.canChooseFiles = true
-    panel.canChooseDirectories = false
-    panel.allowedContentTypes = [.json]
+    private func importShortcuts() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.json]
 
-    if panel.runModal() == .OK, let url = panel.url {
-      if let data = try? Data(contentsOf: url) {
-        try? store.importData(data)
-      }
+        if panel.runModal() == .OK, let url = panel.url {
+            if let data = try? Data(contentsOf: url) {
+                try? store.importData(data)
+            }
+        }
     }
-  }
 }

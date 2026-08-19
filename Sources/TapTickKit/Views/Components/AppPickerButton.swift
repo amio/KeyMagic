@@ -42,7 +42,8 @@ struct AppPickerButton: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             if let bundle = Bundle(url: url),
-               let bundleID = bundle.bundleIdentifier {
+                let bundleID = bundle.bundleIdentifier
+            {
                 selectedBundleID = bundleID
                 selectedAppName = url.deletingPathExtension().lastPathComponent
             }
@@ -56,7 +57,8 @@ struct AppIconView: View {
 
     var body: some View {
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
-           let icon = NSWorkspace.shared.icon(forFile: url.path) as NSImage? {
+            let icon = NSWorkspace.shared.icon(forFile: url.path) as NSImage?
+        {
             Image(nsImage: icon)
                 .resizable()
                 .aspectRatio(contentMode: .fit)

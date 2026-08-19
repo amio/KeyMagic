@@ -30,7 +30,8 @@ struct ScriptExecutionResult: Sendable {
     func subtitleText(maxLines: Int = 6, maxLength: Int = 480) -> String? {
         guard let overlaySource else { return nil }
 
-        let lines = overlaySource
+        let lines =
+            overlaySource
             .components(separatedBy: .newlines)
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         var result = Array(lines.suffix(maxLines)).joined(separator: "\n")

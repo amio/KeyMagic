@@ -9,7 +9,7 @@ struct KeyComboTests {
 
     @Test("Display string with single modifier")
     func displayStringSingleModifier() {
-        let combo = KeyCombo(keyCode: 0, modifiers: .command) // kVK_ANSI_A = 0
+        let combo = KeyCombo(keyCode: 0, modifiers: .command)  // kVK_ANSI_A = 0
         #expect(combo.displayString == "⌘A")
     }
 
@@ -83,9 +83,9 @@ struct ModifiersTests {
         let mods: KeyCombo.Modifiers = [.command, .shift, .option]
         let carbon = mods.carbonModifiers
         // Carbon raw values: cmdKey=256, optionKey=2048, shiftKey=512, controlKey=4096
-        #expect(carbon & 256  != 0)  // cmdKey
+        #expect(carbon & 256 != 0)  // cmdKey
         #expect(carbon & 2048 != 0)  // optionKey
-        #expect(carbon & 512  != 0)  // shiftKey
+        #expect(carbon & 512 != 0)  // shiftKey
         #expect(carbon & 4096 == 0)  // controlKey — not in mods
     }
 }

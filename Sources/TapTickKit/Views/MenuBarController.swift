@@ -279,7 +279,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
 
     @objc private func triggerShortcut(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID,
-              let shortcut = store.shortcuts.first(where: { $0.id == id })
+            let shortcut = store.shortcuts.first(where: { $0.id == id })
         else { return }
         hotkeyService.trigger(shortcut: shortcut, store: store)
     }

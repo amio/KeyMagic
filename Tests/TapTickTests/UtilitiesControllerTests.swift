@@ -65,7 +65,9 @@ struct UtilitiesControllerTests {
 
         #expect(status == .denied)
         #expect(openedURLs.count == 1)
-        #expect(openedURLs[0].absoluteString == "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        #expect(
+            openedURLs[0].absoluteString
+                == "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
     }
 
     private func makeDirectory() -> URL {

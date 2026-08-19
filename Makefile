@@ -18,6 +18,7 @@ PKG_REF_UUID := C9F4A7C64EE4F53F0F15D17D
 # Detect xcbeautify for prettier xcodebuild output; fall back to cat
 XCBEAUTIFY := $(shell command -v xcbeautify 2>/dev/null)
 PRETTY     := $(if $(XCBEAUTIFY), | xcbeautify,)
+SWIFT_FORMAT := $(shell command -v swift-format 2>/dev/null || xcrun --find swift-format 2>/dev/null)
 
 # Re-export PATH so brew-installed tools are found when invoked via Xcode run scripts
 export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
@@ -52,10 +53,11 @@ help: ## Show available targets
 setup: ## Install required tools and generate Xcode project
 	@echo "→ Checking tools..."
 	@command -v xcodegen   >/dev/null || (echo "  Installing xcodegen..."   && brew install xcodegen)
-	@command -v swift-format >/dev/null || (echo "  Installing swift-format..." && brew install swift-format)
+	@command -v swift-format >/dev/null || xcrun --find swift-format >/dev/null 2>&1 || (echo "  Installing swift-format..." && brew install swift-format)
 	@command -v xcbeautify >/dev/null || (echo "  Installing xcbeautify..." && brew install xcbeautify)
 	@echo "  ✓ xcodegen   $$(xcodegen version)"
-	@echo "  ✓ swift-format $$(swift-format --version 2>&1)"
+	@SWIFT_FORMAT_PATH="$$(command -v swift-format 2>/dev/null || xcrun --find swift-format)"; \
+	    echo "  ✓ swift-format $$($$SWIFT_FORMAT_PATH --version 2>&1)"
 	@echo "  ✓ xcbeautify $$(xcbeautify --version 2>&1)"
 	@echo ""
 	@$(MAKE) gen
@@ -145,12 +147,14 @@ test-all: test uitest ## Run all tests (unit + UI)
 
 format: ## Auto-format all Swift source files with swift-format
 	@echo "→ Formatting..."
-	swift-format format --in-place --recursive Sources Tests
+	@test -n "$(SWIFT_FORMAT)" || (echo "  ! swift-format not found; run 'make setup'"; exit 1)
+	$(SWIFT_FORMAT) format --configuration .swift-format --in-place --recursive Sources Tests
 	@echo "  ✓ done"
 
 lint: ## Lint Swift source files with swift-format (no writes)
 	@echo "→ Linting..."
-	swift-format lint --recursive Sources Tests
+	@test -n "$(SWIFT_FORMAT)" || (echo "  ! swift-format not found; run 'make setup'"; exit 1)
+	$(SWIFT_FORMAT) lint --configuration .swift-format --strict --recursive Sources Tests
 	@echo "  ✓ done"
 
 # -----------------------------------------------------------------------------

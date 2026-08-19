@@ -183,7 +183,8 @@ struct KeystrokeOverlayConfiguration: Codable, Hashable, Sendable {
         backgroundColor = try container.decode(RGBAColor.self, forKey: .backgroundColor)
         holdDuration = try container.decode(Double.self, forKey: .holdDuration)
         fadeOutDuration = try container.decode(Double.self, forKey: .fadeOutDuration)
-        verticalPosition = try container.decodeIfPresent(Double.self, forKey: .verticalPosition)
+        verticalPosition =
+            try container.decodeIfPresent(Double.self, forKey: .verticalPosition)
             ?? Self.default.verticalPosition
     }
 
@@ -264,7 +265,8 @@ struct UtilityConfiguration: Codable, Hashable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         keystrokeOverlay = try container.decode(KeystrokeOverlayConfiguration.self, forKey: .keystrokeOverlay)
-        screenshotTools = try container.decodeIfPresent(ScreenshotToolsConfiguration.self, forKey: .screenshotTools)
+        screenshotTools =
+            try container.decodeIfPresent(ScreenshotToolsConfiguration.self, forKey: .screenshotTools)
             ?? .default
     }
 

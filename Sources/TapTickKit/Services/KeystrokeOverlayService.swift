@@ -70,7 +70,8 @@ final class KeystrokeOverlayService {
             return notifyPermissionStatus(currentPermissionStatus())
         }
 
-        let permissionStatus = promptForPermission
+        let permissionStatus =
+            promptForPermission
             ? requestPermission()
             : refreshPermissionStatus()
 
@@ -99,19 +100,20 @@ final class KeystrokeOverlayService {
         }
 
         let eventMask =
-            (CGEventMask(1) << CGEventType.keyDown.rawValue) |
-            (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
+            (CGEventMask(1) << CGEventType.keyDown.rawValue) | (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
 
         let userInfo = Unmanaged.passUnretained(self).toOpaque()
 
-        guard let eventTap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: eventMask,
-            callback: keystrokeOverlayEventTapCallback,
-            userInfo: userInfo
-        ) else {
+        guard
+            let eventTap = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: .listenOnly,
+                eventsOfInterest: eventMask,
+                callback: keystrokeOverlayEventTapCallback,
+                userInfo: userInfo
+            )
+        else {
             notifyCaptureState(false)
             _ = notifyPermissionStatus(currentPermissionStatus())
             return
@@ -239,7 +241,8 @@ final class KeystrokeOverlayService {
                 let keyName = Self.typeableDisplayName(for: keyCode)
                 let now = CFAbsoluteTimeGetCurrent()
                 if let existing = accumulatedText,
-                   now - lastShowTimestamp < configuration.holdDuration {
+                    now - lastShowTimestamp < configuration.holdDuration
+                {
                     accumulatedText = existing + keyName
                 } else {
                     accumulatedText = keyName
@@ -270,7 +273,8 @@ final class KeystrokeOverlayService {
         if Int(keyCode) == kVK_Space { return true }
         let name = KeyCodeMapping.keyName(for: keyCode)
         guard let scalar = name.unicodeScalars.first,
-              name.unicodeScalars.count == 1 else {
+            name.unicodeScalars.count == 1
+        else {
             return false
         }
         return scalar.value >= 0x21 && scalar.value <= 0x7E

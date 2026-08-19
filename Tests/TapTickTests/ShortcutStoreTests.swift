@@ -3,6 +3,7 @@ import Foundation
 @testable import TapTickKit
 
 @Suite("ShortcutStore")
+@MainActor
 struct ShortcutStoreTests {
 
     /// Create a store backed by a temporary directory.
@@ -56,6 +57,20 @@ struct ShortcutStoreTests {
         store.add(shortcut)
         store.remove(id: shortcut.id)
         #expect(store.shortcuts.isEmpty)
+        #expect(store.deletions.map(\.id) == [shortcut.id])
+    }
+
+    @Test("Re-adding a deleted shortcut clears its deletion record")
+    func readdDeletedShortcut() {
+        let store = makeStore()
+        let shortcut = makeSampleShortcut()
+        store.add(shortcut)
+        store.remove(id: shortcut.id)
+
+        store.add(shortcut)
+
+        #expect(store.shortcuts.map(\.id) == [shortcut.id])
+        #expect(store.deletions.isEmpty)
     }
 
     @Test("Remove at offsets")
@@ -139,6 +154,56 @@ struct ShortcutStoreTests {
         try? FileManager.default.removeItem(at: dir)
     }
 
+    @Test("Deletion records survive persistence and block stale shortcuts")
+    func deletionPersistence() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let shortcut = makeSampleShortcut(name: "Removed")
+        let firstStore = ShortcutStore(directory: dir)
+        firstStore.add(shortcut)
+        firstStore.remove(id: shortcut.id)
+
+        let restoredStore = ShortcutStore(directory: dir)
+        #expect(restoredStore.shortcuts.isEmpty)
+        #expect(restoredStore.deletions.map(\.id) == [shortcut.id])
+
+        let deletionDate = try #require(restoredStore.deletions.first?.deletedAt)
+        var staleShortcut = shortcut
+        staleShortcut.modifiedAt = deletionDate.addingTimeInterval(-60)
+        let staleState = ShortcutSyncState(shortcuts: [staleShortcut], deletions: [])
+        let localState = ShortcutSyncState(
+            shortcuts: restoredStore.shortcuts,
+            deletions: restoredStore.deletions
+        )
+        let merged = CloudSyncService.merge(local: localState, remote: staleState)
+        #expect(merged.shortcuts.isEmpty)
+    }
+
+    @Test("Legacy local arrays load and migrate to the sync envelope")
+    func legacyLocalMigration() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let shortcut = makeSampleShortcut(name: "Legacy")
+        let legacyData = try JSONEncoder().encode([shortcut])
+        let fileURL = dir.appendingPathComponent("shortcuts.json")
+        try legacyData.write(to: fileURL)
+
+        let store = ShortcutStore(directory: dir)
+        #expect(store.shortcuts.map(\.name) == ["Legacy"])
+        #expect(store.deletions.isEmpty)
+
+        store.toggleEnabled(id: shortcut.id)
+        let savedData = try Data(contentsOf: fileURL)
+        let savedState = try JSONDecoder().decode(ShortcutSyncState.self, from: savedData)
+        #expect(savedState.shortcuts.count == 1)
+        #expect(savedState.deletions.isEmpty)
+    }
+
     @Test("Export and import")
     func exportImport() throws {
         let store1 = makeStore()
@@ -146,6 +211,8 @@ struct ShortcutStoreTests {
         store1.add(makeSampleShortcut(name: "Export2"))
 
         let data = try store1.exportData()
+        let exportedShortcuts = try JSONDecoder().decode([Shortcut].self, from: data)
+        #expect(exportedShortcuts.count == 2)
 
         let store2 = makeStore()
         try store2.importData(data)
@@ -159,19 +226,19 @@ struct ShortcutStoreTests {
         let store = makeStore()
         var shortcut = makeSampleShortcut()
         shortcut = Shortcut(
-            id: UUID(), // different ID
+            id: UUID(),  // different ID
             name: "Ghost",
             keyCombo: shortcut.keyCombo,
             action: shortcut.action
         )
-        store.update(shortcut) // should not crash
+        store.update(shortcut)  // should not crash
         #expect(store.shortcuts.isEmpty)
     }
 
     @Test("Remove non-existent ID is no-op")
     func removeNonExistent() {
         let store = makeStore()
-        store.remove(id: UUID()) // should not crash
+        store.remove(id: UUID())  // should not crash
         #expect(store.shortcuts.isEmpty)
     }
 }

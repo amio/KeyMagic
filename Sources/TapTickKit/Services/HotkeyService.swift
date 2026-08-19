@@ -80,10 +80,11 @@ public final class HotkeyService: @unchecked Sendable {
     ) -> Bool {
         let shortcutConflict = store?.hasConflict(keyCombo: keyCombo, excludingID: excludingShortcutID) ?? false
         let settingsConflict = !excludingSettingsWindowHotkey && settingsWindowHotkey == keyCombo
-        let utilityConflict = utilities?.reservedHotkeyConflict(
-            for: keyCombo,
-            excluding: excludingUtilityID
-        ) ?? false
+        let utilityConflict =
+            utilities?.reservedHotkeyConflict(
+                for: keyCombo,
+                excluding: excludingUtilityID
+            ) ?? false
         return shortcutConflict || settingsConflict || utilityConflict
     }
 
@@ -215,7 +216,7 @@ public final class HotkeyService: @unchecked Sendable {
         switch registration.action {
         case .shortcut(let shortcutID):
             guard let store,
-                  let shortcut = store.shortcuts.first(where: { $0.id == shortcutID })
+                let shortcut = store.shortcuts.first(where: { $0.id == shortcutID })
             else { return }
 
             store.markTriggered(id: shortcut.id)
@@ -241,7 +242,7 @@ public final class HotkeyService: @unchecked Sendable {
 
     private static func loadSettingsWindowHotkey() -> KeyCombo {
         guard let data = UserDefaults.standard.data(forKey: settingsWindowHotkeyDefaultsKey),
-              let combo = try? JSONDecoder().decode(KeyCombo.self, from: data)
+            let combo = try? JSONDecoder().decode(KeyCombo.self, from: data)
         else {
             return defaultSettingsWindowHotkey
         }

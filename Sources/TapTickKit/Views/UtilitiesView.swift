@@ -70,7 +70,9 @@ private struct UtilityRow: View {
     private let iconColumnWidth: CGFloat = 22
 
     var body: some View {
-        ListRowContainer(isOdd: isOdd, accentBackground: isSelected ? Color.accentColor.opacity(0.10) : .clear, verticalPadding: 8) {
+        ListRowContainer(
+            isOdd: isOdd, accentBackground: isSelected ? Color.accentColor.opacity(0.10) : .clear, verticalPadding: 8
+        ) {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
                 GridRow(alignment: .center) {
                     utilityIcon
@@ -185,10 +187,12 @@ private struct KeystrokeOverlaySettingsPane: View {
                 Label(d.title, systemImage: d.systemImage)
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Toggle(isOn: Binding(
-                    get: { utilities.keystrokeOverlay.isEnabled },
-                    set: { utilities.setKeystrokeOverlayEnabled($0) }
-                )) { EmptyView() }
+                Toggle(
+                    isOn: Binding(
+                        get: { utilities.keystrokeOverlay.isEnabled },
+                        set: { utilities.setKeystrokeOverlayEnabled($0) }
+                    )
+                ) { EmptyView() }
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)
@@ -285,11 +289,13 @@ private struct KeystrokeOverlaySettingsPane: View {
                     Spacer(minLength: 0)
 
                     Text(utilities.keystrokeOverlay.hotkey.displayString)
-                        .font(.system(
-                            size: utilities.keystrokeOverlay.fontSize,
-                            weight: .semibold,
-                            design: .rounded
-                        ))
+                        .font(
+                            .system(
+                                size: utilities.keystrokeOverlay.fontSize,
+                                weight: .semibold,
+                                design: .rounded
+                            )
+                        )
                         .tracking(max(0.8, utilities.keystrokeOverlay.fontSize * 0.025))
                         .foregroundStyle(utilities.keystrokeOverlay.foregroundColor.color)
                         .lineLimit(1)
@@ -319,7 +325,7 @@ private struct KeystrokeOverlaySettingsPane: View {
         Section {
             LabeledContent("Font Size") {
                 HStack(spacing: 12) {
-                    Slider(value: fontSizeBinding.stepped(by: 1), in: 18 ... 72)
+                    Slider(value: fontSizeBinding.stepped(by: 1), in: 18...72)
                         .frame(width: 200)
                     Text("\(Int(utilities.keystrokeOverlay.fontSize)) pt")
                         .foregroundStyle(.secondary)
@@ -348,7 +354,7 @@ private struct KeystrokeOverlaySettingsPane: View {
         Section {
             LabeledContent("Vertical Position") {
                 HStack(spacing: 12) {
-                    Slider(value: verticalPositionBinding.stepped(by: 0.01), in: 0 ... 1)
+                    Slider(value: verticalPositionBinding.stepped(by: 0.01), in: 0...1)
                         .frame(width: 200)
                     Text("\(Int(utilities.keystrokeOverlay.verticalPosition * 100))%")
                         .foregroundStyle(.secondary)
@@ -365,23 +371,27 @@ private struct KeystrokeOverlaySettingsPane: View {
         Section {
             LabeledContent("Visible Time") {
                 HStack(spacing: 12) {
-                    Slider(value: holdDurationBinding.stepped(by: 0.1), in: 0.4 ... 4)
+                    Slider(value: holdDurationBinding.stepped(by: 0.1), in: 0.4...4)
                         .frame(width: 200)
-                    Text("\(utilities.keystrokeOverlay.holdDuration.formatted(.number.precision(.fractionLength(2)))) s")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
+                    Text(
+                        "\(utilities.keystrokeOverlay.holdDuration.formatted(.number.precision(.fractionLength(2)))) s"
+                    )
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 42, alignment: .trailing)
                 }
             }
 
             LabeledContent("Fade Out") {
                 HStack(spacing: 12) {
-                    Slider(value: fadeOutDurationBinding.stepped(by: 0.05), in: 0.1 ... 1.4)
+                    Slider(value: fadeOutDurationBinding.stepped(by: 0.05), in: 0.1...1.4)
                         .frame(width: 200)
-                    Text("\(utilities.keystrokeOverlay.fadeOutDuration.formatted(.number.precision(.fractionLength(2)))) s")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
+                    Text(
+                        "\(utilities.keystrokeOverlay.fadeOutDuration.formatted(.number.precision(.fractionLength(2)))) s"
+                    )
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 42, alignment: .trailing)
                 }
             }
         } header: {
@@ -482,10 +492,12 @@ private struct ScreenshotToolsSettingsPane: View {
                 Label(d.title, systemImage: d.systemImage)
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Toggle(isOn: Binding(
-                    get: { utilities.screenshotTools.isEnabled },
-                    set: { utilities.setScreenshotToolsEnabled($0) }
-                )) { EmptyView() }
+                Toggle(
+                    isOn: Binding(
+                        get: { utilities.screenshotTools.isEnabled },
+                        set: { utilities.setScreenshotToolsEnabled($0) }
+                    )
+                ) { EmptyView() }
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)
@@ -690,9 +702,11 @@ private struct PlannedUtilityPane: View {
                     }
                 }
 
-                Text("This slot already has a dedicated place in the settings IA, so future implementation can add native controls here without changing the top-level structure.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "This slot already has a dedicated place in the settings IA, so future implementation can add native controls here without changing the top-level structure."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .padding(28)
             .frame(maxWidth: 680, alignment: .leading)

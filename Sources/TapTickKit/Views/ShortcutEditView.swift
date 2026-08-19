@@ -48,12 +48,14 @@ struct ShortcutEditView: View {
             Section {
                 TextField("Name", text: $name, prompt: Text("e.g. Open Terminal"))
 
-                KeyRecorderView(keyCombo: $keyCombo, checkConflict: { combo in
-                    hotkeyService.hasConflict(
-                        keyCombo: combo,
-                        excludingShortcutID: editingShortcut?.id
-                    )
-                })
+                KeyRecorderView(
+                    keyCombo: $keyCombo,
+                    checkConflict: { combo in
+                        hotkeyService.hasConflict(
+                            keyCombo: combo,
+                            excludingShortcutID: editingShortcut?.id
+                        )
+                    })
             } header: {
                 Text("Shortcut")
             }

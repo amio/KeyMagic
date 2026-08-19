@@ -42,10 +42,13 @@ struct ShortcutRow: View {
             }
 
             // Enable/disable toggle
-            Toggle("", isOn: Binding(
-                get: { shortcut.isEnabled },
-                set: { _ in onToggle() }
-            ))
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { shortcut.isEnabled },
+                    set: { _ in onToggle() }
+                )
+            )
             .labelsHidden()
             .toggleStyle(.switch)
             .controlSize(.small)

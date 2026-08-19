@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.taptick
   deploymentTarget:
     macOS: "15.0"
-  xcodeVersion: "16.0"
+  xcodeVersion: "26.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
   groupSortPosition: top
@@ -25,7 +25,7 @@ packages:
     path: .
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    from: "2.7.0"
+    exactVersion: "2.9.6"
 
 targets:
   TapTick:

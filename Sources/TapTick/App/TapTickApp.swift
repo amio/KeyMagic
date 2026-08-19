@@ -99,13 +99,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateService: appState.updateService
         )
 
-        appState.utilities.onReservedHotkeysChanged = { [weak hotkeyService = appState.hotkeyService, weak store = appState.store] in
+        appState.utilities.onReservedHotkeysChanged = {
+            [weak hotkeyService = appState.hotkeyService, weak store = appState.store] in
             guard let hotkeyService, let store else { return }
             hotkeyService.restart(store: store)
         }
         appState.utilities.bootstrap()
 
-        appState.hotkeyService.onScriptCompleted = { [weak logStore = appState.scriptLogStore, weak presenter = appState.scriptOutputPresenter] log in
+        appState.hotkeyService.onScriptCompleted = {
+            [weak logStore = appState.scriptLogStore, weak presenter = appState.scriptOutputPresenter] log in
             logStore?.record(log)
             presenter?.show(log: log)
         }
@@ -230,17 +232,22 @@ struct TapTickApp: App {
                 .environment(appState.cloudSync)
                 .environment(appState.updateService)
                 .environment(appState.scriptLogStore)
-                .background(SettingsWindowEscapeShortcut {
-                    appDelegate.dismissSettingsWindow()
-                })
-                .background(SettingsWindowObserver { window in
-                    guard let window else { return }
-                    window.identifier = settingsWindowIdentifier
-                    window.styleMask.remove(.resizable)
-                    appState.settingsWindow = window
-                })
-                .frame(minWidth: 980, idealWidth: 980, maxWidth: 980,
-                       minHeight: 600, idealHeight: 600, maxHeight: 600)
+                .background(
+                    SettingsWindowEscapeShortcut {
+                        appDelegate.dismissSettingsWindow()
+                    }
+                )
+                .background(
+                    SettingsWindowObserver { window in
+                        guard let window else { return }
+                        window.identifier = settingsWindowIdentifier
+                        window.styleMask.remove(.resizable)
+                        appState.settingsWindow = window
+                    }
+                )
+                .frame(
+                    minWidth: 980, idealWidth: 980, maxWidth: 980,
+                    minHeight: 600, idealHeight: 600, maxHeight: 600)
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)

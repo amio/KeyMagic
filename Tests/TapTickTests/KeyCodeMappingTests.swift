@@ -30,11 +30,11 @@ struct KeyCodeMappingTests {
 
     @Test("Special keys map correctly")
     func specialKeys() {
-        #expect(KeyCodeMapping.keyName(for: 36) == "↩")   // Return
-        #expect(KeyCodeMapping.keyName(for: 48) == "⇥")   // Tab
-        #expect(KeyCodeMapping.keyName(for: 49) == "Space") // Space
-        #expect(KeyCodeMapping.keyName(for: 51) == "⌫")   // Delete
-        #expect(KeyCodeMapping.keyName(for: 53) == "⎋")   // Escape
+        #expect(KeyCodeMapping.keyName(for: 36) == "↩")  // Return
+        #expect(KeyCodeMapping.keyName(for: 48) == "⇥")  // Tab
+        #expect(KeyCodeMapping.keyName(for: 49) == "Space")  // Space
+        #expect(KeyCodeMapping.keyName(for: 51) == "⌫")  // Delete
+        #expect(KeyCodeMapping.keyName(for: 53) == "⎋")  // Escape
     }
 
     @Test("Arrow keys map correctly")

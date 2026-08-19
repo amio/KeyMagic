@@ -7,27 +7,28 @@ import Observation
 /// (`TapTick` for release, `TapTick Dev` for Debug).
 /// When iCloud sync is enabled, every local mutation is also pushed to the cloud,
 /// and remote changes are merged in automatically via `CloudSyncService`.
+@MainActor
 @Observable
-public final class ShortcutStore: @unchecked Sendable {
+public final class ShortcutStore {
     // MARK: - Published State
 
     private(set) var shortcuts: [Shortcut] = []
+    @ObservationIgnored private(set) var deletions: [ShortcutDeletion] = []
 
     // MARK: - Persistence
 
     private let fileURL: URL
     private let cloudSync: CloudSyncService?
 
-    /// Flag to prevent upload loops when applying a merge that came from the cloud.
-    private var isApplyingRemote = false
-
     public init(directory: URL? = nil, cloudSync: CloudSyncService? = nil) {
-        let dir = directory ?? FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first!.appendingPathComponent(
-            TapTickRuntimeConfiguration.current.appSupportDirectoryName,
-            isDirectory: true
-        )
+        let dir =
+            directory
+            ?? FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask
+            ).first!.appendingPathComponent(
+                TapTickRuntimeConfiguration.current.appSupportDirectoryName,
+                isDirectory: true
+            )
 
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.fileURL = dir.appendingPathComponent("shortcuts.json")
@@ -39,8 +40,8 @@ public final class ShortcutStore: @unchecked Sendable {
     /// Wire up the cloud sync callback so remote changes are merged automatically.
     private func setupCloudSync() {
         guard let cloudSync else { return }
-        cloudSync.onRemoteChange = { [weak self] remoteShortcuts in
-            self?.applyRemoteChanges(remoteShortcuts)
+        cloudSync.onRemoteChange = { [weak self] remoteState in
+            self?.applyRemoteChanges(remoteState)
         }
     }
 
@@ -49,6 +50,7 @@ public final class ShortcutStore: @unchecked Sendable {
     func add(_ shortcut: Shortcut) {
         var s = shortcut
         s.modifiedAt = Date()
+        clearDeletion(for: s.id)
         shortcuts.append(s)
         saveToDisk()
         syncToCloud()
@@ -58,19 +60,27 @@ public final class ShortcutStore: @unchecked Sendable {
         guard let index = shortcuts.firstIndex(where: { $0.id == shortcut.id }) else { return }
         var s = shortcut
         s.modifiedAt = Date()
+        clearDeletion(for: s.id)
         shortcuts[index] = s
         saveToDisk()
         syncToCloud()
     }
 
     func remove(id: UUID) {
+        guard shortcuts.contains(where: { $0.id == id }) else { return }
         shortcuts.removeAll { $0.id == id }
+        recordDeletion(id: id, at: Date())
         saveToDisk()
         syncToCloud()
     }
 
     func remove(atOffsets offsets: IndexSet) {
+        let ids = offsets.map { shortcuts[$0].id }
         shortcuts.remove(atOffsets: offsets)
+        let deletionDate = Date()
+        for id in ids {
+            recordDeletion(id: id, at: deletionDate)
+        }
         saveToDisk()
         syncToCloud()
     }
@@ -105,21 +115,21 @@ public final class ShortcutStore: @unchecked Sendable {
     // MARK: - Cloud Sync
 
     private func syncToCloud() {
-        guard !isApplyingRemote else { return }
-        cloudSync?.upload(shortcuts: shortcuts)
+        cloudSync?.upload(syncState)
     }
 
-    /// Merge remote shortcuts into local data without re-uploading.
-    private func applyRemoteChanges(_ remoteShortcuts: [Shortcut]) {
-        isApplyingRemote = true
-        defer { isApplyingRemote = false }
+    /// Merge remote state locally and publish the result when the remote side was stale.
+    private func applyRemoteChanges(_ remoteState: ShortcutSyncState) {
+        let merged = CloudSyncService.merge(local: syncState, remote: remoteState)
 
-        let merged = CloudSyncService.merge(local: shortcuts, remote: remoteShortcuts)
+        if merged != syncState {
+            apply(merged)
+            saveToDisk()
+        }
 
-        // Only persist if something actually changed.
-        guard merged != shortcuts else { return }
-        shortcuts = merged
-        saveToDisk()
+        if merged != remoteState {
+            cloudSync?.upload(merged)
+        }
     }
 
     /// Perform a full sync: download + merge + upload the merged result.
@@ -127,28 +137,28 @@ public final class ShortcutStore: @unchecked Sendable {
         guard let cloudSync, cloudSync.isEnabled else { return }
 
         if let remote = cloudSync.download() {
-            let merged = CloudSyncService.merge(local: shortcuts, remote: remote)
-            shortcuts = merged
+            let merged = CloudSyncService.merge(local: syncState, remote: remote)
+            apply(merged)
             saveToDisk()
         }
 
         // Upload the (possibly merged) local data so the cloud has the latest.
-        cloudSync.upload(shortcuts: shortcuts)
+        cloudSync.upload(syncState)
     }
 
     // MARK: - Disk I/O
 
     func loadFromDisk() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            shortcuts = []
+            apply(.empty)
             return
         }
         do {
             let data = try Data(contentsOf: fileURL)
-            shortcuts = try JSONDecoder().decode([Shortcut].self, from: data)
+            apply(try ShortcutSyncState.decode(from: data, using: JSONDecoder()))
         } catch {
             print("TapTick: Failed to load shortcuts: \(error)")
-            shortcuts = []
+            apply(.empty)
         }
     }
 
@@ -156,7 +166,7 @@ public final class ShortcutStore: @unchecked Sendable {
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(shortcuts)
+            let data = try encoder.encode(syncState)
             try data.write(to: fileURL, options: .atomic)
         } catch {
             print("TapTick: Failed to save shortcuts: \(error)")
@@ -172,9 +182,34 @@ public final class ShortcutStore: @unchecked Sendable {
     }
 
     func importData(_ data: Data) throws {
-        let decoded = try JSONDecoder().decode([Shortcut].self, from: data)
-        shortcuts = decoded
+        let importDate = Date()
+        shortcuts = try JSONDecoder().decode([Shortcut].self, from: data).map { shortcut in
+            var restored = shortcut
+            restored.modifiedAt = importDate
+            return restored
+        }
+        deletions = []
         saveToDisk()
         syncToCloud()
+    }
+
+    // MARK: - Sync State
+
+    private var syncState: ShortcutSyncState {
+        ShortcutSyncState(shortcuts: shortcuts, deletions: deletions)
+    }
+
+    private func apply(_ state: ShortcutSyncState) {
+        shortcuts = state.shortcuts
+        deletions = state.deletions
+    }
+
+    private func recordDeletion(id: UUID, at date: Date) {
+        deletions.removeAll { $0.id == id }
+        deletions.append(ShortcutDeletion(id: id, deletedAt: date))
+    }
+
+    private func clearDeletion(for id: UUID) {
+        deletions.removeAll { $0.id == id }
     }
 }

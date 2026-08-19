@@ -2,9 +2,10 @@
 # TapTick — Build & Distribute
 #
 # Triggers:
-#   • push to main       → build + test only (no signing/notarization)
-#   • push of v* tag     → full pipeline: build → sign → notarize → DMG → upload
-#   • workflow_dispatch  → manual trigger, same as tag push
+#   • pull request       → unit tests only
+#   • push of v* tag     → tests + full distribution pipeline
+#   • workflow_dispatch  → tests + manually triggered distribution build
+# Plain pushes to main intentionally do not run this workflow.
 #
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
 #   APPLE_CERTIFICATE_BASE64   Base64-encoded Developer ID Application .p12
@@ -32,7 +33,7 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 1: Unit tests — runs on every push/PR, no secrets needed
+  # Job 1: Unit tests — runs for PRs, version tags, and manual dispatches
   # ---------------------------------------------------------------------------
   test:
     name: Unit Tests
@@ -114,17 +115,44 @@ jobs:
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
 
-      # ---- Derive version from tag or commit --------------------------------
+      # ---- Read and validate version metadata --------------------------------
 
       - name: Set version
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"   # strip leading "v"
-          else
-            VERSION="0.0.0-dev+$(git rev-parse --short HEAD)"
+          MARKETING_VERSION="$(grep -m1 'MARKETING_VERSION:' project.yml | sed 's/.*"\(.*\)".*/\1/')"
+          BUILD_VERSION="$(grep -m1 'CURRENT_PROJECT_VERSION:' project.yml | sed 's/.*"\(.*\)".*/\1/')"
+
+          if [[ ! "$MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid MARKETING_VERSION in project.yml: $MARKETING_VERSION"
+            exit 1
           fi
+          if [[ ! "$BUILD_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "Invalid CURRENT_PROJECT_VERSION in project.yml: $BUILD_VERSION"
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            case "$GITHUB_REF_NAME" in
+              "v${MARKETING_VERSION}")
+                VERSION="$MARKETING_VERSION"
+                ;;
+              "v${MARKETING_VERSION}+b${BUILD_VERSION}")
+                VERSION="${MARKETING_VERSION}+b${BUILD_VERSION}"
+                ;;
+              *)
+                echo "Tag $GITHUB_REF_NAME does not match project version ${MARKETING_VERSION} (build ${BUILD_VERSION})"
+                exit 1
+                ;;
+            esac
+          else
+            VERSION="${MARKETING_VERSION}+b${BUILD_VERSION}-dev-$(git rev-parse --short HEAD)"
+          fi
+
+          echo "MARKETING_VERSION=$MARKETING_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_VERSION=$BUILD_VERSION" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "Build version: $VERSION"
+          echo "Bundle version: $MARKETING_VERSION ($BUILD_VERSION)"
+          echo "Artifact version: $VERSION"
 
       # ---- Generate Xcode project -------------------------------------------
 
@@ -144,7 +172,8 @@ jobs:
             -scheme      "$SCHEME" \
             -configuration Release \
             -archivePath "$RUNNER_TEMP/TapTick.xcarchive" \
-            MARKETING_VERSION="$VERSION" \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_VERSION" \
             CODE_SIGN_IDENTITY="Developer ID Application" \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
@@ -234,9 +263,9 @@ jobs:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           # --- Install Sparkle CLI tools ---
-          # Pin to the same version resolved by SPM (2.9.0).
+          # Pin to the same audited version used by SPM.
           # Download to a file first — macOS BSD tar cannot decompress xz from stdin.
-          SPARKLE_VERSION="2.9.0"
+          SPARKLE_VERSION="2.9.6"
           SPARKLE_TOOLS="$RUNNER_TEMP/sparkle-tools"
           mkdir -p "$SPARKLE_TOOLS"
           curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \

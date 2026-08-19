@@ -46,9 +46,9 @@ public final class UpdateService: @unchecked Sendable {
         // launch. Skip auto-starting the updater entirely during development;
         // the "Check for Updates…" button will still work via checkForUpdates().
         #if DEBUG
-        let shouldStart = false
+            let shouldStart = false
         #else
-        let shouldStart = true
+            let shouldStart = true
         #endif
 
         userDriverDelegate = UpdateUserDriverDelegate()
