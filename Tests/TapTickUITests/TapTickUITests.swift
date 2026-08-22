@@ -1,56 +1,61 @@
 import XCTest
 
+@MainActor
 final class TapTickUITests: XCTestCase {
-
-    var app: XCUIApplication!
-
-    override func setUpWithError() throws {
-        continueAfterFailure = false
-        app = XCUIApplication()
-        app.launch()
-    }
-
-    override func tearDownWithError() throws {
-        app.terminate()
-    }
-
     // MARK: - Settings Window
 
     func testSettingsWindowOpens() throws {
-        // The settings window should be available
-        let window = app.windows["TapTick Settings"]
-        // Give it a moment to appear
-        let exists = window.waitForExistence(timeout: 5)
-        // Note: The window might not open automatically since it's a menu bar app.
-        // This test verifies the basic launch works.
-        XCTAssertTrue(app.exists)
-        _ = exists
+        let app = launchApp()
+        defer { app.terminate() }
+
+        XCTAssertTrue(
+            app.windows.firstMatch.waitForExistence(timeout: 5),
+            "A manual launch should open the settings window"
+        )
     }
 
-    func testEmptyStateShowsPlaceholder() throws {
-        let window = app.windows["TapTick Settings"]
-        if window.waitForExistence(timeout: 5) {
-            // Should show "No Shortcut Selected" or similar empty state
-            let noSelection = window.staticTexts["No Shortcut Selected"]
-            if noSelection.waitForExistence(timeout: 3) {
-                XCTAssertTrue(noSelection.exists)
-            }
-        }
+    func testApplicationsPageIsSelectedByDefault() throws {
+        let app = launchApp()
+        defer { app.terminate() }
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            window.searchFields["Search"].waitForExistence(timeout: 5),
+            "The default Applications page should expose its search field"
+        )
     }
 
-    func testAddButtonExists() throws {
-        let window = app.windows["TapTick Settings"]
-        if window.waitForExistence(timeout: 5) {
-            let addButton = window.buttons["Add Shortcut"]
-            if addButton.waitForExistence(timeout: 3) {
-                XCTAssertTrue(addButton.isEnabled)
-            }
-        }
+    func testCanNavigateToGeneralSettings() throws {
+        let app = launchApp()
+        defer { app.terminate() }
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+
+        let generalTab = window.staticTexts["General"]
+        XCTAssertTrue(generalTab.waitForExistence(timeout: 3))
+        generalTab.click()
+
+        XCTAssertTrue(
+            window.staticTexts["Startup & Appearance"].waitForExistence(timeout: 3),
+            "Selecting General should show startup settings"
+        )
     }
 
     // MARK: - Menu Bar
 
     func testAppLaunches() throws {
+        let app = launchApp()
+        defer { app.terminate() }
+
         XCTAssertTrue(app.exists, "App should launch successfully")
+    }
+
+    private func launchApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["-hasLaunchedBefore", "YES"]
+        app.launch()
+        return app
     }
 }

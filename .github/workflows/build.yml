@@ -45,11 +45,13 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Swift version
-        run: swift --version
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Run unit tests
-        run: swift test --configuration debug
+        run: make test
 
   # ---------------------------------------------------------------------------
   # Job 2: Build, sign, notarize, package as DMG — runs on tag push or manual

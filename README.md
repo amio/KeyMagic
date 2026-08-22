@@ -28,7 +28,7 @@ open           Regenerate and open project in Xcode
 build          Build app — Debug (via xcodebuild)
 release        Build app — Release (via xcodebuild)
 run            Build (Debug) and run `TapTick Dev.app` from the CLI
-test           Run unit tests via swift test (fast, no Xcode needed)
+test           Run unit tests via xcodebuild
 uitest         Run UI tests via xcodebuild
 test-all       Run all tests (unit + UI)
 format         Auto-format all Swift source files with swift-format

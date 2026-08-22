@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.taptick
   deploymentTarget:
     macOS: "15.0"
-  xcodeVersion: "26.0"
+  xcodeVersion: "27.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
   groupSortPosition: top
