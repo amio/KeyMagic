@@ -50,7 +50,7 @@ struct MenuBarTextSlotEditor: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: Self.controlSpacing) {
+        HStack(spacing: Self.contentPadding) {
             Picker("Layout", selection: slotBinding(\.layout)) {
                 ForEach(MenuBarTextLayout.allCases, id: \.self) { layout in
                     MenuBarTextLayoutIcon(layout: layout)
@@ -74,30 +74,36 @@ struct MenuBarTextSlotEditor: View {
             .pickerStyle(.segmented)
             .fixedSize(horizontal: true, vertical: false)
 
-            Spacer()
+            HStack(spacing: 2) {
+                MenuBarEditorHeaderButton(
+                    systemImage: "arrow.left",
+                    accessibilityLabel: "Move Left"
+                ) {
+                    controller.moveSlot(id: slot.id, offset: -1)
+                }
+                .disabled(index == 0)
+                .help("Move Left")
 
-            Button {
-                controller.moveSlot(id: slot.id, offset: -1)
-            } label: {
-                Image(systemName: "arrow.left")
+                MenuBarEditorHeaderButton(
+                    systemImage: "arrow.right",
+                    accessibilityLabel: "Move Right"
+                ) {
+                    controller.moveSlot(id: slot.id, offset: 1)
+                }
+                .disabled(index == slotCount - 1)
+                .help("Move Right")
             }
-            .disabled(index == 0)
-            .help("Move Left")
 
-            Button {
-                controller.moveSlot(id: slot.id, offset: 1)
-            } label: {
-                Image(systemName: "arrow.right")
-            }
-            .disabled(index == slotCount - 1)
-            .help("Move Right")
+            Spacer(minLength: Self.contentPadding)
 
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "trash")
-            }
+            MenuBarEditorHeaderButton(
+                systemImage: "trash",
+                accessibilityLabel: "Remove Slot",
+                role: .destructive,
+                action: onRemove
+            )
             .help("Remove Slot")
         }
-        .buttonStyle(.borderless)
         .controlSize(.small)
     }
 
@@ -194,6 +200,44 @@ struct MenuBarTextSlotEditor: View {
     ) -> String {
         guard slot.layout == .twoLines else { return "Script" }
         return position == .top ? "Top script" : "Bottom script"
+    }
+}
+
+private struct MenuBarEditorHeaderButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    var role: ButtonRole?
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
+
+    init(
+        systemImage: String,
+        accessibilityLabel: String,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.systemImage = systemImage
+        self.accessibilityLabel = accessibilityLabel
+        self.role = role
+        self.action = action
+    }
+
+    var body: some View {
+        Button(role: role, action: action) {
+            Image(systemName: systemImage)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color.primary.opacity(0.08))
+                .opacity(isHovered && isEnabled ? 1 : 0)
+        }
+        .accessibilityLabel(accessibilityLabel)
+        .onHover { isHovered = $0 }
     }
 }
 
