@@ -1,103 +1,40 @@
-# DEVELOPMENT PROTOCOL — TapTick
+# PROJECT RULES
 
-## 1. Workflow & Strategy
+> Keep this file as short as useful, target no more than 1000 words, and never exceed 1200 words. Do not add content to reach a target. Update by replacing or consolidating guidance, not by appending task history. Keep a fact only when it is project-wide, non-obvious, decision-relevant, and durable; otherwise put it in scoped instructions, owning code, tests, or focused docs. Never duplicate or weaken a fact across sections. Before finishing an edit, recheck the size and section limits.
 
-### Execution Phase
+- Before changing code, inspect the relevant owner and its callers, persistence, and runtime boundaries. Fix root causes at the highest coherent owner and raise disproportionate complexity or architecture costs before implementing non-essential requirements.
+- For architecturally significant work, write `docs/<date>-<topic>.md` before implementation. Structure it as Foundations (problem, goals, non-goals, requirements), Functional Spec (external behavior), and Technical Spec (internal ownership and rationale); correct upstream flaws before detailing downstream implementation.
+- Treat `project.yml` as the source for generated Xcode metadata. Run `make gen` after changing it; do not hand-maintain generated `TapTick.xcodeproj` state.
+- Use Makefile workflows for repository operations. Do not format Swift manually: after code changes, run `make format`, `make lint`, focused risk-based tests, and the proportionate build target; finish with `make run` so the user can inspect the modified app.
+- Preserve Swift 6 strict concurrency and macOS 15 compatibility. Keep shared mutable runtime state under an explicit owner, normally isolated to `@MainActor`; do not bypass an owner with parallel state or lifecycle machinery.
+- Write source documentation and comments in English and only for non-obvious intent, invariants, or constraints. Keep `README.md` aligned when public behavior or development workflow changes.
+- Do not add standalone examples or speculative scaffolding; changes must be production-ready and integrated into the owning module.
+- After repository modifications, review the complete diff, simplify it, resolve diagnostics, and end the response with an English Conventional Commit proposal in a code block.
 
-**Pre-Task**: Before executing any assigned task, agents must conduct a thorough analysis of the relevant codebase to understand the context and potential impact of their changes. This includes:
-  - **Contextual Audit**: Perform a comprehensive audit of relevant code for context and impact.
-  - **Proactive Ownership**: Prioritize "why" over "how." Challenge sub-optimal architectures rather than passive execution.
-  - **Strategic Research**: Formulate the optimal approach considering system-wide implications. For complex tasks, onsolidate insights into `docs/{date}-{topic}.md`.
+# PROJECT CONTEXT
 
-**Post Task**: After completing the assigned task, agents must:
-  - **Refinement**: Review the complete changeset; refactor for maximum simplicity and resolve all diagnostic errors.
-  - **Commit Draft**: End every response with an updated English **Conventional Commits** block.
+- **Stack**: Swift 6, SwiftUI plus focused AppKit integration, and an SPM monorepo containing the `TapTickKit` library and `TapTick` app. XcodeGen generates Xcode 27 project metadata.
+- **Platform**: macOS 15+ menu-bar utility. Carbon owns permission-free registered global hotkeys; AppKit owns native status items, panels, process launching, and macOS permission or workspace integration where SwiftUI is not the correct boundary.
+- **Constraints**: The app executes user-selected shell scripts. Generated project state, release signing/notarization, Sparkle appcast inputs, macOS privacy identity, and forward-compatible stored data must remain consistent across local and CI workflows.
+- **Stage**: iCloud shortcut-sync code and migration support exist, but distribution entitlements remain disabled pending provisioning. Do not present sync as release-enabled or enable the commented entitlements without an explicit provisioning and rollout decision.
 
-### Design Framework (Three-Layer Onion)
-1. **Foundations**: Define problem, goals/non-goals, and requirements.
-2. **Functional Spec**: Detail external behavior.
-3. **Technical Spec**: Describe internal logic and rationale.
-*Note: Each layer must justify the next; fix upstream flaws before technical implementation.*
+# ARCHITECTURE INDEX
 
-## 2. Development Principles
+## Ownership Map
 
-- **Simplicity (MVP)**: Eliminate over-engineering and "Trivial Forwarding" (Middle Man). Ensure every function adds value or refactor to reduce call depth.
-- **Clean Architecture**: Enforce SOLID principles; prioritize cohesion and long-term readability.
-- **Native-First**: Use platform APIs (Electron `nativeTheme`, Web Popover/Anchor) and GPU-accelerated CSS over JS-heavy simulations.
-- **Performance-By-Design**: Optimize for real-world usage patterns; avoid premature optimization but identify and address bottlenecks early.
-- **Use Edge APIs**: Leverage cutting-edge features (e.g., React 19 Actions, View Transitions) to enhance UX and maintain modern codebase.
+- `Sources/TapTick/App/TapTickApp.swift` is the composition root: `AppState` owns process-lifetime services and `AppDelegate` owns launch, settings-window, menu-bar, and hotkey wiring.
+- `Sources/TapTickKit/Services/ShortcutStore.swift`, `Sources/TapTickKit/Models/ShortcutSyncState.swift`, and `Sources/TapTickKit/Services/CloudSyncService.swift` own user shortcuts, local/cloud envelopes, deletion records, migrations, merge semantics, and metadata-query lifecycle.
+- `Sources/TapTickKit/Services/HotkeyService.swift`, `Sources/TapTickKit/Services/UtilitiesController.swift`, and `Sources/TapTickKit/Services/KeystrokeOverlayService.swift` own the global hotkey namespace, utility configuration/routing, permission recovery, and utility runtime lifecycle.
+- `Sources/TapTickKit/Services/ShortcutExecutor.swift`, `Sources/TapTickKit/Services/ScriptLogStore.swift`, and `Sources/TapTickKit/Services/ScriptOutputPresenter.swift` own app activation, script processes, canonical explicit-run results, latest-log state, and subtitle presentation.
+- `Sources/TapTickKit/Services/MenuBarTextController.swift`, `Sources/TapTickKit/Models/MenuBarTextSlot.swift`, and `Sources/TapTickKit/Views/MenuBarController.swift` own status-text persistence/scheduling/display state, schema normalization, and the sole native `NSStatusItem`/menu.
+- `project.yml`, `Package.swift`, and `.github/workflows/build.yml` are the coordinated build/release authorities for identity, versions, dependency pins, validation, signing, notarization, packaging, and appcast generation.
 
-## 3. Technical Standards
+## Cross-Cutting Invariants
 
-- **Stack**: Strict TypeScript (zero `any/as`), semicolon-free, **styled-jsx** only (no Tailwind).
-- **Modernity**: React 19 (Actions/use), Node.js test runner, ES2023/2024, View Transitions.
-- **Logic Structure**:
-  - **Newspaper Metaphor**: Primary export at top; helpers follow in execution sequence.
-  - **Organization**: Localize file-specific components; move large strings/prompts to constants.
-- **Constraints**:
-  - No manual reformatting. Use tools like `npm run format/lint`.
-  - No standalone example files. All code must be production-ready and integrated into the system.
-
-## 4. Documentation & Comments
-
-- **In-Code Focus**: Document logic intent within source code, not external docs.
-- **Language & Style**: English only. Use single-line `/** */` for types and **TSDoc** (`@param`, `@returns`) for exports.
-- **Synchronization**: Maintain strict alignment between code comments and `README.md`.
-
-
-
-
-
-
-# ARCHITECTURE BLUEPRINT
-
-> ⚠️ **CRITICAL DIRECTIVE FOR ALL AGENTS** ⚠️
-> This section is the **Mind Map** for the system's core structure and is maintained entirely by agents.
-> **Mandatory Action**: Update this section immediately if your task alters the tech stack, product logic, or file responsibilities.
->
-> **Content Focus & Style**: Keep it lean. Each concept must be 1-2 sentences. Only three categories are permitted:
->
-> 1. **Core Tech Stack**: Critical selections and versions.
-> 2. **Product Logic**: Core concepts and their interaction patterns.
-> 3. **Component Map**: Key components and the specific files responsible for them.
->
-> Failure to maintain this skeleton will degrade future agents' navigation and decision-making capabilities.
-
-## Core Tech Stack
-
-- **Language & UI**: Swift 6 (strict concurrency) + SwiftUI, targeting macOS 15+.
-- **Build System**: Xcode 27 metadata is generated by XcodeGen from `project.yml`; `Makefile` drives pipeline-safe build/test/release commands, replaces the running Debug instance before `make run` launches a fresh build, runs unit tests through the generated Xcode project so embedded frameworks resolve correctly, and resolves Xcode's bundled `swift-format` for the strict repository style gate.
-- **Package Structure**: SPM monorepo — `TapTickKit` library (`Sources/TapTickKit`) + `TapTick` app (`Sources/TapTick`).
-- **Auto-Update**: Sparkle 2.9.6 (`SPUStandardUpdaterController`) is exactly pinned across SPM and release tooling, with an EdDSA-signed appcast at `https://amio.github.io/TapTick/appcast.xml`.
-- **CI**: GitHub Actions (`.github/workflows/build.yml`) — unit tests on pull requests, `v*` tags, and manual dispatches; release tags must match the authoritative marketing/build versions in `project.yml` before archive → notarize → DMG → GitHub Release. Plain pushes to `main` intentionally do not trigger CI.
-
-## Product Logic
-
-- **Global Hotkeys**: Carbon `RegisterEventHotKey` API (no Accessibility permission needed); each `KeyCombo` is registered individually, including the reserved settings-window toggle hotkey, and fires a targeted callback. When that settings surface is dismissed through its shared hide path, TapTick restores focus to the app that was frontmost before the panel was opened when possible.
-- **Utilities**: Native utilities live outside the user shortcut model, with their own persisted settings, reserved hotkeys, and permission-aware runtime services. Each utility can register multiple named hotkey actions (featureID + action string) through `UtilitiesController.reservedHotkeys()`, and permission-gated utilities own both the initial request and the System Settings recovery path.
-- **Capture & Mark**: Two capture flows — "Capture to Clipboard" (`screencapture -ic`, no UI) and "Capture & Mark" (`screencapture -i` to temp file → borderless annotation window with freehand/rect drawing → Return copies composited image to clipboard). Default hotkeys ⌃⌥⌘N / ⌃⌥⌘M. Tapping ⌥ toggles the draw tool, holding ⌥ temporarily swaps to the other tool, and Tab cycles annotation color through a six-color palette.
-- **Shortcuts**: Each `Shortcut` has a `KeyCombo`, a `ShortcutAction` (launch app / run inline script / run script file), and metadata (`isEnabled`, `createdAt`, `modifiedAt`, `lastTriggeredAt`). Application shortcuts hide the target only when its activatable instance is already frontmost; otherwise they unhide/focus a running app or start it through Launch Services.
-- **Runtime Identity**: The Debug app is intentionally isolated as `TapTick Dev` (`com.taptick.app.dev`) while release remains `TapTick` (`com.taptick.app`), so macOS permissions and local app-support storage match the actual signing identity instead of pretending to be shared.
-- **Installed App Discovery**: The Applications tab keeps the first discovered app snapshot in a shared in-memory catalog for the rest of the session, while later tab visits trigger silent background refreshes instead of returning to a loading-only state.
-- **iCloud Sync**: Optional, uses ubiquity container `iCloud.com.taptick.app`; a sync-state envelope merges shortcut edits and persistent deletion records by UUID + timestamp so stale devices cannot resurrect removed shortcuts. It is currently disabled pending provisioning profile.
-- **Persistence**: User shortcuts and utility settings persist under a variant-specific Application Support directory (`TapTick` for release, `TapTick Dev` for Debug); shortcut storage transparently migrates legacy arrays to the sync-state envelope, while user export remains a portable shortcut array.
-- **Script Execution Logging**: Hotkey-triggered and in-panel test script executions both capture stdout+stderr via `Pipe`, store the last `ScriptExecutionLog` per shortcut ID in an in-memory `ScriptLogStore`, and reuse that same log for the subtitle HUD preview plus the Scripts settings `Output` sheet; the HUD is intentionally a compact tail preview while the sheet shows the full formatted log.
-- **Menu Bar Text**: Optional ordered slots render normalized stdout immediately right of TapTick's icon inside the same menu button; every slot retains a 24–240 pt manual width (50 pt default) and can instead fit its current text within the same bounds, with centered-by-default left/center/right alignment and one persistent serial worker per independently scheduled script row.
-
-## Component Map
-
-- **App entry point**: `Sources/TapTick/App/TapTickApp.swift` — `@main`, `AppState` (shared singleton owning all services, the utilities and menu bar text controllers, and the settings window reference), `AppDelegate` (lifecycle, startup wiring, settings-window toggle, menu bar init, hotkey bootstrap), Settings Window scene.
-- **Hotkey engine**: `Sources/TapTickKit/Services/HotkeyService.swift` — registration, Carbon event dispatch, reserved settings-window/built-in hotkeys, shortcut conflict checks, and recorder suspension.
-- **Runtime identity**: `project.yml`, `Resources/Info.plist`, and `Sources/TapTickKit/Services/TapTickRuntimeConfiguration.swift` — define Debug vs release bundle identity, display name, and variant-specific Application Support routing.
-- **Data layer**: `Sources/TapTickKit/Models/ShortcutSyncState.swift` and `Sources/TapTickKit/Services/ShortcutStore.swift` — sync envelope and deletion records, CRUD, legacy-array migration, disk I/O, cloud sync coordination, and runtime-aware local storage routing.
-- **Utility runtime**: `Sources/TapTickKit/Services/UtilitiesController.swift` and `Sources/TapTickKit/Services/KeystrokeOverlayService.swift` — utility persistence, keystroke overlay permission flow, Input Monitoring settings recovery, global key capture, and floating HUD presentation. `Sources/TapTickKit/Services/ScreenshotService.swift` — orchestrates `screencapture` CLI for two modes (clipboard-only and capture-and-mark) and manages the annotation preview window lifecycle.
-- **Cloud sync**: `Sources/TapTickKit/Services/CloudSyncService.swift` — main-actor `NSMetadataQuery` monitoring with explicit observer ownership, envelope upload/download, and edit-vs-deletion merge algorithm.
-- **Action execution**: `Sources/TapTickKit/Services/ShortcutExecutor.swift` — app hide/focus/launch via activation-capable running instances with Launch Services fallback, plus the shared script runner used by both hotkey dispatch and the Scripts test-run button; captures script output and fires `onScriptCompleted` callback with a `ScriptExecutionLog`.
-- **Script logging & subtitle**: `Sources/TapTickKit/Services/ScriptLogStore.swift` — `ScriptExecutionResult`, `ScriptExecutionLog`, and `@Observable ScriptLogStore` keeping the last log per shortcut (in-memory only) plus the shared detail/subtitle formatting rules. `Sources/TapTickKit/Services/ScriptOutputPresenter.swift` — borderless `NSPanel` subtitle overlay (dark translucent pill, monospaced text, 4 s hold + fade-out) positioned at ~15 % from screen bottom, red-tinted background for errors.
-- **Settings UI**: `Sources/TapTickKit/Views/SettingsView.swift` (sidebar nav) → `GeneralSettingsView`, `ApplicationsView`, `ScriptsView`, `MenuBarTextSettingsView`, `UtilitiesView`, `AboutView`; `MenuBarTextSettingsView` owns slot selection/lifecycle, while `Components/MenuBarStatusPreview.swift` owns preview-only geometry/resizing and `Components/MenuBarTextSlotEditor.swift` owns the focused layout/alignment/script controls.
-- **Screenshot annotation UI**: `Sources/TapTickKit/Views/ScreenshotPreviewWindow.swift` — titled floating `NSPanel` (`.titled | .closable | .fullSizeContentView`) with `NSVisualEffectView` (`.sidebar` material) blur background, a SwiftUI `AnnotationToolbar` placed directly in the titlebar zone via `NonDraggableHostingView` (constrained top→safeArea.top, leading 76pt past traffic lights); left group: custom segmented mode switch + keycap "⌥", color circle indicator + keycap "TAB"; right group: "Copy" pill button + keycap "↩". `AnnotationCanvasView` overrides `mouseDownCanMoveWindow = false` to prevent draw gestures from dragging the window; `AnnotationToolbarModel` (@Observable) bridges state between canvas and toolbar; tapping ⌥ toggles mode, holding ⌥ temporarily swaps mode, Tab cycles color, Return composites and copies to clipboard, Escape cancels, ⌘Z undoes.
-- **Applications catalog UI**: `Sources/TapTickKit/Views/ApplicationsView.swift` — shared discovered-app cache, background rescan policy, unavailable-app section, and per-app hotkey binding rows.
-- **Hotkey input UI**: `Sources/TapTickKit/Views/Components/HotkeyBindingControl.swift` owns the compact shared hotkey recording/binding interaction reused by settings surfaces.
-- **Menu bar UI**: `Sources/TapTickKit/Views/MenuBarController.swift` and `Sources/TapTickKit/Views/Components/MenuBarStatusContentView.swift` — one native `NSStatusItem`/`NSMenu` button containing the icon and every configured text slot; the production renderer is embedded unchanged in Settings, while independent weak-owner Observation tasks update menu structure and status content.
-- **Menu bar text runtime**: `Sources/TapTickKit/Models/MenuBarTextSlot.swift` and `Sources/TapTickKit/Services/MenuBarTextController.swift` — backward-compatible local schema with centralized normalization, output state, persistence, and one persistent per-line worker that serializes configuration changes around non-cancellable script processes; it exposes display state but does not own AppKit presentation.
-- **Bundle IDs**: Debug app `com.taptick.app.dev`; release app `com.taptick.app`; iCloud container `iCloud.com.taptick.app`.
+- Debug is `TapTick Dev` / `com.taptick.app.dev`; Release is `TapTick` / `com.taptick.app`. Their Application Support directories and macOS privacy identities stay isolated; release packaging keeps the release identity.
+- Settings, utility, and user shortcuts share one conflict-checked Carbon registration namespace. `HotkeyService` alone registers and dispatches them; nested recorder sessions suspend registrations until the final recorder exits.
+- Native utilities remain outside the user shortcut schema. `UtilitiesController` persists their settings separately, exposes named reserved actions, and delegates permission request and System Settings recovery to the permission-owning service.
+- Shortcut persistence uses an envelope of live records plus UUID/timestamp deletion tombstones. An equal-or-newer deletion defeats an edit, tombstones remain durable, legacy arrays still decode, and user import/export exposes only live shortcut arrays.
+- Explicit hotkey and Settings test runs share `ShortcutExecutor` and update the same in-memory latest log. Menu-bar refreshes reuse only the low-level script boundary and must never overwrite explicit logs or present subtitles.
+- Each configured menu-bar line has one persistent serial worker. Configuration changes wake that worker, obsolete results are discarded, and non-cancellable script processes must never overlap for the same line.
+- Sparkle stays exactly pinned to one audited version across SPM, XcodeGen, and release tooling. `project.yml` owns marketing/build versions; CI validates release tags against them and intentionally ignores plain pushes to `main`.
