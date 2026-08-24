@@ -156,6 +156,7 @@ test: ## Run unit tests via xcodebuild
 	    -only-testing:TapTickTests \
 	    -derivedDataPath $(BUILD_DIR) \
 	    ONLY_ACTIVE_ARCH=YES \
+	    CODE_SIGNING_ALLOWED=NO \
 	    $(PRETTY)
 
 uitest: ## Run UI tests via xcodebuild
