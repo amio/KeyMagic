@@ -1,25 +1,27 @@
 import AppKit
 
-/// Manages the menu bar status item with a native `NSMenu`.
+/// Manages the single menu bar button containing TapTick's icon, text slots, and native menu.
 ///
 /// Replaces the SwiftUI `MenuBarExtra` with a real `NSStatusItem` + `NSMenu` that provides:
 /// - Native key equivalent glyphs (⌘⌥⌃⇧+key) rendered by AppKit
 /// - Standard keyboard navigation and VoiceOver support
-/// - Observation-driven rebuild when `ShortcutStore.shortcuts` changes
+/// - Observation-driven menu rebuilds and text slot rendering
 /// - Dynamic show/hide via UserDefaults KVO for `"showMenuBarIcon"`
 @MainActor
 public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Sendable {
-    private static let menuBarIconName = NSImage.Name("MenuBarIcon")
     private var statusItem: NSStatusItem?
+    private var statusContentView: MenuBarStatusContentView?
     private let store: ShortcutStore
     private let hotkeyService: HotkeyService
     private let updateService: UpdateService
+    private let menuBarTextController: MenuBarTextController
 
     /// Watches `"showMenuBarIcon"` in UserDefaults via KVO.
     private var visibilityObservation: NSKeyValueObservation?
 
     /// Tracks the Observation framework subscription so we can cancel on deinit.
-    private var observationTask: Task<Void, Never>?
+    private var storeObservationTask: Task<Void, Never>?
+    private var textObservationTask: Task<Void, Never>?
 
     /// Tag used to identify the "Check for Updates…" item for dynamic enable/disable.
     private static let updateMenuItemTag = 999
@@ -27,11 +29,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
     public init(
         store: ShortcutStore,
         hotkeyService: HotkeyService,
-        updateService: UpdateService
+        updateService: UpdateService,
+        menuBarTextController: MenuBarTextController
     ) {
         self.store = store
         self.hotkeyService = hotkeyService
         self.updateService = updateService
+        self.menuBarTextController = menuBarTextController
         super.init()
 
         // Seed default if not yet set — matches GeneralSettingsView's @AppStorage default.
@@ -51,10 +55,12 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         }
 
         startObservingStore()
+        startObservingMenuBarText()
     }
 
     deinit {
-        observationTask?.cancel()
+        storeObservationTask?.cancel()
+        textObservationTask?.cancel()
     }
 
     // MARK: - Visibility
@@ -69,55 +75,68 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
 
     private func installStatusItem() {
         guard statusItem == nil else { return }
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let contentView = MenuBarStatusContentView(frame: .zero)
         if let button = item.button {
-            button.image = menuBarImage()
-            button.imageScaling = .scaleProportionallyDown
+            button.image = nil
+            button.title = ""
+            button.addSubview(contentView)
+            contentView.frame = button.bounds
+            contentView.autoresizingMask = [.width, .height]
+            button.setAccessibilityLabel("TapTick")
         }
         let menu = buildMenu()
         menu.delegate = self
         item.menu = menu
         statusItem = item
+        statusContentView = contentView
+        updateStatusContent()
     }
 
     private func removeStatusItem() {
         guard let item = statusItem else { return }
         NSStatusBar.system.removeStatusItem(item)
         statusItem = nil
+        statusContentView = nil
     }
 
     // MARK: - Observation
 
-    /// Re-builds the menu whenever `store.shortcuts` changes, using Swift Observation.
-    ///
-    /// Uses `withObservationTracking` + `AsyncStream` so the task genuinely suspends
-    /// until a tracked property mutates, instead of polling.
+    /// Rebuilds the menu whenever `store.shortcuts` changes.
     private func startObservingStore() {
-        observationTask = Task { [weak self] in
-            // Build an initial menu synchronously on the first pass,
-            // then wait for each mutation before rebuilding.
+        let observedStore = store
+        storeObservationTask = Task { [weak self, observedStore] in
             while !Task.isCancelled {
-                guard let self else { return }
-
-                // Suspend until Observation detects a change to `store.shortcuts`.
                 await withCheckedContinuation { continuation in
                     withObservationTracking {
-                        // Touch the shortcuts array so Observation records the access.
-                        _ = self.store.shortcuts
+                        _ = observedStore.shortcuts
                     } onChange: {
-                        // Called exactly once, on an arbitrary thread, when the
-                        // tracked property mutates. Resume the suspended task.
                         continuation.resume()
                     }
                 }
 
                 guard !Task.isCancelled else { return }
-
-                // Small sleep to coalesce rapid-fire changes (e.g. bulk import).
                 try? await Task.sleep(for: .milliseconds(50))
+                guard !Task.isCancelled else { return }
+                self?.rebuildMenu()
+            }
+        }
+    }
+
+    private func startObservingMenuBarText() {
+        let observedController = menuBarTextController
+        textObservationTask = Task { [weak self, observedController] in
+            while !Task.isCancelled {
+                await withCheckedContinuation { continuation in
+                    withObservationTracking {
+                        _ = observedController.renderedSlots
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
 
                 guard !Task.isCancelled else { return }
-                self.rebuildMenu()
+                self?.updateStatusContent()
             }
         }
     }
@@ -128,6 +147,20 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         statusItem?.menu = menu
     }
 
+    private func updateStatusContent() {
+        let slots = menuBarTextController.renderedSlots
+        statusContentView?.update(slots: slots)
+        statusItem?.length = MenuBarStatusContentView.width(for: slots)
+
+        let accessibilityValue =
+            slots
+            .flatMap(\.contents)
+            .map(\.text)
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        statusItem?.button?.setAccessibilityValue(accessibilityValue)
+    }
+
     // MARK: - NSMenuDelegate
 
     /// Refresh dynamic state (e.g. update button enabled) every time the menu opens.
@@ -135,6 +168,14 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         if let updateItem = menu.item(withTag: Self.updateMenuItemTag) {
             updateItem.isEnabled = updateService.canCheckForUpdates
         }
+    }
+
+    public func menuWillOpen(_ menu: NSMenu) {
+        statusContentView?.needsDisplay = true
+    }
+
+    public func menuDidClose(_ menu: NSMenu) {
+        statusContentView?.needsDisplay = true
     }
 
     // MARK: - Menu Construction
@@ -260,19 +301,6 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         configured.size = size
         configured.isTemplate = true
         return configured
-    }
-
-    /// Load the processed menu bar icon asset and fall back to the previous SF Symbol if needed.
-    private func menuBarImage() -> NSImage? {
-        let size = NSSize(width: 18, height: 18)
-        if let image = NSImage(named: Self.menuBarIconName)?.copy() as? NSImage {
-            image.size = size
-            image.isTemplate = true
-            image.accessibilityDescription = "TapTick"
-            return image
-        }
-
-        return symbolImage("keyboard.badge.ellipsis", size: size)
     }
 
     // MARK: - Actions

@@ -13,6 +13,7 @@ public struct SettingsView: View {
         case general = "General"
         case applications = "Applications"
         case scripts = "Scripts"
+        case menuBar = "Menu Bar"
         case utilities = "Utilities"
         case about = "About"
 
@@ -21,6 +22,7 @@ public struct SettingsView: View {
             case .general: return "gearshape"
             case .applications: return "sparkles.rectangle.stack"
             case .scripts: return "terminal"
+            case .menuBar: return "menubar.rectangle"
             case .utilities: return "wrench.and.screwdriver"
             case .about: return "info.circle"
             }
@@ -30,7 +32,7 @@ public struct SettingsView: View {
             switch self {
             case .utilities:
                 12
-            case .general, .applications, .scripts, .about:
+            case .general, .applications, .scripts, .menuBar, .about:
                 14
             }
         }
@@ -60,6 +62,8 @@ public struct SettingsView: View {
                 ApplicationsView()
             case .scripts:
                 ScriptsView()
+            case .menuBar:
+                MenuBarTextSettingsView()
             case .utilities:
                 UtilitiesView()
                     .environment(utilities)

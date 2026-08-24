@@ -100,7 +100,7 @@ final class ShortcutExecutor {
         }
     }
 
-    static func executeScript(action: ShortcutAction) async -> ScriptExecutionResult {
+    nonisolated static func executeScript(action: ShortcutAction) async -> ScriptExecutionResult {
         let process = Process()
         let pipe = Pipe()
 

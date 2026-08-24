@@ -20,6 +20,7 @@ final class AppState: ObservableObject {
     let updateService = UpdateService()
     let scriptLogStore = ScriptLogStore()
     let scriptOutputPresenter = ScriptOutputPresenter()
+    let menuBarTextController: MenuBarTextController
 
     /// Native NSStatusItem + NSMenu controller — retained for the lifetime of the app.
     var menuBarController: MenuBarController?
@@ -27,7 +28,9 @@ final class AppState: ObservableObject {
     private init() {
         let sync = CloudSyncService()
         self.cloudSync = sync
-        self.store = ShortcutStore(cloudSync: sync)
+        let store = ShortcutStore(cloudSync: sync)
+        self.store = store
+        self.menuBarTextController = MenuBarTextController(store: store)
     }
 }
 
@@ -96,8 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.menuBarController = MenuBarController(
             store: appState.store,
             hotkeyService: appState.hotkeyService,
-            updateService: appState.updateService
+            updateService: appState.updateService,
+            menuBarTextController: appState.menuBarTextController
         )
+        appState.menuBarTextController.bootstrap()
 
         appState.utilities.onReservedHotkeysChanged = {
             [weak hotkeyService = appState.hotkeyService, weak store = appState.store] in
@@ -232,6 +237,7 @@ struct TapTickApp: App {
                 .environment(appState.cloudSync)
                 .environment(appState.updateService)
                 .environment(appState.scriptLogStore)
+                .environment(appState.menuBarTextController)
                 .background(
                     SettingsWindowEscapeShortcut {
                         appDelegate.dismissSettingsWindow()
