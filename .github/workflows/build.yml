@@ -50,6 +50,12 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: make gen
+
       - name: Run unit tests
         run: make test
 
