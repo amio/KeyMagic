@@ -74,6 +74,11 @@ struct MenuBarTextSlotEditor: View {
             .pickerStyle(.segmented)
             .fixedSize(horizontal: true, vertical: false)
 
+            Toggle("Fit to Content", isOn: slotBinding(\.fitsContentWidth))
+                .toggleStyle(.checkbox)
+                .fixedSize(horizontal: true, vertical: false)
+                .help("Automatically adjust this slot's width to fit its current text")
+
             HStack(spacing: 2) {
                 MenuBarEditorHeaderButton(
                     systemImage: "arrow.left",

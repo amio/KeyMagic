@@ -98,6 +98,7 @@ struct MenuBarTextSlot: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var layout: MenuBarTextLayout
     var alignment: MenuBarTextAlignment
+    var fitsContentWidth: Bool
     var widthPoints: Int
     var topLine: MenuBarTextLineConfiguration
     var bottomLine: MenuBarTextLineConfiguration
@@ -106,6 +107,7 @@ struct MenuBarTextSlot: Identifiable, Codable, Equatable, Sendable {
         id: UUID = UUID(),
         layout: MenuBarTextLayout = .singleLine,
         alignment: MenuBarTextAlignment = .center,
+        fitsContentWidth: Bool = false,
         widthPoints: Int = defaultWidthPoints,
         topLine: MenuBarTextLineConfiguration = MenuBarTextLineConfiguration(),
         bottomLine: MenuBarTextLineConfiguration = MenuBarTextLineConfiguration()
@@ -113,6 +115,7 @@ struct MenuBarTextSlot: Identifiable, Codable, Equatable, Sendable {
         self.id = id
         self.layout = layout
         self.alignment = alignment
+        self.fitsContentWidth = fitsContentWidth
         self.widthPoints = widthPoints
         self.topLine = topLine
         self.bottomLine = bottomLine
@@ -128,6 +131,9 @@ struct MenuBarTextSlot: Identifiable, Codable, Equatable, Sendable {
             alignment =
                 try container.decodeIfPresent(MenuBarTextAlignment.self, forKey: .alignment)
                 ?? .center
+            fitsContentWidth =
+                try container.decodeIfPresent(Bool.self, forKey: .fitsContentWidth)
+                ?? false
             widthPoints =
                 try container.decodeIfPresent(Int.self, forKey: .widthPoints)
                 ?? Self.defaultWidthPoints
@@ -146,6 +152,7 @@ struct MenuBarTextSlot: Identifiable, Codable, Equatable, Sendable {
 
             layout = legacyLineCount == 2 ? .twoLines : .singleLine
             alignment = .center
+            fitsContentWidth = false
             widthPoints = Self.defaultWidthPoints
             topLine = MenuBarTextLineConfiguration(
                 scriptID: legacyScriptID,
@@ -161,6 +168,7 @@ struct MenuBarTextSlot: Identifiable, Codable, Equatable, Sendable {
         try container.encode(id, forKey: .id)
         try container.encode(layout, forKey: .layout)
         try container.encode(alignment, forKey: .alignment)
+        try container.encode(fitsContentWidth, forKey: .fitsContentWidth)
         try container.encode(widthPoints, forKey: .widthPoints)
         try container.encode(topLine, forKey: .topLine)
         try container.encode(bottomLine, forKey: .bottomLine)
@@ -199,6 +207,7 @@ struct MenuBarTextSlot: Identifiable, Codable, Equatable, Sendable {
         case id
         case layout
         case alignment
+        case fitsContentWidth
         case widthPoints
         case topLine
         case bottomLine
@@ -234,10 +243,11 @@ struct MenuBarTextContent: Equatable, Sendable {
     }
 }
 
-/** Fixed-width display data consumed by the shared menu bar renderer. */
+/** Display data and sizing policy consumed by the shared menu bar renderer. */
 struct MenuBarTextRenderedSlot: Identifiable, Equatable, Sendable {
     let id: UUID
     let alignment: MenuBarTextAlignment
+    let fitsContentWidth: Bool
     let widthPoints: Int
     let contents: [MenuBarTextContent]
 }

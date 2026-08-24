@@ -19,12 +19,14 @@ struct MenuBarTextControllerTests {
 
         #expect(controller.slots[0].layout == .singleLine)
         #expect(controller.slots[0].alignment == .center)
+        #expect(!controller.slots[0].fitsContentWidth)
         #expect(controller.slots[0].widthPoints == 50)
         #expect(controller.slots[0].topLine.scriptID == nil)
         #expect(controller.slots[0].bottomLine.scriptID == nil)
         #expect(controller.slots[0].topLine.refreshIntervalSeconds == 3)
         #expect(controller.renderedSlots.isEmpty)
         #expect(controller.previewSlots[0].widthPoints == 50)
+        #expect(!controller.previewSlots[0].fitsContentWidth)
         #expect(controller.previewSlots[0].alignment == .center)
         #expect(controller.previewSlots[0].contents == [.chooseScript])
 
@@ -36,6 +38,7 @@ struct MenuBarTextControllerTests {
         controller.updateSlot(id: firstID) { slot in
             slot.layout = .twoLines
             slot.alignment = .right
+            slot.fitsContentWidth = true
             slot.widthPoints = 88
             slot.topLine = MenuBarTextLineConfiguration(
                 scriptID: topScriptID,
@@ -47,6 +50,7 @@ struct MenuBarTextControllerTests {
             )
         }
         #expect(controller.renderedSlots[0].alignment == .right)
+        #expect(controller.renderedSlots[0].fitsContentWidth)
         #expect(controller.renderedSlots[0].widthPoints == 88)
         #expect(controller.renderedSlots[0].contents == [.loading, .loading])
         controller.moveSlot(id: secondID, offset: -1)
@@ -55,6 +59,7 @@ struct MenuBarTextControllerTests {
         #expect(reloaded.slots.map(\.id) == [secondID, firstID])
         #expect(reloaded.slots[1].layout == .twoLines)
         #expect(reloaded.slots[1].alignment == .right)
+        #expect(reloaded.slots[1].fitsContentWidth)
         #expect(reloaded.slots[1].widthPoints == 88)
         #expect(reloaded.slots[1].topLine.scriptID == topScriptID)
         #expect(reloaded.slots[1].topLine.refreshIntervalSeconds == 15)
@@ -110,6 +115,7 @@ struct MenuBarTextControllerTests {
 
         #expect(slot.layout == .twoLines)
         #expect(slot.alignment == .center)
+        #expect(!slot.fitsContentWidth)
         #expect(slot.widthPoints == 50)
         #expect(slot.topLine.scriptID == scriptID)
         #expect(slot.topLine.refreshIntervalSeconds == 15)
@@ -142,6 +148,7 @@ struct MenuBarTextControllerTests {
         let slot = try #require(MenuBarTextController(store: store, directory: directory).slots.first)
 
         #expect(slot.alignment == .center)
+        #expect(!slot.fitsContentWidth)
         #expect(slot.widthPoints == 50)
     }
 

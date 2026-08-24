@@ -18,10 +18,14 @@ struct MenuBarTextSettingsView: View {
 
     private var previewSlots: [MenuBarTextRenderedSlot] {
         controller.previewSlots.map { slot in
-            guard let resizePreview, resizePreview.slotID == slot.id else { return slot }
+            guard !slot.fitsContentWidth,
+                let resizePreview,
+                resizePreview.slotID == slot.id
+            else { return slot }
             return MenuBarTextRenderedSlot(
                 id: slot.id,
                 alignment: slot.alignment,
+                fitsContentWidth: false,
                 widthPoints: resizePreview.widthPoints,
                 contents: slot.contents
             )
@@ -50,6 +54,11 @@ struct MenuBarTextSettingsView: View {
         }
         .onChange(of: controller.slots.map(\.id)) { _, slotIDs in
             reconcileSelection(with: slotIDs)
+        }
+        .onChange(of: selectedSlot?.fitsContentWidth) { _, fitsContentWidth in
+            if fitsContentWidth == true {
+                resizePreview = nil
+            }
         }
     }
 
@@ -155,6 +164,10 @@ struct MenuBarTextSettingsView: View {
 
     private func commitWidth(_ slotID: UUID, _ widthPoints: Int) {
         selectedSlotID = slotID
+        guard controller.slots.first(where: { $0.id == slotID })?.fitsContentWidth == false else {
+            resizePreview = nil
+            return
+        }
         controller.updateSlot(id: slotID) { $0.widthPoints = widthPoints }
         resizePreview = nil
     }

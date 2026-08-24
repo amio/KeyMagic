@@ -1,7 +1,7 @@
 import AppKit
 import CoreText
 
-/** Draws the icon and fixed-width text slots shared by the real menu bar and Settings preview. */
+/** Draws the icon and text slots shared by the real menu bar and Settings preview. */
 @MainActor
 final class MenuBarStatusContentView: NSView {
     static let height = NSStatusBar.system.thickness
@@ -22,7 +22,23 @@ final class MenuBarStatusContentView: NSView {
     }
 
     static func width(for slots: [MenuBarTextRenderedSlot]) -> CGFloat {
-        iconAreaWidth + slots.reduce(0) { $0 + CGFloat($1.widthPoints) }
+        iconAreaWidth + slots.reduce(0) { $0 + width(for: $1) }
+    }
+
+    static func width(for slot: MenuBarTextRenderedSlot) -> CGFloat {
+        guard slot.fitsContentWidth else { return CGFloat(slot.widthPoints) }
+
+        let font = font(lineCount: slot.contents.count)
+        let contentWidth = slot.contents.reduce(CGFloat.zero) { width, content in
+            max(width, textWidth(content.text, font: font))
+        }
+        return min(
+            max(
+                ceil(contentWidth + horizontalTextPadding * 2),
+                CGFloat(MenuBarTextSlot.widthRange.lowerBound)
+            ),
+            CGFloat(MenuBarTextSlot.widthRange.upperBound)
+        )
     }
 
     func update(slots: [MenuBarTextRenderedSlot]) {
@@ -39,14 +55,15 @@ final class MenuBarStatusContentView: NSView {
 
         var originX = Self.iconAreaWidth
         for slot in slots {
+            let slotWidth = Self.width(for: slot)
             let slotRect = NSRect(
                 x: originX,
                 y: 0,
-                width: CGFloat(slot.widthPoints),
+                width: slotWidth,
                 height: bounds.height
             )
             draw(slot: slot, in: slotRect, foregroundColor: foregroundColor)
-            originX += CGFloat(slot.widthPoints)
+            originX += slotWidth
         }
     }
 
@@ -85,7 +102,7 @@ final class MenuBarStatusContentView: NSView {
         in rect: NSRect,
         foregroundColor: NSColor
     ) {
-        let font = font(lineCount: slot.contents.count)
+        let font = Self.font(lineCount: slot.contents.count)
         let lineHeight = ceil(font.ascender - font.descender + font.leading)
         let lineStep =
             slot.contents.count == 1
@@ -141,8 +158,17 @@ final class MenuBarStatusContentView: NSView {
         }
     }
 
-    private func font(lineCount: Int) -> NSFont {
+    private static func font(lineCount: Int) -> NSFont {
         lineCount == 1 ? Self.singleLineFont : Self.twoLineFont
+    }
+
+    private static func textWidth(_ text: String, font: NSFont) -> CGFloat {
+        let attributedString = NSAttributedString(
+            string: text,
+            attributes: [.font: font]
+        )
+        let line = CTLineCreateWithAttributedString(attributedString)
+        return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
     private static func tabularDigitFont(size: CGFloat) -> NSFont {

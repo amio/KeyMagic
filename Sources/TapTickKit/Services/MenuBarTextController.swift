@@ -121,6 +121,7 @@ public final class MenuBarTextController {
         return MenuBarTextRenderedSlot(
             id: slot.id,
             alignment: slot.alignment,
+            fitsContentWidth: slot.fitsContentWidth,
             widthPoints: slot.widthPoints,
             contents: contents
         )

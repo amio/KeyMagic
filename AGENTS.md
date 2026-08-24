@@ -82,7 +82,7 @@
 - **iCloud Sync**: Optional, uses ubiquity container `iCloud.com.taptick.app`; a sync-state envelope merges shortcut edits and persistent deletion records by UUID + timestamp so stale devices cannot resurrect removed shortcuts. It is currently disabled pending provisioning profile.
 - **Persistence**: User shortcuts and utility settings persist under a variant-specific Application Support directory (`TapTick` for release, `TapTick Dev` for Debug); shortcut storage transparently migrates legacy arrays to the sync-state envelope, while user export remains a portable shortcut array.
 - **Script Execution Logging**: Hotkey-triggered and in-panel test script executions both capture stdout+stderr via `Pipe`, store the last `ScriptExecutionLog` per shortcut ID in an in-memory `ScriptLogStore`, and reuse that same log for the subtitle HUD preview plus the Scripts settings `Output` sheet; the HUD is intentionally a compact tail preview while the sheet shows the full formatted log.
-- **Menu Bar Text**: Optional ordered slots render normalized stdout immediately right of TapTick's icon inside the same menu button; every slot has a 24–240 pt persisted width (50 pt default), centered-by-default left/center/right alignment, and one persistent serial worker per independently scheduled script row.
+- **Menu Bar Text**: Optional ordered slots render normalized stdout immediately right of TapTick's icon inside the same menu button; every slot retains a 24–240 pt manual width (50 pt default) and can instead fit its current text within the same bounds, with centered-by-default left/center/right alignment and one persistent serial worker per independently scheduled script row.
 
 ## Component Map
 

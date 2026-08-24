@@ -43,8 +43,11 @@ struct MenuBarStatusPreview: View {
                     .allowsHitTesting(false)
 
                 ForEach(slots) { slot in
+                    let slotWidth = MenuBarStatusContentView.width(for: slot)
                     MenuBarSlotInteraction(
+                        width: slotWidth,
                         widthPoints: slot.widthPoints,
+                        allowsResizing: !slot.fitsContentWidth,
                         isSelected: selectedSlotID == slot.id,
                         height: height,
                         onSelect: { onSelect(slot.id) },
@@ -73,7 +76,10 @@ struct MenuBarStatusPreview: View {
 
             ForEach(slots) { slot in
                 Color.clear
-                    .frame(width: CGFloat(slot.widthPoints), height: height)
+                    .frame(
+                        width: MenuBarStatusContentView.width(for: slot),
+                        height: height
+                    )
                     .overlay(alignment: .bottom) {
                         if selectedSlotID == slot.id {
                             Capsule()
@@ -90,7 +96,9 @@ struct MenuBarStatusPreview: View {
 }
 
 private struct MenuBarSlotInteraction: View {
+    let width: CGFloat
     let widthPoints: Int
+    let allowsResizing: Bool
     let isSelected: Bool
     let height: CGFloat
     let onSelect: () -> Void
@@ -106,20 +114,28 @@ private struct MenuBarSlotInteraction: View {
         ZStack(alignment: .trailing) {
             Button(action: onSelect) {
                 Color.clear
-                    .frame(width: CGFloat(widthPoints), height: height)
+                    .frame(width: width, height: height)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Configure menu bar slot")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
 
-            resizeHandle
+            if allowsResizing {
+                resizeHandle
+            }
         }
-        .frame(width: CGFloat(widthPoints), height: height)
+        .frame(width: width, height: height)
         .onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .named(coordinateSpaceName))
         } action: { frame in
             onFrameChange(frame)
+        }
+        .onChange(of: allowsResizing) { _, allowsResizing in
+            guard !allowsResizing else { return }
+            dragStartWidthPoints = nil
+            isResizeHovered = false
+            NSCursor.arrow.set()
         }
     }
 
