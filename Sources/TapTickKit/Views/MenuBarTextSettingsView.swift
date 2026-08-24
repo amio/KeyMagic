@@ -1,12 +1,16 @@
 import AppKit
 import SwiftUI
 
+private let menuBarTextSettingsCoordinateSpaceName = "menuBarTextSettings"
+
 /// Configures ordered, script-backed text slots rendered in the macOS menu bar.
 struct MenuBarTextSettingsView: View {
     @Environment(MenuBarTextController.self) private var controller
 
     @State private var selectedSlotID: UUID?
     @State private var resizePreview: MenuBarSlotResizePreview?
+    @State private var previewSlotFrames: [UUID: CGRect] = [:]
+    @State private var editorFrame = CGRect.zero
 
     private var selectedSlot: MenuBarTextSlot? {
         controller.slots.first { $0.id == selectedSlotID }
@@ -25,13 +29,21 @@ struct MenuBarTextSettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            previewBar
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Display live script output beside the TapTick icon in your menu bar.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
+                .padding(.bottom, 12)
+
+            previewBar
+                .padding(.horizontal, 24)
 
             editor
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .coordinateSpace(name: menuBarTextSettingsCoordinateSpaceName)
         .navigationTitle("Menu Bar")
         .onAppear {
             reconcileSelection(with: controller.slots.map(\.id))
@@ -50,7 +62,9 @@ struct MenuBarTextSettingsView: View {
                         selectedSlotID: selectedSlotID,
                         onSelect: { selectedSlotID = $0 },
                         onResize: previewWidth,
-                        onResizeEnd: commitWidth
+                        onResizeEnd: commitWidth,
+                        coordinateSpaceName: menuBarTextSettingsCoordinateSpaceName,
+                        onSlotFrameChange: recordPreviewSlotFrame
                     )
                     .id("menu-bar-preview")
                 }
@@ -94,11 +108,34 @@ struct MenuBarTextSettingsView: View {
                 slot: slot,
                 index: index,
                 slotCount: controller.slots.count,
+                pointerX: editorPointerX,
                 onRemove: { removeSelectedSlot(slot, at: index) }
             )
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .named(menuBarTextSettingsCoordinateSpaceName))
+            } action: { frame in
+                editorFrame = frame
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
         } else {
             Spacer()
         }
+    }
+
+    private var editorPointerX: CGFloat {
+        guard let selectedSlotID,
+            let selectedFrame = previewSlotFrames[selectedSlotID],
+            editorFrame.width > 0
+        else {
+            return editorFrame.width / 2
+        }
+        return selectedFrame.midX - editorFrame.minX
+    }
+
+    private func recordPreviewSlotFrame(_ slotID: UUID, _ frame: CGRect) {
+        guard previewSlotFrames[slotID] != frame else { return }
+        previewSlotFrames[slotID] = frame
     }
 
     private func previewWidth(_ slotID: UUID, _ widthPoints: Int) {

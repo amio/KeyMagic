@@ -9,7 +9,12 @@ struct MenuBarTextSlotEditor: View {
     let slot: MenuBarTextSlot
     let index: Int
     let slotCount: Int
+    let pointerX: CGFloat
     let onRemove: () -> Void
+
+    private static let pointerHeight: CGFloat = 9
+    private static let contentPadding: CGFloat = 16
+    private static let controlSpacing: CGFloat = 8
 
     private var scriptShortcuts: [Shortcut] {
         store.shortcuts.filter { shortcut in
@@ -23,21 +28,35 @@ struct MenuBarTextSlotEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             toolbar
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Self.contentPadding)
+                .padding(.top, Self.pointerHeight + Self.contentPadding)
+                .padding(.bottom, Self.contentPadding)
+                .background(Color.primary.opacity(0.045))
+
+            Divider()
+
             lineConfiguration
-            Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 24)
-        .padding(.horizontal, 24)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(MenuBarEditorCalloutShape(pointerX: pointerX))
+        .overlay {
+            MenuBarEditorCalloutShape(pointerX: pointerX)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        }
     }
 
     private var toolbar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.controlSpacing) {
             Picker("Layout", selection: slotBinding(\.layout)) {
                 ForEach(MenuBarTextLayout.allCases, id: \.self) { layout in
-                    Text(layout.title).tag(layout)
+                    MenuBarTextLayoutIcon(layout: layout)
+                        .frame(width: 22)
+                        .accessibilityLabel(layout.title)
+                        .tag(layout)
                 }
             }
             .labelsHidden()
@@ -94,15 +113,10 @@ struct MenuBarTextSlotEditor: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-        }
     }
 
     private func lineConfigurationRow(position: MenuBarTextLinePosition) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Self.controlSpacing) {
             scriptPicker(position: position)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(scriptPickerAccessibilityLabel(position: position))
@@ -126,8 +140,7 @@ struct MenuBarTextSlotEditor: View {
             Text("s")
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(Self.contentPadding)
     }
 
     private func scriptPicker(position: MenuBarTextLinePosition) -> some View {
@@ -181,5 +194,110 @@ struct MenuBarTextSlotEditor: View {
     ) -> String {
         guard slot.layout == .twoLines else { return "Script" }
         return position == .top ? "Top script" : "Bottom script"
+    }
+}
+
+private struct MenuBarTextLayoutIcon: View {
+    let layout: MenuBarTextLayout
+
+    var body: some View {
+        Image(nsImage: image)
+            .renderingMode(.template)
+    }
+
+    private var image: NSImage {
+        switch layout {
+        case .singleLine:
+            Self.singleLineImage
+        case .twoLines:
+            Self.twoLinesImage
+        }
+    }
+
+    private static let singleLineImage = makeImage(lineWidths: [10])
+    private static let twoLinesImage = makeImage(lineWidths: [10, 10])
+
+    private static func makeImage(lineWidths: [CGFloat]) -> NSImage {
+        let size = NSSize(width: 20, height: 16)
+        let image = NSImage(size: size, flipped: false) { _ in
+            NSColor.black.setStroke()
+            let slotPath = NSBezierPath(
+                roundedRect: NSRect(x: 1.25, y: 1.25, width: 17.5, height: 13.5),
+                xRadius: 3.25,
+                yRadius: 3.25
+            )
+            slotPath.lineWidth = 1
+            slotPath.stroke()
+
+            NSColor.black.setFill()
+            let lineHeight: CGFloat = 2.25
+            let lineSpacing: CGFloat = 2.25
+            let totalHeight =
+                lineHeight * CGFloat(lineWidths.count)
+                + lineSpacing * CGFloat(lineWidths.count - 1)
+            var originY = (size.height - totalHeight) / 2
+
+            for width in lineWidths {
+                let lineRect = NSRect(
+                    x: (size.width - width) / 2,
+                    y: originY,
+                    width: width,
+                    height: lineHeight
+                )
+                NSBezierPath(
+                    roundedRect: lineRect,
+                    xRadius: lineHeight / 2,
+                    yRadius: lineHeight / 2
+                ).fill()
+                originY += lineHeight + lineSpacing
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+}
+
+private struct MenuBarEditorCalloutShape: Shape {
+    let pointerX: CGFloat
+
+    private let cornerRadius: CGFloat = 10
+    private let pointerHeight: CGFloat = 9
+    private let pointerHalfWidth: CGFloat = 8
+
+    func path(in rect: CGRect) -> Path {
+        let bodyTop = rect.minY + pointerHeight
+        let pointerCenter = min(
+            max(pointerX, cornerRadius + pointerHalfWidth),
+            rect.maxX - cornerRadius - pointerHalfWidth
+        )
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + cornerRadius, y: bodyTop))
+        path.addLine(to: CGPoint(x: pointerCenter - pointerHalfWidth, y: bodyTop))
+        path.addLine(to: CGPoint(x: pointerCenter, y: rect.minY))
+        path.addLine(to: CGPoint(x: pointerCenter + pointerHalfWidth, y: bodyTop))
+        path.addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: bodyTop))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: bodyTop + cornerRadius),
+            control: CGPoint(x: rect.maxX, y: bodyTop)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - cornerRadius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: bodyTop + cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + cornerRadius, y: bodyTop),
+            control: CGPoint(x: rect.minX, y: bodyTop)
+        )
+        path.closeSubpath()
+        return path
     }
 }

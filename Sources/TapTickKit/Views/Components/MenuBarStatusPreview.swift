@@ -14,9 +14,10 @@ struct MenuBarStatusPreview: View {
     let onSelect: (UUID) -> Void
     let onResize: (UUID, Int) -> Void
     let onResizeEnd: (UUID, Int) -> Void
+    let coordinateSpaceName: String
+    let onSlotFrameChange: (UUID, CGRect) -> Void
 
-    private static let highlightVerticalInset: CGFloat = 3
-    private static let highlightCornerRadius: CGFloat = 5
+    private static let selectionUnderlineHeight: CGFloat = 3
 
     private var width: CGFloat {
         MenuBarStatusContentView.width(for: slots)
@@ -28,7 +29,7 @@ struct MenuBarStatusPreview: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            selectionBackgrounds
+            selectionUnderlines
 
             MenuBarStatusContentRepresentable(slots: slots)
                 .frame(width: width, height: MenuBarStatusContentView.height)
@@ -48,7 +49,9 @@ struct MenuBarStatusPreview: View {
                         height: height,
                         onSelect: { onSelect(slot.id) },
                         onResize: { onResize(slot.id, $0) },
-                        onResizeEnd: { onResizeEnd(slot.id, $0) }
+                        onResizeEnd: { onResizeEnd(slot.id, $0) },
+                        coordinateSpaceName: coordinateSpaceName,
+                        onFrameChange: { onSlotFrameChange(slot.id, $0) }
                     )
                 }
             }
@@ -60,7 +63,7 @@ struct MenuBarStatusPreview: View {
         }
     }
 
-    private var selectionBackgrounds: some View {
+    private var selectionUnderlines: some View {
         HStack(spacing: 0) {
             Color.clear
                 .frame(
@@ -71,15 +74,13 @@ struct MenuBarStatusPreview: View {
             ForEach(slots) { slot in
                 Color.clear
                     .frame(width: CGFloat(slot.widthPoints), height: height)
-                    .overlay {
+                    .overlay(alignment: .bottom) {
                         if selectedSlotID == slot.id {
-                            RoundedRectangle(
-                                cornerRadius: Self.highlightCornerRadius,
-                                style: .continuous
-                            )
-                            .fill(Color.accentColor.opacity(0.12))
-                            .padding(.horizontal, 3)
-                            .padding(.vertical, Self.highlightVerticalInset)
+                            Capsule()
+                                .fill(Color.accentColor)
+                                .frame(height: Self.selectionUnderlineHeight)
+                                .padding(.horizontal, 4)
+                                .padding(.bottom, 1)
                         }
                     }
             }
@@ -95,6 +96,8 @@ private struct MenuBarSlotInteraction: View {
     let onSelect: () -> Void
     let onResize: (Int) -> Void
     let onResizeEnd: (Int) -> Void
+    let coordinateSpaceName: String
+    let onFrameChange: (CGRect) -> Void
 
     @State private var isResizeHovered = false
     @State private var dragStartWidthPoints: Int?
@@ -113,6 +116,11 @@ private struct MenuBarSlotInteraction: View {
             resizeHandle
         }
         .frame(width: CGFloat(widthPoints), height: height)
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .named(coordinateSpaceName))
+        } action: { frame in
+            onFrameChange(frame)
+        }
     }
 
     private var resizeHandle: some View {
