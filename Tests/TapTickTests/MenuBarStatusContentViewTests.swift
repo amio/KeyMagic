@@ -19,9 +19,10 @@ struct MenuBarStatusContentViewTests {
     @Test("Content-fitted width follows text within slot bounds")
     @MainActor
     func contentFittedWidthFollowsTextWithinBounds() {
-        let emptySlot = renderedSlot(
+        let previewEmptySlot = renderedSlot(
             fitsContentWidth: true,
-            contents: [.empty]
+            contents: [.empty],
+            collapsesWhenEmpty: false
         )
         let shortSlot = renderedSlot(
             fitsContentWidth: true,
@@ -33,17 +34,41 @@ struct MenuBarStatusContentViewTests {
         )
 
         #expect(
-            MenuBarStatusContentView.width(for: emptySlot)
+            MenuBarStatusContentView.width(for: previewEmptySlot)
                 == CGFloat(MenuBarTextSlot.widthRange.lowerBound)
         )
         #expect(
             MenuBarStatusContentView.width(for: shortSlot)
-                > MenuBarStatusContentView.width(for: emptySlot)
+                > MenuBarStatusContentView.width(for: previewEmptySlot)
         )
         #expect(
             MenuBarStatusContentView.width(for: longSlot)
                 == CGFloat(MenuBarTextSlot.widthRange.upperBound)
         )
+    }
+
+    @Test("Runtime slots collapse only when every row is empty")
+    @MainActor
+    func runtimeSlotsCollapseOnlyWhenEveryRowIsEmpty() {
+        let fixedEmptySlot = renderedSlot(
+            fitsContentWidth: false,
+            contents: [.empty]
+        )
+        let fittedEmptyRows = renderedSlot(
+            fitsContentWidth: true,
+            contents: [.empty, .empty]
+        )
+        let partiallyEmptyRows = renderedSlot(
+            fitsContentWidth: true,
+            contents: [
+                .empty,
+                MenuBarTextContent(text: "CPU 9%", isPlaceholder: false),
+            ]
+        )
+
+        #expect(MenuBarStatusContentView.width(for: fixedEmptySlot) == 0)
+        #expect(MenuBarStatusContentView.width(for: fittedEmptyRows) == 0)
+        #expect(MenuBarStatusContentView.width(for: partiallyEmptyRows) > 0)
     }
 
     @Test("Two-line content-fitted width follows the wider row")
@@ -74,14 +99,16 @@ struct MenuBarStatusContentViewTests {
     private func renderedSlot(
         fitsContentWidth: Bool,
         widthPoints: Int = MenuBarTextSlot.defaultWidthPoints,
-        contents: [MenuBarTextContent]
+        contents: [MenuBarTextContent],
+        collapsesWhenEmpty: Bool = true
     ) -> MenuBarTextRenderedSlot {
         MenuBarTextRenderedSlot(
             id: UUID(),
             alignment: .center,
             fitsContentWidth: fitsContentWidth,
             widthPoints: widthPoints,
-            contents: contents
+            contents: contents,
+            collapsesWhenEmpty: collapsesWhenEmpty
         )
     }
 }

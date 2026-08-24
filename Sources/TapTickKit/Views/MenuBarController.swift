@@ -77,6 +77,9 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let contentView = MenuBarStatusContentView(frame: .zero)
+        contentView.widthDidChange = { [weak self] width in
+            self?.statusItem?.length = width
+        }
         if let button = item.button {
             button.image = nil
             button.title = ""
@@ -149,8 +152,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
 
     private func updateStatusContent() {
         let slots = menuBarTextController.renderedSlots
-        statusContentView?.update(slots: slots)
-        statusItem?.length = MenuBarStatusContentView.width(for: slots)
+        statusContentView?.update(slots: slots, animated: true)
 
         let accessibilityValue =
             slots

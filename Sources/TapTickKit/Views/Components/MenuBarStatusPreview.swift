@@ -209,6 +209,6 @@ private struct MenuBarStatusContentRepresentable: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: MenuBarStatusContentView, context: Context) {
-        nsView.update(slots: slots)
+        nsView.update(slots: slots, animated: false)
     }
 }

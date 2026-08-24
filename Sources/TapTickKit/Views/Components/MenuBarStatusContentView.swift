@@ -11,14 +11,22 @@ final class MenuBarStatusContentView: NSView {
     private static let iconSize = NSSize(width: 18, height: 18)
     private static let horizontalTextPadding: CGFloat = 4
     private static let twoLineSpacingReduction: CGFloat = 1
+    private static let widthAnimationDuration: TimeInterval = 0.24
+    private static let widthAnimationFrameInterval: TimeInterval = 1 / 60
     private static let singleLineFont = tabularDigitFont(size: 0)
     private static let twoLineFont = tabularDigitFont(size: 9)
 
     private let icon = MenuBarStatusContentView.menuBarImage()
     private var slots: [MenuBarTextRenderedSlot] = []
+    private var displayedWidths: [UUID: CGFloat] = [:]
+    private var widthAnimation: WidthAnimation?
+    private var widthAnimationTimer: Timer?
+    private var hasReceivedInitialSlots = false
+
+    var widthDidChange: ((CGFloat) -> Void)?
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: Self.width(for: slots), height: Self.height)
+        NSSize(width: displayedTotalWidth, height: Self.height)
     }
 
     static func width(for slots: [MenuBarTextRenderedSlot]) -> CGFloat {
@@ -26,6 +34,9 @@ final class MenuBarStatusContentView: NSView {
     }
 
     static func width(for slot: MenuBarTextRenderedSlot) -> CGFloat {
+        if slot.collapsesWhenEmpty, slot.contents.allSatisfy({ $0.text.isEmpty }) {
+            return 0
+        }
         guard slot.fitsContentWidth else { return CGFloat(slot.widthPoints) }
 
         let font = font(lineCount: slot.contents.count)
@@ -41,10 +52,91 @@ final class MenuBarStatusContentView: NSView {
         )
     }
 
-    func update(slots: [MenuBarTextRenderedSlot]) {
+    func update(slots: [MenuBarTextRenderedSlot], animated: Bool) {
+        let targetWidths = Dictionary(
+            uniqueKeysWithValues: slots.map { ($0.id, Self.width(for: $0)) }
+        )
         self.slots = slots
+
+        guard animated, hasReceivedInitialSlots else {
+            hasReceivedInitialSlots = true
+            stopWidthAnimation()
+            displayedWidths = targetWidths
+            displayWidthDidChange()
+            return
+        }
+
+        let startWidths = Dictionary(
+            uniqueKeysWithValues: slots.map { ($0.id, displayedWidths[$0.id] ?? 0) }
+        )
+        guard startWidths != targetWidths else {
+            displayedWidths = targetWidths
+            needsDisplay = true
+            return
+        }
+
+        startWidthAnimation(from: startWidths, to: targetWidths)
+    }
+
+    private var displayedTotalWidth: CGFloat {
+        Self.iconAreaWidth + slots.reduce(0) { $0 + (displayedWidths[$1.id] ?? 0) }
+    }
+
+    private func startWidthAnimation(
+        from startWidths: [UUID: CGFloat],
+        to targetWidths: [UUID: CGFloat]
+    ) {
+        stopWidthAnimation()
+        widthAnimation = WidthAnimation(
+            startTime: ProcessInfo.processInfo.systemUptime,
+            startWidths: startWidths,
+            targetWidths: targetWidths
+        )
+
+        let timer = Timer(
+            timeInterval: Self.widthAnimationFrameInterval,
+            target: self,
+            selector: #selector(advanceWidthAnimation(_:)),
+            userInfo: nil,
+            repeats: true
+        )
+        widthAnimationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        advanceWidthAnimation(timer)
+    }
+
+    @objc private func advanceWidthAnimation(_ timer: Timer) {
+        guard let widthAnimation else {
+            timer.invalidate()
+            return
+        }
+
+        let elapsed = ProcessInfo.processInfo.systemUptime - widthAnimation.startTime
+        let linearProgress = min(max(elapsed / Self.widthAnimationDuration, 0), 1)
+        let easedProgress = linearProgress * linearProgress * (3 - 2 * linearProgress)
+
+        displayedWidths = widthAnimation.targetWidths
+        for (slotID, targetWidth) in widthAnimation.targetWidths {
+            let startWidth = widthAnimation.startWidths[slotID] ?? 0
+            displayedWidths[slotID] = startWidth + (targetWidth - startWidth) * easedProgress
+        }
+        displayWidthDidChange()
+
+        if linearProgress >= 1 {
+            stopWidthAnimation()
+        }
+    }
+
+    private func stopWidthAnimation() {
+        widthAnimationTimer?.invalidate()
+        widthAnimationTimer = nil
+        widthAnimation = nil
+    }
+
+    private func displayWidthDidChange() {
         invalidateIntrinsicContentSize()
         needsDisplay = true
+        widthDidChange?(displayedTotalWidth)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -55,7 +147,7 @@ final class MenuBarStatusContentView: NSView {
 
         var originX = Self.iconAreaWidth
         for slot in slots {
-            let slotWidth = Self.width(for: slot)
+            let slotWidth = displayedWidths[slot.id] ?? Self.width(for: slot)
             let slotRect = NSRect(
                 x: originX,
                 y: 0,
@@ -213,4 +305,10 @@ final class MenuBarStatusContentView: NSView {
         configuredImage.isTemplate = true
         return configuredImage
     }
+}
+
+private struct WidthAnimation {
+    let startTime: TimeInterval
+    let startWidths: [UUID: CGFloat]
+    let targetWidths: [UUID: CGFloat]
 }

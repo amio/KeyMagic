@@ -123,7 +123,8 @@ public final class MenuBarTextController {
             alignment: slot.alignment,
             fitsContentWidth: slot.fitsContentWidth,
             widthPoints: slot.widthPoints,
-            contents: contents
+            contents: contents,
+            collapsesWhenEmpty: !showsPlaceholders
         )
     }
 

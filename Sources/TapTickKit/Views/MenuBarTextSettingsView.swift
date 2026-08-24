@@ -27,7 +27,8 @@ struct MenuBarTextSettingsView: View {
                 alignment: slot.alignment,
                 fitsContentWidth: false,
                 widthPoints: resizePreview.widthPoints,
-                contents: slot.contents
+                contents: slot.contents,
+                collapsesWhenEmpty: slot.collapsesWhenEmpty
             )
         }
     }

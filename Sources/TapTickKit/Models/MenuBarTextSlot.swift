@@ -229,7 +229,7 @@ struct MenuBarTextContent: Equatable, Sendable {
         }
 
         return result.succeeded
-            ? Self(text: "—", isPlaceholder: false)
+            ? .empty
             : Self(text: "Error (\(result.exitCode))", isPlaceholder: false)
     }
 
@@ -250,6 +250,7 @@ struct MenuBarTextRenderedSlot: Identifiable, Equatable, Sendable {
     let fitsContentWidth: Bool
     let widthPoints: Int
     let contents: [MenuBarTextContent]
+    let collapsesWhenEmpty: Bool
 }
 
 private extension Int {

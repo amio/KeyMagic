@@ -53,6 +53,8 @@ struct MenuBarTextControllerTests {
         #expect(controller.renderedSlots[0].fitsContentWidth)
         #expect(controller.renderedSlots[0].widthPoints == 88)
         #expect(controller.renderedSlots[0].contents == [.loading, .loading])
+        #expect(controller.renderedSlots[0].collapsesWhenEmpty)
+        #expect(!controller.previewSlots[0].collapsesWhenEmpty)
         controller.moveSlot(id: secondID, offset: -1)
 
         let reloaded = MenuBarTextController(store: store, directory: directory)
@@ -162,12 +164,12 @@ struct MenuBarTextControllerTests {
         #expect(MenuBarTextContent.scriptResult(result).text == "CPU 12% Memory 3 GB Disk 40%")
     }
 
-    @Test("Uses compact fallbacks for empty output and failures")
+    @Test("Uses empty success as a collapse signal while preserving failures")
     func usesCompactFallbacks() {
         let emptySuccess = ScriptExecutionResult(output: " \n", exitCode: 0)
         let emptyFailure = ScriptExecutionResult(output: "", exitCode: 7)
 
-        #expect(MenuBarTextContent.scriptResult(emptySuccess).text == "—")
+        #expect(MenuBarTextContent.scriptResult(emptySuccess) == .empty)
         #expect(MenuBarTextContent.scriptResult(emptyFailure).text == "Error (7)")
     }
 
