@@ -59,7 +59,7 @@ separate from the notarized release app.
 
 ```bash
 make build      # Debug build via xcodebuild
-make run        # Debug build + launch app
+make run        # Debug build + replace the running Debug instance
 open TapTick.xcodeproj   # or open in Xcode and press ⌘R
 ```
 

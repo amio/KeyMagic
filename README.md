@@ -28,7 +28,7 @@ gen            Regenerate Xcode project from project.yml (run after editing proj
 open           Regenerate and open project in Xcode
 build          Build app — Debug (via xcodebuild)
 release        Build app — Release (via xcodebuild)
-run            Build (Debug) and run `TapTick Dev.app` from the CLI
+run            Build (Debug), replace the running instance, and launch `TapTick Dev.app`
 test           Run unit tests via xcodebuild
 uitest         Run UI tests via xcodebuild
 test-all       Run all tests (unit + UI)

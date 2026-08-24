@@ -29,7 +29,7 @@ export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
 .DEFAULT_GOAL := help
 
 .PHONY: help setup gen open \
-        build release \
+        build release run \
         test uitest test-all \
         format lint \
         archive export notarize dmg dist \
@@ -109,9 +109,29 @@ release: ## Build app — Release (via xcodebuild)
 	    -derivedDataPath $(BUILD_DIR) \
 	    $(PRETTY)
 
-run: ## Build (Debug) and run app from the CLI
+run: ## Build (Debug), replace the running instance, and launch the app
 	@$(MAKE) --no-print-directory build
-	@echo "→ Launching app..."
+	@if pgrep -x "$(DEBUG_APP_NAME)" >/dev/null; then \
+	    echo "→ Stopping existing $(DEBUG_APP_NAME) instance..."; \
+	    pkill -TERM -x "$(DEBUG_APP_NAME)" || true; \
+	    for attempt in {1..50}; do \
+	        pgrep -x "$(DEBUG_APP_NAME)" >/dev/null || break; \
+	        sleep 0.1; \
+	    done; \
+	    if pgrep -x "$(DEBUG_APP_NAME)" >/dev/null; then \
+	        echo "  ! App did not exit in time; forcing it to stop"; \
+	        pkill -KILL -x "$(DEBUG_APP_NAME)"; \
+	        for attempt in {1..10}; do \
+	            pgrep -x "$(DEBUG_APP_NAME)" >/dev/null || break; \
+	            sleep 0.1; \
+	        done; \
+	    fi; \
+	    if pgrep -x "$(DEBUG_APP_NAME)" >/dev/null; then \
+	        echo "  ! Could not stop the existing app instance"; \
+	        exit 1; \
+	    fi; \
+	fi
+	@echo "→ Launching $(DEBUG_APP_NAME)..."
 	@APP_PATH="$(BUILD_DIR)/Build/Products/Debug/$(DEBUG_APP_NAME).app"; \
 	if [ -d "$$APP_PATH" ]; then \
 	    open "$$APP_PATH"; \
