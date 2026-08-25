@@ -79,11 +79,11 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
             title: "Large Type",
             summary: "Project large temporary text on screen for quick glanceable display, similar to Alfred.",
             systemImage: "character.textbox",
-            availability: .planned,
+            availability: .available,
             highlights: [
                 "Huge readable text",
-                "Transient overlay presentation",
-                "Shortcut-triggered display",
+                "Native full-screen text input",
+                "Animated QR-code presentation",
             ]
         ),
     ]
@@ -236,6 +236,32 @@ struct ScreenshotToolsConfiguration: Hashable, Sendable {
     )
 }
 
+struct LargeTypeConfiguration: Codable, Hashable, Sendable {
+    var isEnabled: Bool
+    var hotkey: KeyCombo
+    var fontFamily: String?
+    var foregroundColor: RGBAColor
+    var backgroundColor: RGBAColor
+
+    static let defaultHotkey = KeyCombo(
+        keyCode: UInt32(kVK_ANSI_L),
+        modifiers: [.command, .control, .option]
+    )
+
+    static let `default` = LargeTypeConfiguration(
+        isEnabled: false,
+        hotkey: defaultHotkey,
+        fontFamily: nil,
+        foregroundColor: RGBAColor(NSColor.white),
+        backgroundColor: RGBAColor(
+            red: 0.015,
+            green: 0.018,
+            blue: 0.025,
+            alpha: 0.78
+        )
+    )
+}
+
 // Backward-compatible Codable: new fields default gracefully when absent from older JSON.
 extension ScreenshotToolsConfiguration: Codable {
     enum CodingKeys: String, CodingKey {
@@ -256,10 +282,16 @@ extension ScreenshotToolsConfiguration: Codable {
 struct UtilityConfiguration: Codable, Hashable, Sendable {
     var keystrokeOverlay: KeystrokeOverlayConfiguration
     var screenshotTools: ScreenshotToolsConfiguration
+    var largeType: LargeTypeConfiguration
 
-    init(keystrokeOverlay: KeystrokeOverlayConfiguration, screenshotTools: ScreenshotToolsConfiguration) {
+    init(
+        keystrokeOverlay: KeystrokeOverlayConfiguration,
+        screenshotTools: ScreenshotToolsConfiguration,
+        largeType: LargeTypeConfiguration
+    ) {
         self.keystrokeOverlay = keystrokeOverlay
         self.screenshotTools = screenshotTools
+        self.largeType = largeType
     }
 
     init(from decoder: Decoder) throws {
@@ -268,11 +300,15 @@ struct UtilityConfiguration: Codable, Hashable, Sendable {
         screenshotTools =
             try container.decodeIfPresent(ScreenshotToolsConfiguration.self, forKey: .screenshotTools)
             ?? .default
+        largeType =
+            try container.decodeIfPresent(LargeTypeConfiguration.self, forKey: .largeType)
+            ?? .default
     }
 
     static let `default` = UtilityConfiguration(
         keystrokeOverlay: .default,
-        screenshotTools: .default
+        screenshotTools: .default,
+        largeType: .default
     )
 }
 

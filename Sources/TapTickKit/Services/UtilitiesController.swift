@@ -25,6 +25,7 @@ public final class UtilitiesController: @unchecked Sendable {
         self.catalog = UtilityDescriptor.catalog
         self.configuration = loadedConfig
         self.keystrokeOverlayService = KeystrokeOverlayService()
+        self.largeTypeService = LargeTypeService()
         self.keystrokeOverlayPermission = .unknown
         self.isKeystrokeOverlayCapturing = false
 
@@ -44,11 +45,13 @@ public final class UtilitiesController: @unchecked Sendable {
             guard configuration != oldValue else { return }
             saveConfiguration()
             applyKeystrokeOverlayConfiguration(promptForPermission: false)
+            applyLargeTypeConfiguration()
         }
     }
 
     private let fileURL: URL
     private let keystrokeOverlayService: KeystrokeOverlayService
+    private let largeTypeService: LargeTypeService
     private let screenshotService: ScreenshotService = ScreenshotService()
 
     private(set) var keystrokeOverlayPermission: EventListeningPermissionStatus
@@ -66,6 +69,11 @@ public final class UtilitiesController: @unchecked Sendable {
         set { configuration.screenshotTools = newValue }
     }
 
+    var largeType: LargeTypeConfiguration {
+        get { configuration.largeType }
+        set { configuration.largeType = newValue }
+    }
+
     /// Refresh the on-screen preview HUD using the current settings configuration.
     /// Repeated calls are expected while the user tunes settings, so the underlying
     /// presenter should keep the preview alive instead of flashing between updates.
@@ -76,6 +84,7 @@ public final class UtilitiesController: @unchecked Sendable {
     public func bootstrap() {
         keystrokeOverlayPermission = keystrokeOverlayService.refreshPermissionStatus()
         applyKeystrokeOverlayConfiguration(promptForPermission: false)
+        applyLargeTypeConfiguration()
     }
 
     func descriptor(for featureID: UtilityID) -> UtilityDescriptor {
@@ -89,6 +98,9 @@ public final class UtilitiesController: @unchecked Sendable {
         if screenshotTools.isEnabled {
             hotkeys.append((.screenshotTools, "captureClipboard", screenshotTools.captureToClipboardHotkey))
             hotkeys.append((.screenshotTools, "captureAndMark", screenshotTools.captureAndMarkHotkey))
+        }
+        if largeType.isEnabled {
+            hotkeys.append((.largeType, "togglePresentation", largeType.hotkey))
         }
         return hotkeys
     }
@@ -133,6 +145,24 @@ public final class UtilitiesController: @unchecked Sendable {
         updateScreenshotCaptureAndMarkHotkey(ScreenshotToolsConfiguration.defaultCaptureAndMarkHotkey)
     }
 
+    // MARK: - Large Type
+
+    func setLargeTypeEnabled(_ isEnabled: Bool) {
+        guard largeType.isEnabled != isEnabled else { return }
+        largeType.isEnabled = isEnabled
+        onReservedHotkeysChanged?()
+    }
+
+    func updateLargeTypeHotkey(_ combo: KeyCombo) {
+        guard largeType.hotkey != combo else { return }
+        largeType.hotkey = combo
+        onReservedHotkeysChanged?()
+    }
+
+    func restoreDefaultLargeTypeHotkey() {
+        updateLargeTypeHotkey(LargeTypeConfiguration.defaultHotkey)
+    }
+
     func requestKeystrokeOverlayPermission() {
         keystrokeOverlayPermission = keystrokeOverlayService.requestPermission()
         if keystrokeOverlay.isEnabled {
@@ -167,7 +197,9 @@ public final class UtilitiesController: @unchecked Sendable {
             setKeystrokeOverlayEnabled(!keystrokeOverlay.isEnabled)
         case .screenshotTools:
             setScreenshotToolsEnabled(!screenshotTools.isEnabled)
-        case .windowManager, .largeType:
+        case .largeType:
+            setLargeTypeEnabled(!largeType.isEnabled)
+        case .windowManager:
             break
         }
     }
@@ -195,7 +227,10 @@ public final class UtilitiesController: @unchecked Sendable {
             default:
                 break
             }
-        case .windowManager, .largeType:
+        case .largeType:
+            guard action == "togglePresentation", largeType.isEnabled else { return }
+            largeTypeService.toggle(configuration: largeType)
+        case .windowManager:
             break
         }
     }
@@ -205,6 +240,10 @@ public final class UtilitiesController: @unchecked Sendable {
             configuration: keystrokeOverlay,
             promptForPermission: promptForPermission
         )
+    }
+
+    private func applyLargeTypeConfiguration() {
+        largeTypeService.apply(configuration: largeType)
     }
 
     private func saveConfiguration() {

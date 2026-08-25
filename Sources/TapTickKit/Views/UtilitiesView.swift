@@ -8,6 +8,7 @@ struct UtilitiesView: View {
     @State private var isRecordingKeystrokeOverlayHotkey = false
     @State private var isRecordingScreenshotCaptureHotkey = false
     @State private var isRecordingScreenshotMarkHotkey = false
+    @State private var isRecordingLargeTypeHotkey = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -54,7 +55,11 @@ struct UtilitiesView: View {
                 isRecordingCaptureHotkey: $isRecordingScreenshotCaptureHotkey,
                 isRecordingMarkHotkey: $isRecordingScreenshotMarkHotkey
             )
-        case .windowManager, .largeType:
+        case .largeType:
+            LargeTypeSettingsPane(
+                isRecordingHotkey: $isRecordingLargeTypeHotkey
+            )
+        case .windowManager:
             PlannedUtilityPane(feature: selectedFeature)
         }
     }
@@ -123,7 +128,9 @@ private struct UtilityRow: View {
             utilities.keystrokeOverlay.isEnabled
         case .screenshotTools:
             utilities.screenshotTools.isEnabled
-        case .windowManager, .largeType:
+        case .largeType:
+            utilities.largeType.isEnabled
+        case .windowManager:
             false
         }
     }
