@@ -109,7 +109,8 @@ struct LargeTypeSettingsPane: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(width: 220)
+                .fixedSize()
+                .frame(width: 220, alignment: .trailing)
             }
 
             LabeledContent("Foreground Color") {
@@ -123,6 +124,19 @@ struct LargeTypeSettingsPane: View {
                     .labelsHidden()
                     .frame(height: 16)
             }
+
+            LabeledContent("Text Direction") {
+                Picker("", selection: textDirectionBinding) {
+                    ForEach(LargeTypeTextDirection.allCases) { direction in
+                        Text(direction.displayName)
+                            .tag(direction)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .frame(width: 220, alignment: .trailing)
+            }
         }
     }
 
@@ -132,9 +146,10 @@ struct LargeTypeSettingsPane: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(utilities.largeType.backgroundColor.color)
 
-                Text("Large Type")
+                Text(previewText)
                     .font(previewFont)
                     .foregroundStyle(utilities.largeType.foregroundColor.color)
+                    .environment(\.layoutDirection, utilities.largeType.textDirection.layoutDirection)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .padding(24)
@@ -175,6 +190,13 @@ struct LargeTypeSettingsPane: View {
         )
     }
 
+    private var textDirectionBinding: Binding<LargeTypeTextDirection> {
+        Binding(
+            get: { utilities.largeType.textDirection },
+            set: { utilities.largeType.textDirection = $0 }
+        )
+    }
+
     private var backgroundColorBinding: Binding<Color> {
         Binding(
             get: { utilities.largeType.backgroundColor.color },
@@ -188,5 +210,14 @@ struct LargeTypeSettingsPane: View {
         }
 
         return .system(size: 44, weight: .regular)
+    }
+
+    private var previewText: String {
+        switch utilities.largeType.textDirection {
+        case .leftToRight:
+            "Large Type"
+        case .rightToLeft:
+            "مرحبا بالعالم"
+        }
     }
 }

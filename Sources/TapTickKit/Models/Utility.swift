@@ -236,12 +236,47 @@ struct ScreenshotToolsConfiguration: Hashable, Sendable {
     )
 }
 
-struct LargeTypeConfiguration: Codable, Hashable, Sendable {
+enum LargeTypeTextDirection: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
+    case leftToRight
+    case rightToLeft
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .leftToRight:
+            "Left to Right"
+        case .rightToLeft:
+            "Right to Left"
+        }
+    }
+
+    var layoutDirection: LayoutDirection {
+        switch self {
+        case .leftToRight:
+            .leftToRight
+        case .rightToLeft:
+            .rightToLeft
+        }
+    }
+
+    var writingDirection: NSWritingDirection {
+        switch self {
+        case .leftToRight:
+            .leftToRight
+        case .rightToLeft:
+            .rightToLeft
+        }
+    }
+}
+
+struct LargeTypeConfiguration: Hashable, Sendable {
     var isEnabled: Bool
     var hotkey: KeyCombo
     var fontFamily: String?
     var foregroundColor: RGBAColor
     var backgroundColor: RGBAColor
+    var textDirection: LargeTypeTextDirection
 
     static let defaultHotkey = KeyCombo(
         keyCode: UInt32(kVK_ANSI_L),
@@ -258,7 +293,8 @@ struct LargeTypeConfiguration: Codable, Hashable, Sendable {
             green: 0.018,
             blue: 0.025,
             alpha: 0.78
-        )
+        ),
+        textDirection: .leftToRight
     )
 }
 
@@ -276,6 +312,25 @@ extension ScreenshotToolsConfiguration: Codable {
         captureAndMarkHotkey = try c.decode(KeyCombo.self, forKey: .captureAndMarkHotkey)
         lastAnnotationMode = try c.decodeIfPresent(AnnotationMode.self, forKey: .lastAnnotationMode) ?? .freehand
         lastAnnotationColorIndex = try c.decodeIfPresent(Int.self, forKey: .lastAnnotationColorIndex) ?? 0
+    }
+}
+
+// Backward-compatible Codable: text direction defaults to LTR for existing installations.
+extension LargeTypeConfiguration: Codable {
+    enum CodingKeys: String, CodingKey {
+        case isEnabled, hotkey, fontFamily, foregroundColor, backgroundColor, textDirection
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        hotkey = try container.decode(KeyCombo.self, forKey: .hotkey)
+        fontFamily = try container.decodeIfPresent(String.self, forKey: .fontFamily)
+        foregroundColor = try container.decode(RGBAColor.self, forKey: .foregroundColor)
+        backgroundColor = try container.decode(RGBAColor.self, forKey: .backgroundColor)
+        textDirection =
+            try container.decodeIfPresent(LargeTypeTextDirection.self, forKey: .textDirection)
+            ?? .leftToRight
     }
 }
 

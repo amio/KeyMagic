@@ -198,6 +198,7 @@ private final class LargeTypePresentationModel {
     var qrCodeImage: NSImage?
     var focusRevision = 0
     var fontFamily: String?
+    var textDirection = LargeTypeConfiguration.default.textDirection
     var foregroundColor = LargeTypeConfiguration.default.foregroundColor.color
     var backgroundColor = LargeTypeConfiguration.default.backgroundColor.color
 
@@ -217,6 +218,7 @@ private final class LargeTypePresentationModel {
 
     func apply(configuration: LargeTypeConfiguration) {
         fontFamily = configuration.fontFamily
+        textDirection = configuration.textDirection
         foregroundColor = configuration.foregroundColor.color
         backgroundColor = configuration.backgroundColor.color
     }
@@ -303,7 +305,8 @@ enum LargeTypeLayoutEngine {
         text: String,
         in availableSize: CGSize,
         screenHeight: CGFloat,
-        fontFamily: String?
+        fontFamily: String?,
+        textDirection: LargeTypeTextDirection = .leftToRight
     ) -> LargeTypeLayout {
         guard !text.isEmpty, availableSize.width > 0, availableSize.height > 0 else {
             return LargeTypeLayout(fontSize: max(screenHeight * 0.22, 48), lineLimit: 1)
@@ -317,7 +320,8 @@ enum LargeTypeLayoutEngine {
                 text: text,
                 in: availableSize,
                 maximumLineCount: lineLimit,
-                fontFamily: fontFamily
+                fontFamily: fontFamily,
+                textDirection: textDirection
             )
 
             guard fit.fits else { continue }
@@ -355,7 +359,8 @@ enum LargeTypeLayoutEngine {
         text: String,
         in availableSize: CGSize,
         maximumLineCount: Int,
-        fontFamily: String?
+        fontFamily: String?,
+        textDirection: LargeTypeTextDirection
     ) -> FontFit {
         var lowerBound: CGFloat = 1
         var upperBound = max(availableSize.width, availableSize.height) * 2
@@ -366,7 +371,8 @@ enum LargeTypeLayoutEngine {
             let measurement = measure(
                 text: text,
                 width: availableSize.width,
-                font: font(family: fontFamily, size: candidateSize)
+                font: font(family: fontFamily, size: candidateSize),
+                textDirection: textDirection
             )
             let fits =
                 measurement.lineCount <= maximumLineCount
@@ -394,7 +400,8 @@ enum LargeTypeLayoutEngine {
         let fallbackMeasurement = measure(
             text: text,
             width: availableSize.width,
-            font: fallbackFont
+            font: fallbackFont,
+            textDirection: textDirection
         )
         return FontFit(
             fontSize: 1,
@@ -407,11 +414,13 @@ enum LargeTypeLayoutEngine {
     private static func measure(
         text: String,
         width: CGFloat,
-        font: NSFont
+        font: NSFont,
+        textDirection: LargeTypeTextDirection
     ) -> TextMeasurement {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineBreakMode = .byWordWrapping
         paragraphStyle.alignment = .center
+        paragraphStyle.baseWritingDirection = textDirection.writingDirection
 
         let storage = NSTextStorage(
             string: text,
@@ -499,7 +508,8 @@ private struct LargeTypeOverlay: View {
                 text: model.text,
                 in: CGSize(width: textWidth, height: textHeight),
                 screenHeight: size.height,
-                fontFamily: model.fontFamily
+                fontFamily: model.fontFamily,
+                textDirection: model.textDirection
             )
 
             ZStack {
@@ -510,7 +520,7 @@ private struct LargeTypeOverlay: View {
                 textPresentation(layout: layout)
                     .frame(width: textWidth, height: textHeight)
                     .position(
-                        x: size.width * (model.showsQRCode ? 0.265 : 0.5),
+                        x: size.width * (model.showsQRCode ? directionalX(0.265) : 0.5),
                         y: size.height * 0.49
                     )
 
@@ -520,7 +530,7 @@ private struct LargeTypeOverlay: View {
                             width: min(size.width * 0.36, size.height * 0.62),
                             height: min(size.width * 0.36, size.height * 0.62)
                         )
-                        .position(x: size.width * 0.745, y: size.height * 0.49)
+                        .position(x: size.width * directionalX(0.745), y: size.height * 0.49)
                         .transition(
                             .asymmetric(
                                 insertion: qrTransition.animation(qrInsertionAnimation),
@@ -535,6 +545,7 @@ private struct LargeTypeOverlay: View {
                         set: { model.text = $0 }
                     ),
                     focusRevision: model.focusRevision,
+                    textDirection: model.textDirection,
                     onCancel: onDismiss,
                     onToggleQRCode: {
                         withAnimation(layoutAnimation) {
@@ -554,8 +565,12 @@ private struct LargeTypeOverlay: View {
     }
 
     private var qrTransition: AnyTransition {
-        .scale(scale: 0.9, anchor: .trailing)
+        .scale(scale: 0.9, anchor: model.textDirection == .rightToLeft ? .leading : .trailing)
             .combined(with: .opacity)
+    }
+
+    private func directionalX(_ leftToRightX: CGFloat) -> CGFloat {
+        model.textDirection == .rightToLeft ? 1 - leftToRightX : leftToRightX
     }
 
     @ViewBuilder
@@ -568,6 +583,7 @@ private struct LargeTypeOverlay: View {
                 .font(presentationFont(size: layout.fontSize))
                 .foregroundStyle(model.foregroundColor)
                 .multilineTextAlignment(.center)
+                .environment(\.layoutDirection, model.textDirection.layoutDirection)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 .accessibilityLabel(model.text)
@@ -660,6 +676,7 @@ private struct BlinkingLargeTypeCaret: View {
 private struct LargeTypeTextInput: NSViewRepresentable {
     @Binding var text: String
     let focusRevision: Int
+    let textDirection: LargeTypeTextDirection
     let onCancel: () -> Void
     let onToggleQRCode: () -> Void
 
@@ -678,6 +695,7 @@ private struct LargeTypeTextInput: NSViewRepresentable {
         textView.textColor = .clear
         textView.insertionPointColor = .clear
         textView.font = .systemFont(ofSize: 1)
+        textView.baseWritingDirection = textDirection.writingDirection
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
@@ -691,6 +709,7 @@ private struct LargeTypeTextInput: NSViewRepresentable {
         context.coordinator.parent = self
         textView.onCancel = onCancel
         textView.onToggleQRCode = onToggleQRCode
+        textView.baseWritingDirection = textDirection.writingDirection
 
         if textView.string != text, !textView.hasMarkedText() {
             textView.string = text

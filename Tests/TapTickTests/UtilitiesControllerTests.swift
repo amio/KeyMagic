@@ -46,6 +46,7 @@ struct UtilitiesControllerTests {
 
         controller.largeType.fontFamily = "Helvetica"
         controller.largeType.foregroundColor = foregroundColor
+        controller.largeType.textDirection = .rightToLeft
         controller.updateLargeTypeHotkey(overrideHotkey)
         controller.setLargeTypeEnabled(true)
 
@@ -59,6 +60,7 @@ struct UtilitiesControllerTests {
         #expect(reloaded.largeType.isEnabled)
         #expect(reloaded.largeType.fontFamily == "Helvetica")
         #expect(reloaded.largeType.foregroundColor == foregroundColor)
+        #expect(reloaded.largeType.textDirection == .rightToLeft)
         #expect(reloaded.largeType.hotkey == overrideHotkey)
     }
 
@@ -73,6 +75,20 @@ struct UtilitiesControllerTests {
 
         #expect(decoded.largeType == .default)
         #expect(decoded.largeType.hotkey == LargeTypeConfiguration.defaultHotkey)
+    }
+
+    @Test("Older Large Type configuration defaults text direction to LTR")
+    func decodesLargeTypeTextDirectionDefault() throws {
+        let encoded = try JSONEncoder().encode(UtilityConfiguration.default)
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var largeType = try #require(object["largeType"] as? [String: Any])
+        largeType.removeValue(forKey: "textDirection")
+        object["largeType"] = largeType
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(UtilityConfiguration.self, from: legacyData)
+
+        #expect(decoded.largeType.textDirection == .leftToRight)
     }
 
     @Test("Large Type progressively allows more lines for long text")
