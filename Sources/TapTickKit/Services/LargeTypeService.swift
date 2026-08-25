@@ -474,7 +474,15 @@ private struct LargeTypeOverlay: View {
     let onDismiss: () -> Void
     @State private var isHoveringQRToggle = false
 
-    private let layoutAnimation = Animation.easeOut(duration: 0.42)
+    private static let transitionDuration = 0.36
+    private static let qrTransitionDuration = transitionDuration * 2 / 3
+
+    private let layoutAnimation = Animation.easeOut(duration: transitionDuration)
+    private let qrInsertionAnimation =
+        Animation
+        .easeOut(duration: qrTransitionDuration)
+        .delay(transitionDuration / 3)
+    private let qrRemovalAnimation = Animation.easeOut(duration: qrTransitionDuration)
 
     var body: some View {
         GeometryReader { proxy in
@@ -508,8 +516,10 @@ private struct LargeTypeOverlay: View {
                         )
                         .position(x: size.width * 0.745, y: size.height * 0.49)
                         .transition(
-                            .scale(scale: 0.9, anchor: .trailing)
-                                .combined(with: .opacity)
+                            .asymmetric(
+                                insertion: qrTransition.animation(qrInsertionAnimation),
+                                removal: qrTransition.animation(qrRemovalAnimation)
+                            )
                         )
                 }
 
@@ -535,6 +545,11 @@ private struct LargeTypeOverlay: View {
             }
             .animation(layoutAnimation, value: model.showsQRCode)
         }
+    }
+
+    private var qrTransition: AnyTransition {
+        .scale(scale: 0.9, anchor: .trailing)
+            .combined(with: .opacity)
     }
 
     @ViewBuilder
