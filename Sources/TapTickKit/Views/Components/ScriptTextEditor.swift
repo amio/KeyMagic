@@ -68,6 +68,7 @@ final class ScriptTextEditorController {
 /// A plain-text AppKit editor so buttons and standard keyboard commands share one UndoManager.
 struct ScriptTextEditor: NSViewRepresentable {
     @Binding var text: String
+    let shell: ShortcutAction.ShellType
     let controller: ScriptTextEditorController
 
     func makeCoordinator() -> Coordinator {
@@ -101,6 +102,7 @@ struct ScriptTextEditor: NSViewRepresentable {
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         context.coordinator.attach(to: textView, controller: controller)
+        context.coordinator.highlightIfNeeded(textView)
 
         return scrollView
     }
@@ -109,13 +111,14 @@ struct ScriptTextEditor: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.attach(to: textView, controller: controller)
-        guard textView.string != text else { return }
-
-        let undoManager = controller.undoManager
-        undoManager.disableUndoRegistration()
-        textView.string = text
-        undoManager.enableUndoRegistration()
-        controller.refresh()
+        if textView.string != text {
+            let undoManager = controller.undoManager
+            undoManager.disableUndoRegistration()
+            textView.string = text
+            undoManager.enableUndoRegistration()
+            controller.refresh()
+        }
+        context.coordinator.highlightIfNeeded(textView)
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
@@ -129,6 +132,8 @@ struct ScriptTextEditor: NSViewRepresentable {
 
         private weak var observedTextView: NSTextView?
         private var observedUndoManager: UndoManager?
+        private var highlightedText: String?
+        private var highlightedShell: ShortcutAction.ShellType?
 
         init(parent: ScriptTextEditor) {
             self.parent = parent
@@ -180,6 +185,14 @@ struct ScriptTextEditor: NSViewRepresentable {
         private func synchronizeText(from textView: NSTextView) {
             parent.text = textView.string
             parent.controller.refresh()
+            highlightIfNeeded(textView)
+        }
+
+        func highlightIfNeeded(_ textView: NSTextView) {
+            guard highlightedText != textView.string || highlightedShell != parent.shell else { return }
+            ShellSyntaxHighlighter.apply(to: textView, shell: parent.shell)
+            highlightedText = textView.string
+            highlightedShell = parent.shell
         }
 
         private func stopObservingUndoChanges() {
@@ -196,6 +209,8 @@ struct ScriptTextEditor: NSViewRepresentable {
             )
             self.observedUndoManager = nil
             observedTextView = nil
+            highlightedText = nil
+            highlightedShell = nil
         }
 
         func undoManager(for view: NSTextView) -> UndoManager? {

@@ -38,6 +38,7 @@ struct ScriptTextEditorTests {
                 get: { text.value },
                 set: { text.value = $0 }
             ),
+            shell: .zsh,
             controller: controller
         )
         let coordinator = editor.makeCoordinator()
@@ -72,6 +73,7 @@ struct ScriptTextEditorTests {
                 get: { text.value },
                 set: { text.value = $0 }
             ),
+            shell: .zsh,
             controller: controller
         )
         let coordinator = editor.makeCoordinator()

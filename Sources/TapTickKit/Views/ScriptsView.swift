@@ -515,13 +515,17 @@ struct ScriptEditView: View {
                 Spacer()
                 editorActionButtons
             }
-            ScriptTextEditor(text: $draftState.draft.scriptContent, controller: editorController)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color(.separatorColor), lineWidth: 1)
-                )
+            ScriptTextEditor(
+                text: $draftState.draft.scriptContent,
+                shell: draftState.draft.shellType,
+                controller: editorController
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color(.separatorColor), lineWidth: 1)
+            )
         }
         .frame(maxHeight: .infinity)
     }
