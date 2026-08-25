@@ -163,7 +163,7 @@ struct MenuBarTextSlotEditor: View {
             TextField(
                 "Seconds",
                 value: lineBinding(position: position, \.refreshIntervalSeconds),
-                format: .number
+                formatter: DigitsOnlyNumberFormatter.shared
             )
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.trailing)
@@ -229,6 +229,28 @@ struct MenuBarTextSlotEditor: View {
     ) -> String {
         guard slot.layout == .twoLines else { return "Script" }
         return position == .top ? "Top script" : "Bottom script"
+    }
+}
+
+private final class DigitsOnlyNumberFormatter: NumberFormatter, @unchecked Sendable {
+    static let shared = DigitsOnlyNumberFormatter()
+
+    private override init() {
+        super.init()
+        numberStyle = .none
+        allowsFloats = false
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    override func isPartialStringValid(
+        _ partialString: String,
+        newEditingString newString: AutoreleasingUnsafeMutablePointer<NSString?>?,
+        errorDescription error: AutoreleasingUnsafeMutablePointer<NSString?>?
+    ) -> Bool {
+        partialString.allSatisfy { $0.isASCII && $0.isNumber }
     }
 }
 
