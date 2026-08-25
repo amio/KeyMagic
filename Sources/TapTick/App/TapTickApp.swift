@@ -390,6 +390,8 @@ struct TapTickApp: App {
             openWindow(id: "settings")
         }
         .commands {
+            TextEditingCommands()
+
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {
                     appState.updateService.checkForUpdates()

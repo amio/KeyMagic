@@ -295,7 +295,7 @@ struct ScriptEditView: View {
     @State private var hasUnsavedChanges = false
     @State private var isLoading = true
     @State private var autosaveTask: Task<Void, Never>?
-    @State private var undoController = ScriptTextUndoController()
+    @State private var editorController = ScriptTextEditorController()
 
     // AI generation state
     @State private var isGenerating = false
@@ -459,7 +459,7 @@ struct ScriptEditView: View {
                 Spacer()
                 editorActionButtons
             }
-            ScriptTextEditor(text: $scriptContent, undoController: undoController)
+            ScriptTextEditor(text: $scriptContent, controller: editorController)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(
@@ -473,19 +473,19 @@ struct ScriptEditView: View {
     private var undoRedoButtons: some View {
         HStack(spacing: 2) {
             Button {
-                undoController.undo()
+                editorController.undo()
             } label: {
                 Image(systemName: "arrow.uturn.backward")
             }
-            .disabled(!undoController.canUndo)
+            .disabled(!editorController.canUndo)
             .help("Undo (⌘Z)")
 
             Button {
-                undoController.redo()
+                editorController.redo()
             } label: {
                 Image(systemName: "arrow.uturn.forward")
             }
-            .disabled(!undoController.canRedo)
+            .disabled(!editorController.canRedo)
             .help("Redo (⇧⌘Z)")
         }
         .buttonStyle(.borderless)
@@ -595,7 +595,7 @@ struct ScriptEditView: View {
         // Reset dirty flag after loading
         hasUnsavedChanges = false
         isLoading = false
-        undoController.reset()
+        editorController.reset()
     }
 
     // MARK: - AI Generation
@@ -608,7 +608,10 @@ struct ScriptEditView: View {
         // Empty editor: insert a starter template so the user knows how to use the feature.
         let trimmed = scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            scriptContent = scriptTemplateForShell(shellType)
+            editorController.replaceAll(
+                with: scriptTemplateForShell(shellType),
+                actionName: "Insert Template"
+            )
             return
         }
 
@@ -645,7 +648,12 @@ struct ScriptEditView: View {
                     """
 
                 let response = try await session.respond(to: prompt)
-                scriptContent = response.content
+                guard scriptContent == input else {
+                    generationError = "Script changed while generating. Generate again to use the latest content."
+                    isGenerating = false
+                    return
+                }
+                editorController.replaceAll(with: response.content, actionName: "Generate Script")
             } catch {
                 generationError = error.localizedDescription
             }
