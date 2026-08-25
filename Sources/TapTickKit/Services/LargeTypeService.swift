@@ -474,15 +474,21 @@ private struct LargeTypeOverlay: View {
     let onDismiss: () -> Void
     @State private var isHoveringQRToggle = false
 
-    private static let transitionDuration = 0.36
+    private static let transitionDuration = 0.24
     private static let qrTransitionDuration = transitionDuration * 2 / 3
 
-    private let layoutAnimation = Animation.easeOut(duration: transitionDuration)
+    private let layoutAnimation = Animation.smooth(
+        duration: transitionDuration,
+        extraBounce: 0
+    )
     private let qrInsertionAnimation =
         Animation
-        .easeOut(duration: qrTransitionDuration)
+        .smooth(duration: qrTransitionDuration, extraBounce: 0)
         .delay(transitionDuration / 3)
-    private let qrRemovalAnimation = Animation.easeOut(duration: qrTransitionDuration)
+    private let qrRemovalAnimation = Animation.smooth(
+        duration: qrTransitionDuration,
+        extraBounce: 0
+    )
 
     var body: some View {
         GeometryReader { proxy in
@@ -557,11 +563,12 @@ private struct LargeTypeOverlay: View {
         if model.text.isEmpty {
             BlinkingLargeTypeCaret(color: model.foregroundColor)
         } else {
+            // Animated intermediate widths must reflow instead of truncating the final line.
             Text(model.text)
                 .font(presentationFont(size: layout.fontSize))
                 .foregroundStyle(model.foregroundColor)
                 .multilineTextAlignment(.center)
-                .lineLimit(layout.lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 .accessibilityLabel(model.text)
         }
@@ -622,7 +629,7 @@ private struct LargeTypeOverlay: View {
         }
         .buttonStyle(.plain)
         .disabled(model.text.isEmpty)
-        .help(model.showsQRCode ? "Show text only · ⌥" : "Show QR code · ⌥")
+        .immediateHelp(model.showsQRCode ? "Show text only · ⌥" : "Show QR code · ⌥")
         .onHover { isHovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHoveringQRToggle = isHovering
