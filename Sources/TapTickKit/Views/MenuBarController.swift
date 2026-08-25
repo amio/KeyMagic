@@ -218,9 +218,11 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         updateItem.target = self
         updateItem.tag = Self.updateMenuItemTag
         updateItem.isEnabled = updateService.canCheckForUpdates
+        applyImage(
+            symbolImage("arrow.triangle.2.circlepath", size: NSSize(width: 18, height: 18)),
+            to: updateItem
+        )
         menu.addItem(updateItem)
-
-        menu.addItem(.separator())
 
         // Settings…
         let settingsItem = NSMenuItem(
@@ -267,9 +269,16 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
         item.keyEquivalentModifierMask = modMask
         item.target = self
         item.representedObject = shortcut.id
-        item.image = icon(for: shortcut.action)
+        applyImage(icon(for: shortcut.action), to: item)
 
         return item
+    }
+
+    private func applyImage(_ image: NSImage?, to item: NSMenuItem) {
+        item.image = image
+        if #available(macOS 27.0, *) {
+            item.preferredImageVisibility = .visible
+        }
     }
 
     /// Resolve an appropriately-sized icon for the shortcut's action type.
