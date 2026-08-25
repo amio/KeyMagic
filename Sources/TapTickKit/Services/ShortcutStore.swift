@@ -66,6 +66,19 @@ public final class ShortcutStore {
         syncToCloud()
     }
 
+    /// Persist fields owned by the script editor.
+    /// Unrelated fields come from the latest store value so autosave cannot overwrite a hotkey edit.
+    func updateScript(_ shortcut: Shortcut) {
+        guard let current = shortcuts.first(where: { $0.id == shortcut.id }) else { return }
+        guard !current.action.isLaunchApp, !shortcut.action.isLaunchApp else { return }
+        guard current.name != shortcut.name || current.action != shortcut.action else { return }
+
+        var updated = current
+        updated.name = shortcut.name
+        updated.action = shortcut.action
+        update(updated)
+    }
+
     func remove(id: UUID) {
         guard shortcuts.contains(where: { $0.id == id }) else { return }
         shortcuts.removeAll { $0.id == id }

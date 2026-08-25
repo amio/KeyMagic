@@ -148,8 +148,7 @@ struct ScriptsView: View {
                 isRunning: runningShortcutID == shortcut.id,
                 hasLog: logStore.logs[shortcut.id] != nil,
                 onSave: { updated in
-                    store.update(updated)
-                    hotkeyService.restart(store: store)
+                    store.updateScript(updated)
                 },
                 onRun: { script, shell in
                     testRun(id: shortcut.id, script: script, shell: shell)
@@ -294,13 +293,16 @@ struct ScriptEditView: View {
     @State private var scriptContent = ""
     @State private var shellType: ShortcutAction.ShellType = .zsh
     @State private var hasUnsavedChanges = false
+    @State private var isLoading = true
+    @State private var autosaveTask: Task<Void, Never>?
+    @State private var undoController = ScriptTextUndoController()
 
     // AI generation state
     @State private var isGenerating = false
     @State private var generationError: String?
 
     private var isValid: Bool {
-        !name.isEmpty && !scriptContent.isEmpty
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Whether the on-device Foundation Models framework is usable on this system.
@@ -368,9 +370,10 @@ struct ScriptEditView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { loadFrom(shortcut) }
-        .onChange(of: name) { hasUnsavedChanges = true }
-        .onChange(of: scriptContent) { hasUnsavedChanges = true }
-        .onChange(of: shellType) { hasUnsavedChanges = true }
+        .onDisappear { flushAutosave() }
+        .onChange(of: name) { scheduleAutosave() }
+        .onChange(of: scriptContent) { scheduleAutosave() }
+        .onChange(of: shellType) { scheduleAutosave() }
     }
 
     // MARK: - Header
@@ -379,6 +382,8 @@ struct ScriptEditView: View {
         HStack(spacing: 8) {
             Text("Edit Script")
                 .font(.headline)
+
+            saveStatus
 
             Spacer()
 
@@ -392,20 +397,6 @@ struct ScriptEditView: View {
             .controlSize(.regular)
             .help("Delete this script")
 
-            Divider()
-                .frame(height: 16)
-
-            // Save button
-            Button {
-                save()
-            } label: {
-                Text("Save")
-            }
-            .disabled(!isValid || !hasUnsavedChanges)
-            .keyboardShortcut("s", modifiers: .command)
-            .buttonStyle(.borderedProminent)
-            .frame(minWidth: headerActionMinWidth)
-            .controlSize(.regular)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -413,6 +404,22 @@ struct ScriptEditView: View {
 
     // Keep header action buttons aligned and stable in width.
     private var headerActionMinWidth: CGFloat { 60 }
+
+    @ViewBuilder
+    private var saveStatus: some View {
+        if hasUnsavedChanges {
+            if isValid {
+                Label("Unsaved changes", systemImage: "clock")
+                    .foregroundStyle(.secondary)
+            } else {
+                Label("Name required", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
+        } else {
+            Label("Saved", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.secondary)
+        }
+    }
 
     // MARK: - Form Fields
 
@@ -448,15 +455,12 @@ struct ScriptEditView: View {
                 Text("Script")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                undoRedoButtons
                 Spacer()
                 editorActionButtons
             }
-            TextEditor(text: $scriptContent)
-                .font(.system(.body, design: .monospaced))
-                // Inner padding so text doesn't hug the border
-                .padding(EdgeInsets(top: 12, leading: 8, bottom: 12, trailing: 8))
+            ScriptTextEditor(text: $scriptContent, undoController: undoController)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .scrollContentBackground(.hidden)
                 .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
@@ -464,6 +468,28 @@ struct ScriptEditView: View {
                 )
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private var undoRedoButtons: some View {
+        HStack(spacing: 2) {
+            Button {
+                undoController.undo()
+            } label: {
+                Image(systemName: "arrow.uturn.backward")
+            }
+            .disabled(!undoController.canUndo)
+            .help("Undo (⌘Z)")
+
+            Button {
+                undoController.redo()
+            } label: {
+                Image(systemName: "arrow.uturn.forward")
+            }
+            .disabled(!undoController.canRedo)
+            .help("Redo (⇧⌘Z)")
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
     }
 
     /// Generate and Run buttons sitting above the editor's top-right corner.
@@ -487,7 +513,7 @@ struct ScriptEditView: View {
 
             // Run button — executes the current editor content directly
             Button {
-                onRun(scriptContent, shellType)
+                run()
             } label: {
                 ZStack {
                     Label("Run", systemImage: "play.fill")
@@ -515,7 +541,28 @@ struct ScriptEditView: View {
 
     // MARK: - Logic
 
+    private func scheduleAutosave() {
+        guard !isLoading else { return }
+
+        hasUnsavedChanges = true
+        autosaveTask?.cancel()
+        guard isValid else { return }
+
+        autosaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            save()
+        }
+    }
+
+    private func flushAutosave() {
+        autosaveTask?.cancel()
+        guard hasUnsavedChanges, isValid else { return }
+        save()
+    }
+
     private func save() {
+        autosaveTask?.cancel()
         let action = ShortcutAction.runScript(script: scriptContent, shell: shellType)
         var updated = shortcut
         updated.name = name
@@ -524,7 +571,13 @@ struct ScriptEditView: View {
         hasUnsavedChanges = false
     }
 
+    private func run() {
+        flushAutosave()
+        onRun(scriptContent, shellType)
+    }
+
     private func loadFrom(_ shortcut: Shortcut) {
+        isLoading = true
         name = shortcut.name
 
         switch shortcut.action {
@@ -541,6 +594,8 @@ struct ScriptEditView: View {
 
         // Reset dirty flag after loading
         hasUnsavedChanges = false
+        isLoading = false
+        undoController.reset()
     }
 
     // MARK: - AI Generation

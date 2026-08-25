@@ -25,6 +25,13 @@ struct ShortcutStoreTests {
         )
     }
 
+    private func makeScriptShortcut(name: String = "Script", script: String = "echo initial") -> Shortcut {
+        Shortcut(
+            name: name,
+            action: .runScript(script: script, shell: .zsh)
+        )
+    }
+
     @Test("Starts empty")
     func startsEmpty() {
         let store = makeStore()
@@ -48,6 +55,26 @@ struct ShortcutStoreTests {
         shortcut.name = "Updated"
         store.update(shortcut)
         #expect(store.shortcuts.first?.name == "Updated")
+    }
+
+    @Test("Script updates preserve unrelated current fields")
+    func scriptUpdatePreservesUnrelatedFields() {
+        let store = makeStore()
+        var shortcut = makeScriptShortcut()
+        store.add(shortcut)
+
+        let hotkey = KeyCombo(keyCode: 12, modifiers: .command)
+        var rebound = shortcut
+        rebound.keyCombo = hotkey
+        store.update(rebound)
+
+        shortcut.name = "Updated Script"
+        shortcut.action = .runScript(script: "echo updated", shell: .bash)
+        store.updateScript(shortcut)
+
+        #expect(store.shortcuts.first?.name == "Updated Script")
+        #expect(store.shortcuts.first?.action == .runScript(script: "echo updated", shell: .bash))
+        #expect(store.shortcuts.first?.keyCombo == hotkey)
     }
 
     @Test("Remove shortcut by ID")

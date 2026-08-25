@@ -5,7 +5,7 @@ An application launcher, script runner, and native utility hub for macOS.
 TapTick currently covers four shortcut and status surfaces:
 
 - application launchers
-- shell scripts
+- shell scripts with autosave and native undo/redo
 - one-line or two-line menu bar text with independently scheduled script output per line; empty output collapses its slot smoothly
 - built-in utilities such as the keystroke subtitle overlay
 
