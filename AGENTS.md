@@ -3,13 +3,10 @@
 > Keep this file as short as useful, target no more than 1000 words, and never exceed 1200 words. Do not add content to reach a target. Update by replacing or consolidating guidance, not by appending task history. Keep a fact only when it is project-wide, non-obvious, decision-relevant, and durable; otherwise put it in scoped instructions, owning code, tests, or focused docs. Never duplicate or weaken a fact across sections. Before finishing an edit, recheck the size and section limits.
 
 - Before changing code, inspect the relevant owner and its callers, persistence, and runtime boundaries. Fix root causes at the highest coherent owner and raise disproportionate complexity or architecture costs before implementing non-essential requirements.
-- For architecturally significant work, write `docs/<date>-<topic>.md` before implementation. Structure it as Foundations (problem, goals, non-goals, requirements), Functional Spec (external behavior), and Technical Spec (internal ownership and rationale); correct upstream flaws before detailing downstream implementation.
 - Treat `project.yml` as the source for generated Xcode metadata. Run `make gen` after changing it; do not hand-maintain generated `TapTick.xcodeproj` state.
 - Use Makefile workflows for repository operations. Do not format Swift manually: after code changes, run `make format`, `make lint`, focused risk-based tests, and the proportionate build target; finish with `make run` so the user can inspect the modified app.
 - Preserve Swift 6 strict concurrency and macOS 15 compatibility. Keep shared mutable runtime state under an explicit owner, normally isolated to `@MainActor`; do not bypass an owner with parallel state or lifecycle machinery.
-- Write source documentation and comments in English and only for non-obvious intent, invariants, or constraints. Keep `README.md` aligned when public behavior or development workflow changes.
 - Do not add standalone examples or speculative scaffolding; changes must be production-ready and integrated into the owning module.
-- After repository modifications, review the complete diff, simplify it, resolve diagnostics, and end the response with an English Conventional Commit proposal in a code block.
 
 # PROJECT CONTEXT
 
