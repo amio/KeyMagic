@@ -14,7 +14,9 @@ struct MenuBarTextSlotEditor: View {
 
     private static let pointerHeight: CGFloat = 9
     private static let contentPadding: CGFloat = 16
+    private static let verticalPadding: CGFloat = 12
     private static let controlSpacing: CGFloat = 8
+    private static let headerFontSize = NSFont.smallSystemFontSize + 2
 
     private var scriptShortcuts: [Shortcut] {
         store.shortcuts.filter { shortcut in
@@ -32,13 +34,17 @@ struct MenuBarTextSlotEditor: View {
             toolbar
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Self.contentPadding)
-                .padding(.top, Self.pointerHeight + Self.contentPadding)
-                .padding(.bottom, Self.contentPadding)
+                .padding(.top, Self.pointerHeight + Self.verticalPadding)
+                .padding(.bottom, Self.verticalPadding)
                 .background(Color.primary.opacity(0.045))
 
             Divider()
 
             lineConfiguration
+
+            Divider()
+
+            scriptBehaviorNote
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
@@ -54,7 +60,7 @@ struct MenuBarTextSlotEditor: View {
             Picker("Layout", selection: slotBinding(\.layout)) {
                 ForEach(MenuBarTextLayout.allCases, id: \.self) { layout in
                     MenuBarTextLayoutIcon(layout: layout)
-                        .frame(width: 22)
+                        .frame(width: 24)
                         .accessibilityLabel(layout.title)
                         .tag(layout)
                 }
@@ -62,6 +68,7 @@ struct MenuBarTextSlotEditor: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .fixedSize(horizontal: true, vertical: false)
+            .help("Choose a one-line or two-line layout")
 
             Picker("Alignment", selection: slotBinding(\.alignment)) {
                 ForEach(MenuBarTextAlignment.allCases, id: \.self) { alignment in
@@ -73,33 +80,16 @@ struct MenuBarTextSlotEditor: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .fixedSize(horizontal: true, vertical: false)
+            .help("Choose the text alignment within this slot")
 
             Toggle("Fit to Content", isOn: slotBinding(\.fitsContentWidth))
                 .toggleStyle(.checkbox)
                 .fixedSize(horizontal: true, vertical: false)
                 .help("Automatically adjust this slot's width to fit its current text")
 
-            HStack(spacing: 2) {
-                MenuBarEditorHeaderButton(
-                    systemImage: "arrow.left",
-                    accessibilityLabel: "Move Left"
-                ) {
-                    controller.moveSlot(id: slot.id, offset: -1)
-                }
-                .disabled(index == 0)
-                .help("Move Left")
-
-                MenuBarEditorHeaderButton(
-                    systemImage: "arrow.right",
-                    accessibilityLabel: "Move Right"
-                ) {
-                    controller.moveSlot(id: slot.id, offset: 1)
-                }
-                .disabled(index == slotCount - 1)
-                .help("Move Right")
-            }
-
             Spacer(minLength: Self.contentPadding)
+
+            moveButtons
 
             MenuBarEditorHeaderButton(
                 systemImage: "trash",
@@ -110,6 +100,29 @@ struct MenuBarTextSlotEditor: View {
             .help("Remove Slot")
         }
         .controlSize(.small)
+        .font(.system(size: Self.headerFontSize))
+    }
+
+    private var moveButtons: some View {
+        HStack(spacing: 2) {
+            MenuBarEditorHeaderButton(
+                systemImage: "arrow.left",
+                accessibilityLabel: "Move Left"
+            ) {
+                controller.moveSlot(id: slot.id, offset: -1)
+            }
+            .disabled(index == 0)
+            .help("Move Left")
+
+            MenuBarEditorHeaderButton(
+                systemImage: "arrow.right",
+                accessibilityLabel: "Move Right"
+            ) {
+                controller.moveSlot(id: slot.id, offset: 1)
+            }
+            .disabled(index == slotCount - 1)
+            .help("Move Right")
+        }
     }
 
     private var lineConfiguration: some View {
@@ -124,6 +137,16 @@ struct MenuBarTextSlotEditor: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var scriptBehaviorNote: some View {
+        Text(
+            "Scripts refresh in the background at the selected interval. Multiline output is condensed to one line, and the slot collapses when every script returns empty output."
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, Self.contentPadding)
+        .padding(.vertical, Self.verticalPadding)
     }
 
     private func lineConfigurationRow(position: MenuBarTextLinePosition) -> some View {
@@ -151,7 +174,8 @@ struct MenuBarTextSlotEditor: View {
             Text("s")
                 .foregroundStyle(.secondary)
         }
-        .padding(Self.contentPadding)
+        .padding(.horizontal, Self.contentPadding)
+        .padding(.vertical, Self.verticalPadding)
     }
 
     private func scriptPicker(position: MenuBarTextLinePosition) -> some View {
@@ -232,7 +256,7 @@ private struct MenuBarEditorHeaderButton: View {
     var body: some View {
         Button(role: role, action: action) {
             Image(systemName: systemImage)
-                .frame(width: 24, height: 24)
+                .frame(width: 26, height: 26)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -252,6 +276,8 @@ private struct MenuBarTextLayoutIcon: View {
     var body: some View {
         Image(nsImage: image)
             .renderingMode(.template)
+            .resizable()
+            .frame(width: 22, height: 18)
     }
 
     private var image: NSImage {
