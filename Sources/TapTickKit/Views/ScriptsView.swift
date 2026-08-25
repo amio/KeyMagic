@@ -386,10 +386,16 @@ struct ScriptEditView: View {
 
             Divider()
 
-            // Form body
-            VStack(alignment: .leading, spacing: 12) {
-                nameField
-                shellPicker
+            // Form body. Keep the metadata grouped in one row so the editor remains the
+            // visual focus without shrinking the controls or their labels.
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 16) {
+                    nameField
+                        .frame(maxWidth: .infinity)
+                    shellPicker
+                        .frame(width: 240, alignment: .trailing)
+                }
+
                 scriptEditor
 
                 // Inline error banner for AI generation failures
@@ -491,8 +497,8 @@ struct ScriptEditView: View {
     }
 
     private var scriptEditor: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Label row: "Script" caption on the left, action buttons on the right
+        VStack(alignment: .leading, spacing: 8) {
+            // Keep editing controls on the left and execution actions on the right.
             HStack(alignment: .center) {
                 Text("Script")
                     .font(.caption)
