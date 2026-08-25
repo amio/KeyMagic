@@ -3,6 +3,12 @@ import SwiftUI
 
 private let scriptHotkeyColumnWidth: CGFloat = 97
 
+private struct ScriptLogsPresentation: Identifiable {
+    let shortcutID: UUID
+
+    var id: UUID { shortcutID }
+}
+
 /// The Scripts settings view: manages script-type shortcuts.
 /// Fixed two-panel layout: 240px list on the left, edit panel on the right.
 struct ScriptsView: View {
@@ -14,8 +20,7 @@ struct ScriptsView: View {
     @State private var selectedID: UUID?
     @State private var showingDeleteConfirmation = false
     @State private var deletingShortcutID: UUID?
-    @State private var showingLogs = false
-    @State private var logsShortcutID: UUID?
+    @State private var logsPresentation: ScriptLogsPresentation?
     @State private var editorRunIDs: [UUID: UUID] = [:]
     @State private var recordingShortcutID: UUID?
 
@@ -57,13 +62,12 @@ struct ScriptsView: View {
                 .keyboardShortcut("n", modifiers: .command)
             }
         }
-        .sheet(isPresented: $showingLogs) {
-            if let logsShortcutID {
-                ScriptLogsView(
-                    logs: logStore.recentLogs(for: logsShortcutID),
-                    scriptName: store.shortcuts.first { $0.id == logsShortcutID }?.name ?? "Deleted Script"
-                )
-            }
+        .sheet(item: $logsPresentation) { presentation in
+            ScriptLogsView(
+                logs: logStore.recentLogs(for: presentation.shortcutID),
+                scriptName: store.shortcuts.first { $0.id == presentation.shortcutID }?.name
+                    ?? "Deleted Script"
+            )
         }
         .confirmationDialog(
             "Delete Script?",
@@ -206,8 +210,7 @@ struct ScriptsView: View {
     }
 
     private func showLogs(for shortcutID: UUID) {
-        logsShortcutID = shortcutID
-        showingLogs = true
+        logsPresentation = ScriptLogsPresentation(shortcutID: shortcutID)
     }
 
     private func run(shortcutID: UUID) {
