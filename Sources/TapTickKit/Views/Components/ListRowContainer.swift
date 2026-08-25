@@ -1,24 +1,23 @@
 import SwiftUI
 
 /// A shared table header used in ApplicationsView and ScriptsView.
-/// Renders column labels with consistent caption styling without adding a tint
-/// layer that can bleed into nearby liquid glass surfaces.
 struct ListTableHeader<Content: View>: View {
     var trailingPadding: CGFloat = 20
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        HStack(spacing: 0) {
-            content()
-        }
-        .font(.caption)
-        .fontWeight(.medium)
-        .foregroundStyle(.secondary)
-        .padding(.leading, 20)
-        .padding(.trailing, trailingPadding)
-        .padding(.vertical, 6)
-        .background(Color.clear)
-        .overlay(alignment: .bottom) {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                content()
+            }
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundStyle(.secondary)
+            .padding(.leading, 20)
+            .padding(.trailing, trailingPadding)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Divider()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

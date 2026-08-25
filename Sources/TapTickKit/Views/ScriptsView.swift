@@ -51,7 +51,6 @@ struct ScriptsView: View {
             editPanel
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle("Scripts")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {

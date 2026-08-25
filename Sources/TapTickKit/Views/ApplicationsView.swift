@@ -183,7 +183,6 @@ struct ApplicationsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationTitle("Applications")
         .searchable(text: $searchText, placement: .toolbar, prompt: "Search")
         .task {
             applicationsCatalog.refresh()

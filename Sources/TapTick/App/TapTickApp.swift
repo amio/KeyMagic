@@ -176,6 +176,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func registerSettingsWindow(_ window: NSWindow) {
         window.identifier = settingsWindowIdentifier
         window.styleMask.remove(.resizable)
+        // The automatic style changes with the active detail pane's scrolling context.
+        // Settings has a persistent header, so its boundary must be a window-level invariant.
+        window.titlebarSeparatorStyle = .line
         AppState.shared.settingsWindow = window
         isSettingsPresentationPending = false
 
@@ -395,6 +398,7 @@ struct TapTickApp: App {
                     minHeight: 600, idealHeight: 600, maxHeight: 600)
         }
         .windowResizability(.contentSize)
+        .windowToolbarStyle(.unified(showsTitle: true))
         .defaultLaunchBehavior(.suppressed)
         .onChange(of: appState.openSettingsTrigger) {
             openWindow(id: "settings")

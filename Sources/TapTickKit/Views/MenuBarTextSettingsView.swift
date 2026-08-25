@@ -49,7 +49,6 @@ struct MenuBarTextSettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .coordinateSpace(name: menuBarTextSettingsCoordinateSpaceName)
-        .navigationTitle("Menu Bar")
         .onAppear {
             reconcileSelection(with: controller.slots.map(\.id))
         }

@@ -20,7 +20,6 @@ struct UtilitiesView: View {
             featureDetail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle("Utilities")
     }
 
     private var selectedFeature: UtilityDescriptor {

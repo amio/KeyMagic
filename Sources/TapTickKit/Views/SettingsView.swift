@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 /// The main settings view with a sidebar for navigation across global and feature-specific areas.
@@ -54,42 +53,29 @@ public struct SettingsView: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
             .listStyle(.sidebar)
         } detail: {
-            switch selectedTab {
-            case .general:
-                GeneralSettingsView()
-                    .environment(cloudSync)
-            case .applications:
-                ApplicationsView()
-            case .scripts:
-                ScriptsView()
-            case .menuBar:
-                MenuBarTextSettingsView()
-            case .utilities:
-                UtilitiesView()
-                    .environment(utilities)
-            case .about:
-                AboutView()
-                    .environment(updateService)
-            }
+            selectedPane
+                .navigationTitle(selectedTab.rawValue)
         }
-        .background(SettingsWindowTitleSync(title: selectedTab.rawValue))
-    }
-}
-
-private struct SettingsWindowTitleSync: NSViewRepresentable {
-    let title: String
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            view.window?.title = title
-        }
-        return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            nsView.window?.title = title
+    @ViewBuilder
+    private var selectedPane: some View {
+        switch selectedTab {
+        case .general:
+            GeneralSettingsView()
+                .environment(cloudSync)
+        case .applications:
+            ApplicationsView()
+        case .scripts:
+            ScriptsView()
+        case .menuBar:
+            MenuBarTextSettingsView()
+        case .utilities:
+            UtilitiesView()
+                .environment(utilities)
+        case .about:
+            AboutView()
+                .environment(updateService)
         }
     }
 }
