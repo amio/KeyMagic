@@ -34,66 +34,51 @@ final class AppState: ObservableObject {
     }
 }
 
-/// Returns `true` when this process was launched by launchd (login item / system boot),
-/// rather than directly by the user (Dock, Finder, Terminal, etc.).
-///
-/// The heuristic compares the parent-process name: launchd always has PID 1 and name
-/// "launchd". Any interactive launch will have a parent such as "Dock" or "launchservicesd".
+/// Returns `true` only when the launch Apple Event identifies this as a login-item launch.
+/// Parent-process inspection is not reliable because LaunchServices may also launch a manually
+/// opened UIElement app through launchd.
 private func isLaunchedByLoginItem() -> Bool {
-    var info = kinfo_proc()
-    var size = MemoryLayout<kinfo_proc>.stride
-    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getppid()]
-    sysctl(&mib, 4, &info, &size, nil, 0)
-    let parentName = withUnsafeBytes(of: info.kp_proc.p_comm) { bytes in
-        bytes.baseAddress.flatMap { String(validatingCString: $0.assumingMemoryBound(to: CChar.self)) } ?? ""
-    }
-    return parentName == "launchd"
+    guard let event = NSAppleEventManager.shared().currentAppleEvent else { return false }
+    return event.eventID == kAEOpenApplication
+        && event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue
+            == keyAELaunchedAsLogInItem
 }
 
-/// Applies the dock icon policy once at launch based on the stored user preference.
-/// Using an app delegate avoids the crash from accessing `NSApp` in the `App.init()`,
-/// where `NSApplication.shared` has not yet been created.
+/// Owns app-level presentation: Settings window lifecycle, focus handoff, and Dock policy.
+/// Keeping these decisions together prevents individual views and entry points from creating
+/// different activation behavior for the same window.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Observation token for the notification posted by `MenuBarController` to open settings.
     private var settingsNotificationObserver: Any?
     private var toggleSettingsNotificationObserver: Any?
-    /// The app that was frontmost when the settings window was last shown via the toggle hotkey.
-    /// Restored on toggle-close so the user lands back where they started.
-    private var previousActiveApp: NSRunningApplication?
+    private var settingsWindowCloseObserver: Any?
+    private var workspaceActivationObserver: Any?
+    private var defaultsObserver: Any?
+    private weak var observedSettingsWindow: NSWindow?
+    private var lastExternalActiveApp: NSRunningApplication?
+    private var appliedDockIconVisibility: Bool?
+    private var isTerminating = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        startTrackingExternalActivation()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let appState = AppState.shared
         let hasLaunchedBefore = UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
+        let shouldOpenSettings = !hasLaunchedBefore || !isLaunchedByLoginItem()
+
+        UserDefaults.standard.register(defaults: ["showDockIcon": false])
 
         if !hasLaunchedBefore {
             // First launch: apply defaults and register login item
             UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-            // showDockIcon defaults to true — no write needed; @AppStorage default handles UI,
-            // but AppDelegate reads UserDefaults directly, so seed the value explicitly.
-            if UserDefaults.standard.object(forKey: "showDockIcon") == nil {
-                UserDefaults.standard.set(true, forKey: "showDockIcon")
-            }
             // Enable launch at login by default on first launch
             try? SMAppService.mainApp.register()
-
-            NSApp.activate(ignoringOtherApps: true)
-        } else {
-            let launchedBySystem = isLaunchedByLoginItem()
-
-            if !launchedBySystem {
-                // Launched manually by the user: open settings window and bring app to front.
-                // Window uses .defaultLaunchBehavior(.suppressed) so it won't open automatically.
-                appState.openSettingsTrigger += 1
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            // Launched by login item: do nothing — window stays hidden, app lives in menu bar.
         }
 
-        let showDockIcon = UserDefaults.standard.bool(forKey: "showDockIcon")
-        if !showDockIcon {
-            NSApp.setActivationPolicy(.accessory)
-        }
+        applyDockIconPolicyFromDefaults()
+        startObservingDockIconPreference()
 
         // Install the native menu bar controller now that NSApplication is fully initialised.
         appState.menuBarController = MenuBarController(
@@ -142,17 +127,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.toggleSettingsWindow()
             }
         }
+
+        if shouldOpenSettings {
+            // Manual and first launches present Settings. Login-item launches remain quiet.
+            openSettingsWindow()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            openSettingsWindow()
-        }
-        return true
+        openSettingsWindow()
+        return false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        isTerminating = true
+        removeObservers()
+    }
+
+    func registerSettingsWindow(_ window: NSWindow) {
+        window.identifier = settingsWindowIdentifier
+        window.styleMask.remove(.resizable)
+        AppState.shared.settingsWindow = window
+
+        guard observedSettingsWindow !== window else { return }
+
+        if let settingsWindowCloseObserver {
+            NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
+        }
+
+        observedSettingsWindow = window
+        settingsWindowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            Task { @MainActor [weak self, weak window] in
+                guard let window else { return }
+                self?.settingsWindowWillClose(window)
+            }
+        }
     }
 
     func dismissSettingsWindow() {
@@ -160,22 +177,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Keep the NSWindow instance alive so reopen stays synchronous, but hand focus
-        // back to the app that was frontmost before TapTick activated its settings UI.
+        // Keep the window alive for a synchronous reopen, then return to the user's work.
         window.orderOut(nil)
-        restorePreviousActiveApp()
+        handOffFocusIfNeeded(excluding: window)
     }
 
     private func openSettingsWindow() {
-        NSApp.activate(ignoringOtherApps: true)
+        rememberExternalApp(NSWorkspace.shared.frontmostApplication)
+        NSApp.unhide(nil)
+        NSApp.activate()
+
         if let window = currentSettingsWindow() {
-            // Window already exists (ordered-out or behind another app): bring it directly
-            // to front via AppKit. This is synchronous and happens after activate(), so the
-            // window reliably appears on the first keypress — no deferred Combine/SwiftUI hop.
             window.makeKeyAndOrderFront(nil)
         } else {
-            // Window hasn't been created yet (first launch after suppressed startup).
-            // Delegate to the SwiftUI scene mechanism to instantiate it.
             AppState.shared.openSettingsTrigger += 1
         }
     }
@@ -189,21 +203,116 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Carbon delivers the hotkey without activating TapTick, so frontmostApplication
-        // is still the user's previous app at this point — capture it before activate().
-        previousActiveApp = NSWorkspace.shared.frontmostApplication
         openSettingsWindow()
     }
 
-    private func restorePreviousActiveApp() {
-        let app = previousActiveApp
-        previousActiveApp = nil
+    private func settingsWindowWillClose(_ window: NSWindow) {
+        guard observedSettingsWindow === window else { return }
 
-        // Guard against restoring to TapTick itself when the settings window was opened
-        // from a TapTick-owned interaction such as a Dock launch.
-        if app?.bundleIdentifier != Bundle.main.bundleIdentifier {
-            app?.activate()
+        if let settingsWindowCloseObserver {
+            NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
+            self.settingsWindowCloseObserver = nil
         }
+        AppState.shared.settingsWindow = nil
+        observedSettingsWindow = nil
+        handOffFocusIfNeeded(excluding: window)
+    }
+
+    private func handOffFocusIfNeeded(excluding settingsWindow: NSWindow) {
+        guard !isTerminating, NSApp.isActive else { return }
+        guard !hasOtherVisibleInteractiveWindow(excluding: settingsWindow) else { return }
+
+        guard let target = lastExternalActiveApp, !target.isTerminated else {
+            // A cold launch may not have observed the previously active process. Hiding lets
+            // macOS select the appropriate successor without leaving TapTick active and empty.
+            NSApp.hide(nil)
+            return
+        }
+
+        NSApp.yieldActivation(to: target)
+        target.activate()
+    }
+
+    private func hasOtherVisibleInteractiveWindow(excluding settingsWindow: NSWindow) -> Bool {
+        NSApp.windows.contains { window in
+            window !== settingsWindow
+                && window.isVisible
+                && window.canBecomeKey
+                && !window.styleMask.contains(.nonactivatingPanel)
+        }
+    }
+
+    private func startTrackingExternalActivation() {
+        rememberExternalApp(NSWorkspace.shared.frontmostApplication)
+
+        workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let app =
+                notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+            Task { @MainActor [weak self] in
+                self?.rememberExternalApp(app)
+            }
+        }
+    }
+
+    private func rememberExternalApp(_ app: NSRunningApplication?) {
+        guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            return
+        }
+        lastExternalActiveApp = app
+    }
+
+    private func startObservingDockIconPreference() {
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.applyDockIconPolicyFromDefaults()
+            }
+        }
+    }
+
+    private func applyDockIconPolicyFromDefaults() {
+        let isVisible = UserDefaults.standard.bool(forKey: "showDockIcon")
+        guard appliedDockIconVisibility != isVisible else { return }
+        appliedDockIconVisibility = isVisible
+
+        let settingsWindow = currentSettingsWindow()
+        let shouldRestoreSettingsFocus = settingsWindow?.isKeyWindow == true
+        NSApp.setActivationPolicy(isVisible ? .regular : .accessory)
+
+        guard shouldRestoreSettingsFocus else { return }
+        Task { @MainActor [weak settingsWindow] in
+            await Task.yield()
+            NSApp.activate()
+            settingsWindow?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func removeObservers() {
+        let center = NotificationCenter.default
+        [
+            settingsNotificationObserver, toggleSettingsNotificationObserver,
+            settingsWindowCloseObserver, defaultsObserver,
+        ]
+        .compactMap { $0 }
+        .forEach(center.removeObserver)
+
+        if let workspaceActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceActivationObserver)
+        }
+
+        settingsNotificationObserver = nil
+        toggleSettingsNotificationObserver = nil
+        settingsWindowCloseObserver = nil
+        workspaceActivationObserver = nil
+        defaultsObserver = nil
     }
 
     private func currentSettingsWindow() -> NSWindow? {
@@ -246,9 +355,7 @@ struct TapTickApp: App {
                 .background(
                     SettingsWindowObserver { window in
                         guard let window else { return }
-                        window.identifier = settingsWindowIdentifier
-                        window.styleMask.remove(.resizable)
-                        appState.settingsWindow = window
+                        appDelegate.registerSettingsWindow(window)
                     }
                 )
                 .frame(

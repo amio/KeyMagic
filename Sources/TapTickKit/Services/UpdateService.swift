@@ -96,10 +96,9 @@ public final class UpdateService: @unchecked Sendable {
         userInitiatedFocusSession = false
     }
 
-    /// Sparkle uses `NSApp.activate()` on macOS 14+, which is too gentle for TapTick's
-    /// accessory/menu-bar lifecycle. Reuse the same stronger activation path as settings.
+    /// An explicit update check is direct user intent, so request activation for its UI.
     private func bringAppToFrontForInteractiveUpdate() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 }
 

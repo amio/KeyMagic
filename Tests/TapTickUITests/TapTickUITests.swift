@@ -43,6 +43,33 @@ final class TapTickUITests: XCTestCase {
         )
     }
 
+    func testEscapeDismissesSettingsWithoutQuitting() throws {
+        let app = launchApp()
+        defer { app.terminate() }
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+
+        app.typeKey(.escape, modifierFlags: [])
+
+        let windowDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: window
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [windowDismissed], timeout: 3), .completed)
+        XCTAssertTrue(app.exists, "Dismissing Settings should keep the menu-bar app running")
+
+        let appMovedToBackground = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in app.state == .runningBackground },
+            object: nil
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [appMovedToBackground], timeout: 3),
+            .completed,
+            "Dismissing Settings should return focus to the previous app"
+        )
+    }
+
     // MARK: - Menu Bar
 
     func testAppLaunches() throws {
@@ -54,7 +81,11 @@ final class TapTickUITests: XCTestCase {
 
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-hasLaunchedBefore", "YES"]
+        app.launchArguments += [
+            "-hasLaunchedBefore", "YES",
+            "-showDockIcon", "YES",
+            "-showMenuBarIcon", "YES",
+        ]
         app.launch()
         return app
     }

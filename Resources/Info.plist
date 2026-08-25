@@ -20,6 +20,8 @@
     <string>$(EXECUTABLE_NAME)</string>
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <key>LSUIElement</key>
+    <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>NSHumanReadableCopyright</key>

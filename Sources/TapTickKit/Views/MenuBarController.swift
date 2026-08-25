@@ -321,7 +321,6 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
     @objc private func openSettings() {
         // Post a notification that TapTickApp's AppDelegate picks up to open the settings window.
         NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func quitApp() {

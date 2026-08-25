@@ -7,7 +7,7 @@ struct GeneralSettingsView: View {
     @Environment(ShortcutStore.self) private var store
     @Environment(CloudSyncService.self) private var cloudSync
 
-    @AppStorage("showDockIcon") private var showDockIcon = true
+    @AppStorage("showDockIcon") private var showDockIcon = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @State private var isRecordingSettingsWindowHotkey = false
 
@@ -58,9 +58,6 @@ struct GeneralSettingsView: View {
                 ))
 
             Toggle("Show Dock Icon", isOn: $showDockIcon)
-                .onChange(of: showDockIcon) { _, newValue in
-                    applyDockIconPolicy(visible: newValue)
-                }
 
             Toggle("Show Menu Bar Icon", isOn: $showMenuBarIcon)
         } header: {
@@ -198,20 +195,6 @@ struct GeneralSettingsView: View {
             }
         } header: {
             Text("Data & Sync")
-        }
-    }
-
-    // MARK: - Dock Icon
-
-    private func applyDockIconPolicy(visible: Bool) {
-        if visible {
-            NSApp.setActivationPolicy(.regular)
-        } else {
-            NSApp.setActivationPolicy(.accessory)
-            // Ensure window stays visible after switching to accessory
-            DispatchQueue.main.async {
-                NSApp.activate(ignoringOtherApps: true)
-            }
         }
     }
 
