@@ -6,7 +6,7 @@ struct AboutView: View {
     @Environment(UpdateService.self) private var updateService
 
     private let runtimeConfiguration = TapTickRuntimeConfiguration.current
-    private let socialURL = URL(string: "https://x.com/_amiojin")!
+    private let socialURL = URL(string: "https://x.com/amiojinn")!
     private let websiteURL = URL(string: "https://amio.cn")!
     private let linkAccent = Color(red: 0.47, green: 0.71, blue: 1.0)
 
@@ -108,7 +108,7 @@ struct AboutView: View {
     private var footerLinks: some View {
         Text(
             .init(
-                "made by [@_amiojin](" + socialURL.absoluteString + ")  visit [amio.cn](" + websiteURL.absoluteString
+                "made by [@amiojinn](" + socialURL.absoluteString + ")  visit [amio.cn](" + websiteURL.absoluteString
                     + ")"
             )
         )
