@@ -42,7 +42,7 @@ The Scripts editor originally required an explicit Save action. Autosave removed
 
 ### Ownership
 
-`ScriptEditView` owns draft and autosave state. `ScriptTextEditor` owns the AppKit text boundary, and `ScriptTextEditorController` owns editor commands, the per-editor `UndoManager`, and observable button state. The app scene installs SwiftUI's standard `TextEditingCommands` so Find menu shortcuts reach the current AppKit first responder. `ShortcutStore.updateScript` persists only name and action while preserving the latest unrelated shortcut fields.
+`ScriptEditView` owns autosave scheduling, while `ScriptEditorDraftState` owns the current draft and its last persisted baseline; dirty state is derived by comparing them, so loading or reverting to saved content cannot schedule a redundant save. `ScriptTextEditor` owns the AppKit text boundary, and `ScriptTextEditorController` owns editor commands, the per-editor `UndoManager`, and observable button state. The app scene installs SwiftUI's standard `TextEditingCommands` so Find menu shortcuts reach the current AppKit first responder. `ShortcutStore.updateScript` persists only name and action while preserving the latest unrelated shortcut fields.
 
 ### Editor Boundary
 

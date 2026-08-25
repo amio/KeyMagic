@@ -6,6 +6,29 @@ import Testing
 @Suite("ScriptTextEditor")
 @MainActor
 struct ScriptTextEditorTests {
+    @Test("Loading a script establishes a clean saved baseline")
+    func loadingDraftIsSaved() {
+        let shortcut = Shortcut(
+            name: "Example",
+            action: .runScript(script: "echo initial", shell: .zsh)
+        )
+        var state = ScriptEditorDraftState()
+
+        state.load(shortcut)
+        let savedDraft = state.draft
+        #expect(!state.hasUnsavedChanges)
+
+        state.draft.scriptContent = "echo changed"
+        #expect(state.hasUnsavedChanges)
+
+        state.draft = savedDraft
+        #expect(!state.hasUnsavedChanges)
+
+        state.draft.name = "Renamed"
+        state.markSaved()
+        #expect(!state.hasUnsavedChanges)
+    }
+
     @Test("Native undo and redo share the editor controller")
     func nativeUndoRedo() {
         let text = TextBox("a")

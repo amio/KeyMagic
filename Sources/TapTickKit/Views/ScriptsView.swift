@@ -280,6 +280,54 @@ private struct ScriptRow: View {
 
 // MARK: - Script Edit View (always-visible right panel)
 
+struct ScriptEditorDraft: Equatable {
+    var name = ""
+    var scriptContent = ""
+    var shellType: ShortcutAction.ShellType = .zsh
+
+    init() {}
+
+    init(shortcut: Shortcut) {
+        name = shortcut.name
+
+        switch shortcut.action {
+        case .runScript(let script, let shell):
+            scriptContent = script
+            shellType = shell
+        case .runScriptFile(let path, let shell):
+            scriptContent = "# Script file: \(path)\n"
+            shellType = shell
+        case .launchApp:
+            break
+        }
+    }
+
+    var isValid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+/// Derives dirty state from the current draft and its persisted baseline.
+struct ScriptEditorDraftState {
+    var draft = ScriptEditorDraft()
+    private var savedDraft: ScriptEditorDraft?
+
+    var hasUnsavedChanges: Bool {
+        guard let savedDraft else { return false }
+        return draft != savedDraft
+    }
+
+    mutating func load(_ shortcut: Shortcut) {
+        let loadedDraft = ScriptEditorDraft(shortcut: shortcut)
+        draft = loadedDraft
+        savedDraft = loadedDraft
+    }
+
+    mutating func markSaved() {
+        savedDraft = draft
+    }
+}
+
 struct ScriptEditView: View {
     let shortcut: Shortcut
     let isRunning: Bool
@@ -289,11 +337,7 @@ struct ScriptEditView: View {
     let onShowLog: () -> Void
     let onDelete: () -> Void
 
-    @State private var name = ""
-    @State private var scriptContent = ""
-    @State private var shellType: ShortcutAction.ShellType = .zsh
-    @State private var hasUnsavedChanges = false
-    @State private var isLoading = true
+    @State private var draftState = ScriptEditorDraftState()
     @State private var autosaveTask: Task<Void, Never>?
     @State private var editorController = ScriptTextEditorController()
 
@@ -302,7 +346,7 @@ struct ScriptEditView: View {
     @State private var generationError: String?
 
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        draftState.draft.isValid
     }
 
     /// Whether the on-device Foundation Models framework is usable on this system.
@@ -371,9 +415,7 @@ struct ScriptEditView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { loadFrom(shortcut) }
         .onDisappear { flushAutosave() }
-        .onChange(of: name) { scheduleAutosave() }
-        .onChange(of: scriptContent) { scheduleAutosave() }
-        .onChange(of: shellType) { scheduleAutosave() }
+        .onChange(of: draftState.draft) { scheduleAutosave() }
     }
 
     // MARK: - Header
@@ -407,7 +449,7 @@ struct ScriptEditView: View {
 
     @ViewBuilder
     private var saveStatus: some View {
-        if hasUnsavedChanges {
+        if draftState.hasUnsavedChanges {
             if isValid {
                 Label("Unsaved changes", systemImage: "clock")
                     .foregroundStyle(.secondary)
@@ -428,7 +470,7 @@ struct ScriptEditView: View {
             Text("Name")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            TextField("e.g. Deploy Script", text: $name)
+            TextField("e.g. Deploy Script", text: $draftState.draft.name)
                 .textFieldStyle(.roundedBorder)
         }
     }
@@ -438,7 +480,7 @@ struct ScriptEditView: View {
             Text("Shell")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Picker("", selection: $shellType) {
+            Picker("", selection: $draftState.draft.shellType) {
                 ForEach(ShortcutAction.ShellType.allCases, id: \.self) { shell in
                     Text(shell.displayName).tag(shell)
                 }
@@ -459,7 +501,7 @@ struct ScriptEditView: View {
                 Spacer()
                 editorActionButtons
             }
-            ScriptTextEditor(text: $scriptContent, controller: editorController)
+            ScriptTextEditor(text: $draftState.draft.scriptContent, controller: editorController)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(
@@ -523,7 +565,7 @@ struct ScriptEditView: View {
                         .opacity(isRunning ? 1 : 0)
                 }
             }
-            .disabled(scriptContent.isEmpty || isRunning)
+            .disabled(draftState.draft.scriptContent.isEmpty || isRunning)
             .controlSize(.small)
             .help("Test run this script")
 
@@ -542,11 +584,8 @@ struct ScriptEditView: View {
     // MARK: - Logic
 
     private func scheduleAutosave() {
-        guard !isLoading else { return }
-
-        hasUnsavedChanges = true
         autosaveTask?.cancel()
-        guard isValid else { return }
+        guard draftState.hasUnsavedChanges, isValid else { return }
 
         autosaveTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
@@ -557,44 +596,29 @@ struct ScriptEditView: View {
 
     private func flushAutosave() {
         autosaveTask?.cancel()
-        guard hasUnsavedChanges, isValid else { return }
+        guard draftState.hasUnsavedChanges, isValid else { return }
         save()
     }
 
     private func save() {
         autosaveTask?.cancel()
-        let action = ShortcutAction.runScript(script: scriptContent, shell: shellType)
+        let draft = draftState.draft
+        let action = ShortcutAction.runScript(script: draft.scriptContent, shell: draft.shellType)
         var updated = shortcut
-        updated.name = name
+        updated.name = draft.name
         updated.action = action
+        draftState.markSaved()
         onSave(updated)
-        hasUnsavedChanges = false
     }
 
     private func run() {
         flushAutosave()
-        onRun(scriptContent, shellType)
+        onRun(draftState.draft.scriptContent, draftState.draft.shellType)
     }
 
     private func loadFrom(_ shortcut: Shortcut) {
-        isLoading = true
-        name = shortcut.name
-
-        switch shortcut.action {
-        case .runScript(let script, let shell):
-            scriptContent = script
-            shellType = shell
-        case .runScriptFile(let path, let shell):
-            // Legacy: show file path as placeholder
-            scriptContent = "# Script file: \(path)\n"
-            shellType = shell
-        case .launchApp:
-            break
-        }
-
-        // Reset dirty flag after loading
-        hasUnsavedChanges = false
-        isLoading = false
+        autosaveTask?.cancel()
+        draftState.load(shortcut)
         editorController.reset()
     }
 
@@ -606,10 +630,10 @@ struct ScriptEditView: View {
         generationError = nil
 
         // Empty editor: insert a starter template so the user knows how to use the feature.
-        let trimmed = scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = draftState.draft.scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             editorController.replaceAll(
-                with: scriptTemplateForShell(shellType),
+                with: scriptTemplateForShell(draftState.draft.shellType),
                 actionName: "Insert Template"
             )
             return
@@ -622,8 +646,8 @@ struct ScriptEditView: View {
     /// Calls the on-device Foundation Model to generate script code from the user's comments.
     @available(macOS 26, *)
     private func generateWithModel() {
-        let shell = shellType
-        let input = scriptContent
+        let shell = draftState.draft.shellType
+        let input = draftState.draft.scriptContent
         isGenerating = true
         generationError = nil
 
@@ -648,7 +672,7 @@ struct ScriptEditView: View {
                     """
 
                 let response = try await session.respond(to: prompt)
-                guard scriptContent == input else {
+                guard draftState.draft.scriptContent == input else {
                     generationError = "Script changed while generating. Generate again to use the latest content."
                     isGenerating = false
                     return
