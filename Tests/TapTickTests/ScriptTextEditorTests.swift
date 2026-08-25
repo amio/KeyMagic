@@ -6,6 +6,26 @@ import Testing
 @Suite("ScriptTextEditor")
 @MainActor
 struct ScriptTextEditorTests {
+    @Test("Editor keeps long lines unwrapped and provides horizontal scrolling")
+    func nonWrappingLayout() throws {
+        let scrollView = NSTextView.scrollableTextView()
+        let textView = try #require(scrollView.documentView as? NSTextView)
+        let textContainer = try #require(textView.textContainer)
+        let layoutManager = try #require(textView.layoutManager)
+        scrollView.frame = NSRect(x: 0, y: 0, width: 240, height: 120)
+        textView.string = String(repeating: "a", count: 200)
+
+        ScriptTextEditor.configureNonWrappingLayout(textView, in: scrollView)
+        ScriptTextEditor.resizeDocumentView(textView, in: scrollView)
+        layoutManager.ensureLayout(for: textContainer)
+        scrollView.layoutSubtreeIfNeeded()
+
+        #expect(scrollView.hasHorizontalScroller)
+        #expect(textView.textContainer?.widthTracksTextView == false)
+        #expect(layoutManager.usedRect(for: textContainer).width > scrollView.contentSize.width)
+        #expect(textView.frame.width > scrollView.documentVisibleRect.width)
+    }
+
     @Test("Loading a script establishes a clean saved baseline")
     func loadingDraftIsSaved() {
         let shortcut = Shortcut(

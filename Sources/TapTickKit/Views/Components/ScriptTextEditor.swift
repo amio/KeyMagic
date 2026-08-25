@@ -99,18 +99,44 @@ struct ScriptTextEditor: NSViewRepresentable {
         textView.writingToolsBehavior = .none
         textView.usesFindBar = true
         textView.isIncrementalSearchingEnabled = true
+        Self.configureNonWrappingLayout(textView, in: scrollView)
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
-        context.coordinator.attach(to: textView, controller: controller)
+        context.coordinator.attach(to: textView, in: scrollView, controller: controller)
         context.coordinator.highlightIfNeeded(textView)
 
         return scrollView
     }
 
+    static func configureNonWrappingLayout(_ textView: NSTextView, in scrollView: NSScrollView) {
+        scrollView.hasHorizontalScroller = true
+        textView.isHorizontallyResizable = true
+        textView.autoresizingMask = [.width, .height]
+        textView.textContainer?.size = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = false
+    }
+
+    static func resizeDocumentView(_ textView: NSTextView, in scrollView: NSScrollView) {
+        guard let textContainer = textView.textContainer, let layoutManager = textView.layoutManager else {
+            return
+        }
+
+        layoutManager.ensureLayout(for: textContainer)
+        let contentWidth =
+            layoutManager.usedRect(for: textContainer).maxX
+            + (textView.textContainerInset.width * 2)
+        let documentWidth = max(scrollView.contentSize.width, ceil(contentWidth))
+        guard textView.frame.width != documentWidth else { return }
+        textView.setFrameSize(NSSize(width: documentWidth, height: textView.frame.height))
+    }
+
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
-        context.coordinator.attach(to: textView, controller: controller)
+        context.coordinator.attach(to: textView, in: scrollView, controller: controller)
         if textView.string != text {
             let undoManager = controller.undoManager
             undoManager.disableUndoRegistration()
@@ -119,6 +145,7 @@ struct ScriptTextEditor: NSViewRepresentable {
             controller.refresh()
         }
         context.coordinator.highlightIfNeeded(textView)
+        context.coordinator.resizeDocumentView(textView)
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
@@ -131,6 +158,7 @@ struct ScriptTextEditor: NSViewRepresentable {
         var parent: ScriptTextEditor
 
         private weak var observedTextView: NSTextView?
+        private weak var observedScrollView: NSScrollView?
         private var observedUndoManager: UndoManager?
         private var highlightedText: String?
         private var highlightedShell: ShortcutAction.ShellType?
@@ -143,14 +171,22 @@ struct ScriptTextEditor: NSViewRepresentable {
             NotificationCenter.default.removeObserver(self)
         }
 
-        func attach(to textView: NSTextView, controller: ScriptTextEditorController) {
+        func attach(
+            to textView: NSTextView,
+            in scrollView: NSScrollView? = nil,
+            controller: ScriptTextEditorController
+        ) {
             controller.attach(to: textView)
-            guard observedTextView !== textView || observedUndoManager !== controller.undoManager else {
+            guard
+                observedTextView !== textView || observedScrollView !== scrollView
+                    || observedUndoManager !== controller.undoManager
+            else {
                 return
             }
 
             stopObservingUndoChanges()
             observedTextView = textView
+            observedScrollView = scrollView
             observedUndoManager = controller.undoManager
             NotificationCenter.default.addObserver(
                 self,
@@ -158,6 +194,16 @@ struct ScriptTextEditor: NSViewRepresentable {
                 name: Notification.Name.NSUndoManagerDidUndoChange,
                 object: controller.undoManager
             )
+            if let scrollView {
+                scrollView.contentView.postsFrameChangedNotifications = true
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(clipViewFrameDidChange),
+                    name: NSView.frameDidChangeNotification,
+                    object: scrollView.contentView
+                )
+                resizeDocumentView(textView)
+            }
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(undoManagerDidChange),
@@ -182,10 +228,16 @@ struct ScriptTextEditor: NSViewRepresentable {
             synchronizeText(from: textView)
         }
 
+        @objc private func clipViewFrameDidChange(_ notification: Notification) {
+            guard let textView = observedTextView else { return }
+            resizeDocumentView(textView)
+        }
+
         private func synchronizeText(from textView: NSTextView) {
             parent.text = textView.string
             parent.controller.refresh()
             highlightIfNeeded(textView)
+            resizeDocumentView(textView)
         }
 
         func highlightIfNeeded(_ textView: NSTextView) {
@@ -193,6 +245,11 @@ struct ScriptTextEditor: NSViewRepresentable {
             ShellSyntaxHighlighter.apply(to: textView, shell: parent.shell)
             highlightedText = textView.string
             highlightedShell = parent.shell
+        }
+
+        func resizeDocumentView(_ textView: NSTextView) {
+            guard let scrollView = observedScrollView else { return }
+            ScriptTextEditor.resizeDocumentView(textView, in: scrollView)
         }
 
         private func stopObservingUndoChanges() {
@@ -207,8 +264,16 @@ struct ScriptTextEditor: NSViewRepresentable {
                 name: Notification.Name.NSUndoManagerDidRedoChange,
                 object: observedUndoManager
             )
+            if let observedScrollView {
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: NSView.frameDidChangeNotification,
+                    object: observedScrollView.contentView
+                )
+            }
             self.observedUndoManager = nil
             observedTextView = nil
+            observedScrollView = nil
             highlightedText = nil
             highlightedShell = nil
         }
