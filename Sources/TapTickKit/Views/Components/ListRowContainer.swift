@@ -4,6 +4,7 @@ import SwiftUI
 /// Renders column labels with consistent caption styling without adding a tint
 /// layer that can bleed into nearby liquid glass surfaces.
 struct ListTableHeader<Content: View>: View {
+    var trailingPadding: CGFloat = 20
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -13,7 +14,8 @@ struct ListTableHeader<Content: View>: View {
         .font(.caption)
         .fontWeight(.medium)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 20)
+        .padding(.leading, 20)
+        .padding(.trailing, trailingPadding)
         .padding(.vertical, 6)
         .background(Color.clear)
         .overlay(alignment: .bottom) {
@@ -33,6 +35,8 @@ struct ListRowContainer<Content: View>: View {
     var accentBackground: Color = .clear
     /// Vertical padding inside the row. Defaults to 6; use 8 for rows with taller content.
     var verticalPadding: CGFloat = 6
+    /// Trailing padding after the final column. Defaults to the shared 20-point table inset.
+    var trailingPadding: CGFloat = 20
 
     @ViewBuilder let content: () -> Content
 
@@ -42,7 +46,8 @@ struct ListRowContainer<Content: View>: View {
         HStack(spacing: 0) {
             content()
         }
-        .padding(.horizontal, 20)
+        .padding(.leading, 20)
+        .padding(.trailing, trailingPadding)
         .padding(.vertical, verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(rowBackground)

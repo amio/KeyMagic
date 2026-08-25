@@ -1,6 +1,8 @@
 import FoundationModels
 import SwiftUI
 
+private let scriptHotkeyColumnWidth: CGFloat = 97
+
 /// The Scripts settings view: manages script-type shortcuts.
 /// Fixed two-panel layout: 240px list on the left, edit panel on the right.
 struct ScriptsView: View {
@@ -95,11 +97,11 @@ struct ScriptsView: View {
                 Spacer()
             } else {
                 // Header
-                ListTableHeader {
+                ListTableHeader(trailingPadding: 8) {
                     Text("Name")
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("Hotkey")
-                        .frame(width: 100, alignment: .leading)
+                        .frame(width: scriptHotkeyColumnWidth, alignment: .leading)
                 }
 
                 ScrollView {
@@ -240,13 +242,11 @@ private struct ScriptRow: View {
         ListRowContainer(
             isOdd: isOdd,
             accentBackground: isSelected ? Color.accentColor.opacity(0.12) : .clear,
-            verticalPadding: 6
+            verticalPadding: 6,
+            trailingPadding: 8
         ) {
-            // Name + icon + availability warning
+            // Name + availability warning
             HStack(spacing: 6) {
-                Image(systemName: shortcut.action.systemImage)
-                    .font(.caption)
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                 Text(shortcut.name)
                     .lineLimit(1)
                     .fontWeight(.medium)
@@ -272,7 +272,7 @@ private struct ScriptRow: View {
                 onClearHotkey: onClearHotkey,
                 checkConflict: checkConflict
             )
-            .frame(width: 100, alignment: .leading)
+            .frame(width: scriptHotkeyColumnWidth, alignment: .leading)
         }
         .opacity(shortcut.isEnabled ? 1.0 : 0.6)
     }
