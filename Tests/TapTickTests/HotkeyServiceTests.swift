@@ -65,37 +65,6 @@ struct HotkeyServiceTests {
         )
     }
 
-    @Test("Direct shortcut triggers use the script completion pipeline")
-    @MainActor
-    func directTriggerRunsAndRecordsLikeAHotkey() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("TapTickHotkeyService-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        let store = ShortcutStore(directory: directory)
-        let logStore = ScriptLogStore(directory: directory)
-        let shortcut = Shortcut(
-            name: "Trigger Test",
-            action: .runScript(script: "sleep 0.02; printf trigger", shell: .sh)
-        )
-        store.add(shortcut)
-
-        let service = HotkeyService()
-        service.onScriptCompleted = { [logStore] log in
-            logStore.record(log)
-        }
-        service.trigger(shortcut: shortcut, store: store)
-
-        for _ in 0..<100 where logStore.recentLogs.isEmpty {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-
-        #expect(store.shortcuts.first?.lastTriggeredAt != nil)
-        #expect(logStore.latestLog(for: shortcut.id)?.output == "trigger")
-        #expect(logStore.latestLog(for: shortcut.id)?.succeeded == true)
-        #expect(logStore.latestLog(for: shortcut.id)?.duration ?? 0 > 0)
-    }
-
     @MainActor
     private func restore(_ previous: Data?, in defaults: UserDefaults) {
         if let previous {

@@ -189,7 +189,8 @@ struct MenuBarTextControllerTests {
         let controller = MenuBarTextController(
             store: store,
             directory: directory,
-            runScript: { action in await runner.run(action) }
+            scriptRunner: ScriptRunner { command in await runner.run(command) },
+            publicationInterval: .milliseconds(10)
         )
         let slotID = controller.addSlot()
         controller.updateSlot(id: slotID) { slot in
@@ -208,7 +209,43 @@ struct MenuBarTextControllerTests {
         try await waitUntil { await runner.runCount == 2 }
 
         let actions = await runner.actions
-        #expect(Set(actions) == Set([top.action, bottom.action]))
+        #expect(Set(actions) == Set([top.action.scriptCommand, bottom.action.scriptCommand].compactMap { $0 }))
+    }
+
+    @Test("Publishes completed line results together on the shared cadence")
+    @MainActor
+    func publishesCompletedResultsTogether() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ShortcutStore(directory: directory)
+        let top = Shortcut(name: "Top", action: .runScript(script: "top", shell: .zsh))
+        let bottom = Shortcut(name: "Bottom", action: .runScript(script: "bottom", shell: .zsh))
+        store.add(top)
+        store.add(bottom)
+
+        let runner = ControlledScriptRunner()
+        let controller = MenuBarTextController(
+            store: store,
+            directory: directory,
+            scriptRunner: ScriptRunner { command in await runner.run(command) },
+            publicationInterval: .milliseconds(500)
+        )
+        let slotID = controller.addSlot()
+        controller.updateSlot(id: slotID) { slot in
+            slot.layout = .twoLines
+            slot.topLine.scriptID = top.id
+            slot.bottomLine.scriptID = bottom.id
+        }
+
+        controller.bootstrap()
+        try await waitUntil { await runner.runCount == 2 }
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(controller.renderedSlots.first?.contents == [.loading, .loading])
+
+        try await waitUntil {
+            controller.renderedSlots.first?.contents.map(\.text) == ["top", "bottom"]
+        }
     }
 
     @Test("Serializes bottom-line reactivation during execution")
@@ -227,7 +264,8 @@ struct MenuBarTextControllerTests {
         let controller = MenuBarTextController(
             store: store,
             directory: directory,
-            runScript: { action in await runner.run(action) }
+            scriptRunner: ScriptRunner { command in await runner.run(command) },
+            publicationInterval: .milliseconds(10)
         )
         let slotID = controller.addSlot()
         controller.updateSlot(id: slotID) { slot in
@@ -250,9 +288,9 @@ struct MenuBarTextControllerTests {
         try await waitUntil { await runner.runCount == 2 }
 
         let snapshot = await runner.snapshot()
-        #expect(snapshot.actions == [first.action, second.action])
+        #expect(snapshot.actions == [first.action.scriptCommand, second.action.scriptCommand].compactMap { $0 })
         #expect(snapshot.maximumConcurrentRuns == 1)
-        #expect(controller.renderedSlots.first?.contents.last?.text == "second")
+        try await waitUntil { controller.renderedSlots.first?.contents.last?.text == "second" }
     }
 
     private func makeDirectory() -> URL {
@@ -267,7 +305,7 @@ struct MenuBarTextControllerTests {
 }
 
 private actor ControlledScriptRunner {
-    private(set) var actions: [ShortcutAction] = []
+    private(set) var actions: [ScriptCommand] = []
     private(set) var maximumConcurrentRuns = 0
 
     private let blocksFirstRun: Bool
@@ -282,8 +320,8 @@ private actor ControlledScriptRunner {
         actions.count
     }
 
-    func run(_ action: ShortcutAction) async -> ScriptExecutionResult {
-        actions.append(action)
+    func run(_ command: ScriptCommand) async -> ScriptExecutionResult {
+        actions.append(command)
         activeRunCount += 1
         maximumConcurrentRuns = max(maximumConcurrentRuns, activeRunCount)
 
@@ -292,7 +330,7 @@ private actor ControlledScriptRunner {
         }
 
         activeRunCount -= 1
-        return ScriptExecutionResult(output: output(for: action), exitCode: 0)
+        return ScriptExecutionResult(output: output(for: command), exitCode: 0)
     }
 
     func releaseFirstRun() {
@@ -301,18 +339,16 @@ private actor ControlledScriptRunner {
         continuation?.resume()
     }
 
-    func snapshot() -> (actions: [ShortcutAction], maximumConcurrentRuns: Int) {
+    func snapshot() -> (actions: [ScriptCommand], maximumConcurrentRuns: Int) {
         (actions, maximumConcurrentRuns)
     }
 
-    private func output(for action: ShortcutAction) -> String {
-        switch action {
-        case .runScript(let script, _):
+    private func output(for command: ScriptCommand) -> String {
+        switch command {
+        case .inline(let script, _):
             script
-        case .runScriptFile(let path, _):
+        case .file(let path, _):
             path
-        case .launchApp:
-            ""
         }
     }
 }
@@ -321,10 +357,11 @@ private enum MenuBarTextTestError: Error {
     case timedOut
 }
 
+@MainActor
 private func waitUntil(
-    _ condition: @escaping @Sendable () async -> Bool
+    _ condition: @escaping @MainActor @Sendable () async -> Bool
 ) async throws {
-    for _ in 0..<100 {
+    for _ in 0..<200 {
         if await condition() {
             return
         }

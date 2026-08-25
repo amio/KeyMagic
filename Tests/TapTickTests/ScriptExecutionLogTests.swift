@@ -93,7 +93,7 @@ struct ScriptExecutionLogTests {
         #expect(minutes.durationText == "2 min, 5 sec")
     }
 
-    @Test("Log store keeps the 12 most recent executions in completion order")
+    @Test("Log store keeps the 32 most recent executions per script in completion order")
     @MainActor
     func logStoreKeepsRecentHistory() {
         let directory = makeDirectory()
@@ -101,7 +101,7 @@ struct ScriptExecutionLogTests {
 
         let store = ScriptLogStore(directory: directory)
         let shortcutID = UUID()
-        let logs = (0..<14).map { index in
+        let logs = (0..<34).map { index in
             ScriptExecutionLog(
                 shortcutID: shortcutID,
                 output: "run \(index)",
@@ -115,8 +115,42 @@ struct ScriptExecutionLogTests {
         }
 
         #expect(store.recentLogs.count == ScriptLogStore.recentLogLimit)
-        #expect(store.recentLogs.map(\.output) == (2..<14).reversed().map { "run \($0)" })
-        #expect(store.latestLog(for: shortcutID)?.output == "run 13")
+        #expect(store.recentLogs.map(\.output) == (2..<34).reversed().map { "run \($0)" })
+        #expect(store.recentLogs(for: shortcutID).first?.output == "run 33")
+    }
+
+    @Test("One script's history does not evict another script's logs")
+    @MainActor
+    func logStoreLimitsEachScriptIndependently() {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ScriptLogStore(directory: directory)
+        let busyShortcutID = UUID()
+        let otherShortcutID = UUID()
+        store.record(
+            ScriptExecutionLog(
+                shortcutID: otherShortcutID,
+                output: "other",
+                exitCode: 0,
+                timestamp: Date(timeIntervalSince1970: 0)
+            )
+        )
+
+        for index in 0..<34 {
+            store.record(
+                ScriptExecutionLog(
+                    shortcutID: busyShortcutID,
+                    output: "busy \(index)",
+                    exitCode: 0,
+                    timestamp: Date(timeIntervalSince1970: TimeInterval(index + 1))
+                )
+            )
+        }
+
+        #expect(store.recentLogs(for: busyShortcutID).count == ScriptLogStore.recentLogLimit)
+        #expect(store.recentLogs(for: otherShortcutID).map(\.output) == ["other"])
+        #expect(store.recentLogs.count == ScriptLogStore.recentLogLimit + 1)
     }
 
     @Test("Log store keeps repeated executions while exposing the latest per shortcut")
@@ -144,8 +178,7 @@ struct ScriptExecutionLogTests {
         store.record(second)
 
         #expect(store.recentLogs.map(\.output) == ["second", "first"])
-        #expect(store.logs.count == 1)
-        #expect(store.latestLog(for: shortcutID)?.output == "second")
+        #expect(store.recentLogs(for: shortcutID).first?.output == "second")
     }
 
     @Test("Log store persists history and filters it by shortcut")
@@ -178,7 +211,35 @@ struct ScriptExecutionLogTests {
         let reloadedStore = ScriptLogStore(directory: directory)
         #expect(reloadedStore.recentLogs.map(\.output) == ["current", "other"])
         #expect(reloadedStore.recentLogs(for: currentShortcutID).map(\.output) == ["current"])
-        #expect(reloadedStore.latestLog(for: currentShortcutID)?.duration == 0.25)
+        #expect(reloadedStore.recentLogs(for: currentShortcutID).first?.duration == 0.25)
+    }
+
+    @Test("Existing flat log records decode without duration and stay flat when encoded")
+    func flatStorageCompatibility() throws {
+        let shortcutID = UUID()
+        let data = try #require(
+            """
+            {
+              "shortcutID": "\(shortcutID.uuidString)",
+              "output": "legacy",
+              "exitCode": 0,
+              "timestamp": 10
+            }
+            """.data(using: .utf8)
+        )
+
+        let log = try JSONDecoder().decode(ScriptExecutionLog.self, from: data)
+        #expect(log.shortcutID == shortcutID)
+        #expect(log.output == "legacy")
+        #expect(log.duration == 0)
+
+        let encoded = try JSONEncoder().encode(log)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        #expect(object["result"] == nil)
+        #expect(object["output"] as? String == "legacy")
+        #expect(object["duration"] as? Double == 0)
     }
 
     private func makeDirectory() -> URL {

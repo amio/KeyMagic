@@ -18,8 +18,9 @@ final class AppState: ObservableObject {
     let hotkeyService = HotkeyService()
     let loginItemManager = LoginItemManager()
     let updateService = UpdateService()
-    let scriptLogStore = ScriptLogStore()
-    let scriptOutputPresenter = ScriptOutputPresenter()
+    let scriptLogStore: ScriptLogStore
+    let scriptOutputPresenter: ScriptOutputPresenter
+    let shortcutExecutor: ShortcutExecutor
     let menuBarTextController: MenuBarTextController
 
     /// Native NSStatusItem + NSMenu controller — retained for the lifetime of the app.
@@ -29,7 +30,16 @@ final class AppState: ObservableObject {
         let sync = CloudSyncService()
         self.cloudSync = sync
         let store = ShortcutStore(cloudSync: sync)
+        let scriptLogStore = ScriptLogStore()
+        let scriptOutputPresenter = ScriptOutputPresenter()
         self.store = store
+        self.scriptLogStore = scriptLogStore
+        self.scriptOutputPresenter = scriptOutputPresenter
+        self.shortcutExecutor = ShortcutExecutor(
+            store: store,
+            logStore: scriptLogStore,
+            outputPresenter: scriptOutputPresenter
+        )
         self.menuBarTextController = MenuBarTextController(store: store)
     }
 }
@@ -85,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Install the native menu bar controller now that NSApplication is fully initialised.
         appState.menuBarController = MenuBarController(
             store: appState.store,
-            hotkeyService: appState.hotkeyService,
+            shortcutExecutor: appState.shortcutExecutor,
             updateService: appState.updateService,
             menuBarTextController: appState.menuBarTextController
         )
@@ -98,10 +108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         appState.utilities.bootstrap()
 
-        appState.hotkeyService.onScriptCompleted = {
-            [weak logStore = appState.scriptLogStore, weak presenter = appState.scriptOutputPresenter] log in
-            logStore?.record(log)
-            presenter?.show(log: log)
+        appState.hotkeyService.onShortcutTriggered = {
+            [weak shortcutExecutor = appState.shortcutExecutor] shortcutID in
+            shortcutExecutor?.execute(shortcutID: shortcutID)
         }
 
         appState.hotkeyService.start(
@@ -368,6 +377,7 @@ struct TapTickApp: App {
                 .environment(appState.cloudSync)
                 .environment(appState.updateService)
                 .environment(appState.scriptLogStore)
+                .environment(appState.shortcutExecutor)
                 .environment(appState.menuBarTextController)
                 .background(
                     SettingsWindowEscapeShortcut {

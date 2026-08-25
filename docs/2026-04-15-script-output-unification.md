@@ -10,9 +10,9 @@
 
 - Every inline-script run now records one `ScriptExecutionLog` that carries both the raw output and the shared display helpers used by the UI.
 - The bottom-of-screen subtitle remains a compact preview, but it now uses the same last log as the Scripts settings `Output` button instead of its own formatting branch.
-- The Scripts `Run` button and global hotkey execution both store their result in the same in-memory log store, so the detail viewer always shows the latest full output for that shortcut.
+- The Scripts `Run` button and global hotkey execution both store their result in the same persisted, per-script history, so the detail viewer always shows the latest full output for that shortcut.
 
 ## Technical Spec
 
-- `ShortcutExecutor` now owns the shared script-process execution helper used by both hotkey dispatch and the Scripts test-run flow, eliminating the duplicated `Process` + `Pipe` logic.
+- `ScriptRunner` owns the shared context-free process boundary, while the process-lifetime `ShortcutExecutor` owns trigger metadata, explicit logs, active-run state, and subtitle presentation for hotkey and Scripts test runs.
 - `ScriptExecutionLog` centralizes the detail-text and subtitle-preview rules, including empty-output and exit-code fallbacks, while `ScriptOutputPresenter` only renders the preview it receives from that model.

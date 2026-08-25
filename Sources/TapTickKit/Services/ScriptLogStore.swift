@@ -1,66 +1,15 @@
 import Foundation
 import Observation
 
-/** Captured stdout/stderr and exit status for a single script run. */
-struct ScriptExecutionResult: Sendable {
-    let output: String
-    let exitCode: Int32
-    let duration: TimeInterval
-
-    init(output: String, exitCode: Int32, duration: TimeInterval = 0) {
-        self.output = output
-        self.exitCode = exitCode
-        self.duration = duration
-    }
-
-    var succeeded: Bool { exitCode == 0 }
-
-    private var trimmedOutput: String {
-        output.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    var detailText: String {
-        if !trimmedOutput.isEmpty {
-            return succeeded ? trimmedOutput : "\(trimmedOutput)\n\n[Exit code: \(exitCode)]"
-        }
-
-        return succeeded ? "(No output)" : "Script failed with exit code \(exitCode)"
-    }
-
-    private var overlaySource: String? {
-        if !trimmedOutput.isEmpty {
-            return trimmedOutput
-        }
-
-        return succeeded ? nil : "Script failed with exit code \(exitCode)"
-    }
-
-    func subtitleText(maxLines: Int = 6, maxLength: Int = 480) -> String? {
-        guard let overlaySource else { return nil }
-
-        let lines =
-            overlaySource
-            .components(separatedBy: .newlines)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        var result = Array(lines.suffix(maxLines)).joined(separator: "\n")
-
-        guard !result.isEmpty else { return nil }
-
-        if result.count > maxLength {
-            result = "…" + String(result.suffix(maxLength - 1))
-        }
-
-        return result
-    }
-}
-
 /// Record of a single script execution, stored for debugging.
 public struct ScriptExecutionLog: Codable, Identifiable, Sendable {
     public let shortcutID: UUID
-    public let output: String
-    public let exitCode: Int32
-    public let duration: TimeInterval
     public let timestamp: Date
+    let result: ScriptExecutionResult
+
+    public var output: String { result.output }
+    public var exitCode: Int32 { result.exitCode }
+    public var duration: TimeInterval { result.duration }
 
     public init(
         shortcutID: UUID,
@@ -70,17 +19,26 @@ public struct ScriptExecutionLog: Codable, Identifiable, Sendable {
         duration: TimeInterval = 0
     ) {
         self.shortcutID = shortcutID
-        self.output = output
-        self.exitCode = exitCode
         self.timestamp = timestamp
-        self.duration = duration
+        self.result = ScriptExecutionResult(
+            output: output,
+            exitCode: exitCode,
+            startedAt: timestamp,
+            duration: duration
+        )
+    }
+
+    init(shortcutID: UUID, result: ScriptExecutionResult) {
+        self.shortcutID = shortcutID
+        self.timestamp = result.startedAt
+        self.result = result
     }
 
     public var id: String {
         "\(shortcutID.uuidString)-\(timestamp.timeIntervalSinceReferenceDate)"
     }
 
-    public var succeeded: Bool { exitCode == 0 }
+    public var succeeded: Bool { result.succeeded }
 
     public var durationText: String {
         let safeDuration = max(0, duration)
@@ -105,16 +63,42 @@ public struct ScriptExecutionLog: Codable, Identifiable, Sendable {
         result.subtitleText()
     }
 
-    var result: ScriptExecutionResult {
-        ScriptExecutionResult(output: output, exitCode: exitCode, duration: duration)
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        shortcutID = try container.decode(UUID.self, forKey: .shortcutID)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        result = ScriptExecutionResult(
+            output: try container.decode(String.self, forKey: .output),
+            exitCode: try container.decode(Int32.self, forKey: .exitCode),
+            startedAt: timestamp,
+            duration: try container.decodeIfPresent(TimeInterval.self, forKey: .duration) ?? 0
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(shortcutID, forKey: .shortcutID)
+        try container.encode(output, forKey: .output)
+        try container.encode(exitCode, forKey: .exitCode)
+        try container.encode(duration, forKey: .duration)
+        try container.encode(timestamp, forKey: .timestamp)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case shortcutID
+        case output
+        case exitCode
+        case duration
+        case timestamp
     }
 }
 
-/// Owns the bounded, persisted execution history and the latest-log lookup used by the UI.
+/// Owns the bounded, persisted execution history used by the UI.
 @Observable
 @MainActor
 public final class ScriptLogStore: @unchecked Sendable {
-    public static let recentLogLimit = 12
+    /// Maximum persisted executions retained independently for each script.
+    public static let recentLogLimit = 32
 
     @ObservationIgnored private let fileURL: URL
 
@@ -134,11 +118,9 @@ public final class ScriptLogStore: @unchecked Sendable {
         loadFromDisk()
     }
 
-    public private(set) var logs: [UUID: ScriptExecutionLog] = [:]
     public private(set) var recentLogs: [ScriptExecutionLog] = []
 
     public func record(_ log: ScriptExecutionLog) {
-        logs[log.shortcutID] = log
         recentLogs.removeAll { $0.id == log.id }
         recentLogs.insert(log, at: 0)
         trimHistory()
@@ -149,13 +131,16 @@ public final class ScriptLogStore: @unchecked Sendable {
         recentLogs.filter { $0.shortcutID == shortcutID }
     }
 
-    public func latestLog(for shortcutID: UUID) -> ScriptExecutionLog? {
-        logs[shortcutID]
-    }
-
     private func trimHistory() {
-        guard recentLogs.count > Self.recentLogLimit else { return }
-        recentLogs.removeLast(recentLogs.count - Self.recentLogLimit)
+        var retainedCountByShortcut: [UUID: Int] = [:]
+        recentLogs.removeAll { log in
+            let retainedCount = retainedCountByShortcut[log.shortcutID, default: 0]
+            guard retainedCount >= Self.recentLogLimit else {
+                retainedCountByShortcut[log.shortcutID] = retainedCount + 1
+                return false
+            }
+            return true
+        }
     }
 
     private func loadFromDisk() {
@@ -164,11 +149,8 @@ public final class ScriptLogStore: @unchecked Sendable {
         do {
             let data = try Data(contentsOf: fileURL)
             let archive = try JSONDecoder().decode(ScriptLogArchive.self, from: data)
-            recentLogs = Array(archive.logs.prefix(Self.recentLogLimit))
-
-            for log in recentLogs.reversed() {
-                logs[log.shortcutID] = log
-            }
+            recentLogs = archive.logs
+            trimHistory()
         } catch {
             print("TapTick: Failed to load script logs: \(error)")
         }

@@ -10,7 +10,8 @@ struct ShortcutExecutorTests {
         let app = TestRunningApplication(activationPolicy: .regular, isActive: true)
         var openedURL: URL?
 
-        let executor = ShortcutExecutor(
+        let context = makeContext(
+            action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"),
             applicationLauncher: ApplicationLauncher(
                 runningApplications: { _ in [app.handle] },
                 applicationURL: { _ in URL(fileURLWithPath: "/Applications/Test.app") },
@@ -20,8 +21,9 @@ struct ShortcutExecutorTests {
                 }
             )
         )
+        defer { context.removeDirectory() }
 
-        executor.execute(action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"))
+        context.executor.execute(shortcutID: context.shortcut.id)
 
         #expect(app.didHide)
         #expect(app.didUnhide == false)
@@ -34,7 +36,8 @@ struct ShortcutExecutorTests {
         let app = TestRunningApplication(activationPolicy: .regular)
         var openedURL: URL?
 
-        let executor = ShortcutExecutor(
+        let context = makeContext(
+            action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"),
             applicationLauncher: ApplicationLauncher(
                 runningApplications: { _ in [app.handle] },
                 applicationURL: { _ in URL(fileURLWithPath: "/Applications/Test.app") },
@@ -44,8 +47,9 @@ struct ShortcutExecutorTests {
                 }
             )
         )
+        defer { context.removeDirectory() }
 
-        executor.execute(action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"))
+        context.executor.execute(shortcutID: context.shortcut.id)
 
         #expect(app.didUnhide)
         #expect(app.activationOptions == [.activateAllWindows])
@@ -58,7 +62,8 @@ struct ShortcutExecutorTests {
         let expectedURL = URL(fileURLWithPath: "/Applications/Test.app")
         var openedURL: URL?
 
-        let executor = ShortcutExecutor(
+        let context = makeContext(
+            action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"),
             applicationLauncher: ApplicationLauncher(
                 runningApplications: { _ in [helper.handle] },
                 applicationURL: { _ in expectedURL },
@@ -68,8 +73,9 @@ struct ShortcutExecutorTests {
                 }
             )
         )
+        defer { context.removeDirectory() }
 
-        executor.execute(action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"))
+        context.executor.execute(shortcutID: context.shortcut.id)
 
         #expect(helper.didUnhide == false)
         #expect(helper.activationOptions == nil)
@@ -82,7 +88,8 @@ struct ShortcutExecutorTests {
         let expectedURL = URL(fileURLWithPath: "/Applications/Test.app")
         var openedURL: URL?
 
-        let executor = ShortcutExecutor(
+        let context = makeContext(
+            action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"),
             applicationLauncher: ApplicationLauncher(
                 runningApplications: { _ in [app.handle] },
                 applicationURL: { _ in expectedURL },
@@ -92,13 +99,95 @@ struct ShortcutExecutorTests {
                 }
             )
         )
+        defer { context.removeDirectory() }
 
-        executor.execute(action: .launchApp(bundleIdentifier: "com.test.app", appName: "Test"))
+        context.executor.execute(shortcutID: context.shortcut.id)
 
         #expect(app.didUnhide)
         #expect(app.activationOptions == [.activateAllWindows])
         #expect(openedURL == expectedURL)
     }
+
+    @Test("Explicit script execution owns progress, logging, trigger metadata, and presentation")
+    func explicitScriptExecutionPipeline() async throws {
+        let startedAt = Date(timeIntervalSince1970: 100)
+        let result = ScriptExecutionResult(
+            output: "trigger",
+            exitCode: 0,
+            startedAt: startedAt,
+            duration: 0.25
+        )
+        let presenter = TestScriptPresentationRecorder()
+        let context = makeContext(
+            action: .runScript(script: "printf trigger", shell: .sh),
+            scriptRunner: ScriptRunner { _ in result },
+            presentOutput: { log in presenter.logs.append(log) }
+        )
+        defer { context.removeDirectory() }
+
+        let runID = try #require(context.executor.execute(shortcutID: context.shortcut.id))
+        #expect(context.executor.isRunning(runID: runID))
+
+        for _ in 0..<100 where context.executor.isRunning(runID: runID) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let log = try #require(context.logStore.recentLogs(for: context.shortcut.id).first)
+        #expect(!context.executor.isRunning(runID: runID))
+        #expect(context.store.shortcuts.first?.lastTriggeredAt != nil)
+        #expect(log.output == "trigger")
+        #expect(log.timestamp == startedAt)
+        #expect(log.duration == 0.25)
+        #expect(presenter.logs.map(\.id) == [log.id])
+    }
+
+    private func makeContext(
+        action: ShortcutAction,
+        scriptRunner: ScriptRunner = ScriptRunner { _ in
+            ScriptExecutionResult(output: "", exitCode: 0)
+        },
+        presentOutput: @escaping @MainActor @Sendable (ScriptExecutionLog) -> Void = { _ in },
+        applicationLauncher: ApplicationLauncher = .live
+    ) -> ExecutionTestContext {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickShortcutExecutor-\(UUID().uuidString)")
+        let store = ShortcutStore(directory: directory)
+        let logStore = ScriptLogStore(directory: directory)
+        let shortcut = Shortcut(name: "Test", action: action)
+        store.add(shortcut)
+        let executor = ShortcutExecutor(
+            store: store,
+            scriptRunner: scriptRunner,
+            logStore: logStore,
+            presentOutput: presentOutput,
+            applicationLauncher: applicationLauncher
+        )
+        return ExecutionTestContext(
+            directory: directory,
+            store: store,
+            logStore: logStore,
+            shortcut: shortcut,
+            executor: executor
+        )
+    }
+}
+
+@MainActor
+private struct ExecutionTestContext {
+    let directory: URL
+    let store: ShortcutStore
+    let logStore: ScriptLogStore
+    let shortcut: Shortcut
+    let executor: ShortcutExecutor
+
+    func removeDirectory() {
+        try? FileManager.default.removeItem(at: directory)
+    }
+}
+
+@MainActor
+private final class TestScriptPresentationRecorder {
+    var logs: [ScriptExecutionLog] = []
 }
 
 private final class TestRunningApplication {

@@ -12,7 +12,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
     private var statusItem: NSStatusItem?
     private var statusContentView: MenuBarStatusContentView?
     private let store: ShortcutStore
-    private let hotkeyService: HotkeyService
+    private let shortcutExecutor: ShortcutExecutor
     private let updateService: UpdateService
     private let menuBarTextController: MenuBarTextController
 
@@ -28,12 +28,12 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
 
     public init(
         store: ShortcutStore,
-        hotkeyService: HotkeyService,
+        shortcutExecutor: ShortcutExecutor,
         updateService: UpdateService,
         menuBarTextController: MenuBarTextController
     ) {
         self.store = store
-        self.hotkeyService = hotkeyService
+        self.shortcutExecutor = shortcutExecutor
         self.updateService = updateService
         self.menuBarTextController = menuBarTextController
         super.init()
@@ -308,10 +308,8 @@ public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Senda
     // MARK: - Actions
 
     @objc private func triggerShortcut(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID,
-            let shortcut = store.shortcuts.first(where: { $0.id == id })
-        else { return }
-        hotkeyService.trigger(shortcut: shortcut, store: store)
+        guard let shortcutID = sender.representedObject as? UUID else { return }
+        shortcutExecutor.execute(shortcutID: shortcutID)
     }
 
     @objc private func checkForUpdates() {

@@ -1,26 +1,72 @@
 import Cocoa
 import Foundation
+import Observation
 
-/// Executes shortcut actions (toggle app visibility/focus, run scripts).
+/**
+ Owns user-initiated shortcut execution for the process lifetime.
+
+ Hotkeys, menu items, and Editor Run all enter here. Background menu-bar refreshes intentionally
+ bypass this policy owner and reuse only `ScriptRunner` so they cannot affect explicit logs or HUDs.
+ */
 @MainActor
-final class ShortcutExecutor {
+@Observable
+public final class ShortcutExecutor {
+    @ObservationIgnored private let store: ShortcutStore
+    @ObservationIgnored private let scriptRunner: ScriptRunner
+    @ObservationIgnored private let logStore: ScriptLogStore
+    @ObservationIgnored private let presentOutput: @MainActor @Sendable (ScriptExecutionLog) -> Void
     private let applicationLauncher: ApplicationLauncher
 
-    /// Called on the main actor after a script finishes with its captured output.
-    var onScriptCompleted: (@MainActor @Sendable (ScriptExecutionLog) -> Void)?
+    public private(set) var activeRunIDs: Set<UUID> = []
 
-    init(applicationLauncher: ApplicationLauncher = .live) {
+    public convenience init(
+        store: ShortcutStore,
+        logStore: ScriptLogStore,
+        outputPresenter: ScriptOutputPresenter
+    ) {
+        self.init(
+            store: store,
+            scriptRunner: .live,
+            logStore: logStore,
+            presentOutput: { log in outputPresenter.show(log: log) },
+            applicationLauncher: .live
+        )
+    }
+
+    init(
+        store: ShortcutStore,
+        scriptRunner: ScriptRunner,
+        logStore: ScriptLogStore,
+        presentOutput: @escaping @MainActor @Sendable (ScriptExecutionLog) -> Void,
+        applicationLauncher: ApplicationLauncher = .live
+    ) {
+        self.store = store
+        self.scriptRunner = scriptRunner
+        self.logStore = logStore
+        self.presentOutput = presentOutput
         self.applicationLauncher = applicationLauncher
     }
 
-    /// Execute the given action, optionally associating it with a shortcut for logging.
-    func execute(action: ShortcutAction, shortcutID: UUID? = nil) {
-        switch action {
+    /** Executes the latest stored action and returns an ID for an asynchronous script run. */
+    @discardableResult
+    public func execute(shortcutID: UUID) -> UUID? {
+        guard let shortcut = store.shortcuts.first(where: { $0.id == shortcutID }) else {
+            return nil
+        }
+
+        store.markTriggered(id: shortcutID)
+        switch shortcut.action {
         case .launchApp(let bundleIdentifier, _):
             toggleOrLaunchApp(bundleIdentifier: bundleIdentifier)
+            return nil
         case .runScript, .runScriptFile:
-            runScript(action: action, shortcutID: shortcutID)
+            guard let command = shortcut.action.scriptCommand else { return nil }
+            return runScript(command: command, shortcutID: shortcutID)
         }
+    }
+
+    public func isRunning(runID: UUID) -> Bool {
+        activeRunIDs.contains(runID)
     }
 
     // MARK: - Toggle App Visibility / Focus
@@ -84,84 +130,21 @@ final class ShortcutExecutor {
 
     // MARK: - Run Script
 
-    private func runScript(action: ShortcutAction, shortcutID: UUID?) {
-        let callback = onScriptCompleted
-        Task.detached(priority: .userInitiated) {
-            let result = await Self.executeScript(action: action)
-            if let shortcutID, let callback {
-                let log = ScriptExecutionLog(
-                    shortcutID: shortcutID,
-                    output: result.output,
-                    exitCode: result.exitCode,
-                    timestamp: Date(),
-                    duration: result.duration
-                )
-                await callback(log)
-            }
+    private func runScript(command: ScriptCommand, shortcutID: UUID) -> UUID {
+        let runID = UUID()
+        activeRunIDs.insert(runID)
+        let scriptRunner = scriptRunner
+
+        Task { [weak self, scriptRunner] in
+            let result = await scriptRunner.run(command)
+            guard let self else { return }
+
+            activeRunIDs.remove(runID)
+            let log = ScriptExecutionLog(shortcutID: shortcutID, result: result)
+            logStore.record(log)
+            presentOutput(log)
         }
-    }
-
-    nonisolated static func executeScript(action: ShortcutAction) async -> ScriptExecutionResult {
-        let startedAt = DispatchTime.now().uptimeNanoseconds
-        let elapsed: () -> TimeInterval = {
-            TimeInterval(DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000_000
-        }
-        let process = Process()
-        let pipe = Pipe()
-
-        switch action {
-        case .runScript(let script, let shell):
-            process.executableURL = URL(fileURLWithPath: shell.rawValue)
-            process.arguments = ["-c", script]
-        case .runScriptFile(let path, let shell):
-            let expandedPath = NSString(string: path).expandingTildeInPath
-            guard FileManager.default.fileExists(atPath: expandedPath) else {
-                print("TapTick: Script file not found: \(expandedPath)")
-                return ScriptExecutionResult(
-                    output: "Script file not found: \(expandedPath)",
-                    exitCode: -1,
-                    duration: elapsed()
-                )
-            }
-
-            process.executableURL = URL(fileURLWithPath: shell.rawValue)
-            process.arguments = [expandedPath]
-        case .launchApp:
-            return ScriptExecutionResult(
-                output: "Error: Not a script action.",
-                exitCode: -1,
-                duration: elapsed()
-            )
-        }
-
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            let exitCode = process.terminationStatus
-
-            if exitCode != 0 {
-                print("TapTick: Script exited with code \(exitCode)")
-            }
-
-            return ScriptExecutionResult(
-                output: output,
-                exitCode: exitCode,
-                duration: elapsed()
-            )
-        } catch {
-            print("TapTick: Failed to run script: \(error)")
-            return ScriptExecutionResult(
-                output: "Error: \(error.localizedDescription)",
-                exitCode: -1,
-                duration: elapsed()
-            )
-        }
+        return runID
     }
 }
 

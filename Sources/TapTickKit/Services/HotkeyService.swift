@@ -25,13 +25,10 @@ public final class HotkeyService: @unchecked Sendable {
 
     private var store: ShortcutStore?
     private var utilities: UtilitiesController?
-    private var executor: ShortcutExecutor?
     private var eventHandlerRef: EventHandlerRef?
 
-    /// Forwarded to each new `ShortcutExecutor` created by `start()`.
-    public var onScriptCompleted: (@MainActor @Sendable (ScriptExecutionLog) -> Void)? {
-        didSet { executor?.onScriptCompleted = onScriptCompleted }
-    }
+    /// Delivers a registered user-shortcut ID to the process-lifetime execution owner.
+    public var onShortcutTriggered: (@MainActor @Sendable (UUID) -> Void)?
 
     static let settingsWindowHotkeyDefaultsKey = "settingsWindowHotkey"
     static let defaultSettingsWindowHotkey = KeyCombo(
@@ -47,8 +44,6 @@ public final class HotkeyService: @unchecked Sendable {
         if let utilities {
             self.utilities = utilities
         }
-        self.executor = ShortcutExecutor()
-        executor?.onScriptCompleted = onScriptCompleted
         rebuildRegistrations(store: store)
     }
 
@@ -62,11 +57,6 @@ public final class HotkeyService: @unchecked Sendable {
     public func restart(store: ShortcutStore) {
         stop()
         start(store: store)
-    }
-
-    /// Trigger a shortcut action directly (e.g. from menu bar click).
-    func trigger(shortcut: Shortcut, store: ShortcutStore) {
-        dispatch(shortcut: shortcut, store: store)
     }
 
     /// Returns true when a combo conflicts with either a user shortcut or the reserved settings hotkey.
@@ -214,10 +204,10 @@ public final class HotkeyService: @unchecked Sendable {
         switch registration.action {
         case .shortcut(let shortcutID):
             guard let store,
-                let shortcut = store.shortcuts.first(where: { $0.id == shortcutID })
+                store.shortcuts.contains(where: { $0.id == shortcutID })
             else { return }
 
-            dispatch(shortcut: shortcut, store: store)
+            onShortcutTriggered?(shortcutID)
 
         case .toggleSettingsWindow:
             NotificationCenter.default.post(name: .toggleSettingsWindow, object: nil)
@@ -225,25 +215,6 @@ public final class HotkeyService: @unchecked Sendable {
         case .toggleUtility(let featureID, let action):
             utilities?.handleHotkey(for: featureID, action: action)
         }
-    }
-
-    /// Owns the complete shortcut-trigger side effect shared by Carbon events and
-    /// explicit UI triggers: update local trigger metadata, then execute the
-    /// current action through the process-lifetime executor.
-    private func dispatch(shortcut: Shortcut, store: ShortcutStore) {
-        store.markTriggered(id: shortcut.id)
-
-        let exec: ShortcutExecutor
-        if let executor {
-            exec = executor
-        } else {
-            let newExecutor = ShortcutExecutor()
-            newExecutor.onScriptCompleted = onScriptCompleted
-            executor = newExecutor
-            exec = newExecutor
-        }
-
-        exec.execute(action: shortcut.action, shortcutID: shortcut.id)
     }
 
     private func rebuildActiveRegistrationsIfPossible() {

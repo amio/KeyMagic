@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Owns menu bar slot persistence, resolved content, and one serial worker per configured line.
+/// Owns menu bar slot persistence, serial line workers, and shared publication of resolved content.
 @MainActor
 @Observable
 public final class MenuBarTextController {
@@ -10,9 +10,12 @@ public final class MenuBarTextController {
 
     @ObservationIgnored private let store: ShortcutStore
     @ObservationIgnored private let fileURL: URL
-    @ObservationIgnored private let runScript: @Sendable (ShortcutAction) async -> ScriptExecutionResult
+    @ObservationIgnored private let scriptRunner: ScriptRunner
+    @ObservationIgnored private let publicationInterval: Duration
     @ObservationIgnored private var isBootstrapped = false
     @ObservationIgnored private var refreshJobs: [MenuBarTextLineKey: MenuBarTextRefreshJob] = [:]
+    @ObservationIgnored private var pendingContentByLineKey: [MenuBarTextLineKey: MenuBarTextPendingContent] = [:]
+    @ObservationIgnored private var publicationTask: Task<Void, Never>?
 
     /** Configured slots rendered beside the icon in the shared menu bar button. */
     var renderedSlots: [MenuBarTextRenderedSlot] {
@@ -31,14 +34,15 @@ public final class MenuBarTextController {
         self.init(
             store: store,
             directory: directory,
-            runScript: ShortcutExecutor.executeScript
+            scriptRunner: .live
         )
     }
 
     init(
         store: ShortcutStore,
         directory: URL? = nil,
-        runScript: @escaping @Sendable (ShortcutAction) async -> ScriptExecutionResult
+        scriptRunner: ScriptRunner,
+        publicationInterval: Duration = .seconds(1)
     ) {
         let baseDirectory =
             directory
@@ -55,7 +59,8 @@ public final class MenuBarTextController {
         let fileURL = baseDirectory.appendingPathComponent("menu-bar-text.json")
         self.store = store
         self.fileURL = fileURL
-        self.runScript = runScript
+        self.scriptRunner = scriptRunner
+        self.publicationInterval = publicationInterval
         self.slots = Self.loadConfiguration(from: fileURL)?.slots ?? []
     }
 
@@ -63,12 +68,14 @@ public final class MenuBarTextController {
         for job in refreshJobs.values {
             job.task.cancel()
         }
+        publicationTask?.cancel()
     }
 
     public func bootstrap() {
         guard !isBootstrapped else { return }
         isBootstrapped = true
         reconcileRefreshJobs()
+        startContentPublication()
     }
 
     @discardableResult
@@ -164,6 +171,10 @@ public final class MenuBarTextController {
                 definition: definition
             )
         }
+
+        pendingContentByLineKey = pendingContentByLineKey.filter { lineKey, pendingContent in
+            definitions[lineKey] == pendingContent.definition
+        }
     }
 
     private func activeRefreshDefinitions() -> [MenuBarTextLineKey: MenuBarTextRefreshDefinition] {
@@ -191,8 +202,8 @@ public final class MenuBarTextController {
             lineKey: lineKey,
             definition: definition
         )
-        let runScript = runScript
-        let task = Task { [weak self, state, runScript] in
+        let scriptRunner = scriptRunner
+        let task = Task { [weak self, state, scriptRunner] in
             while !Task.isCancelled, !state.isStopped {
                 guard let definition = state.definition else {
                     await state.suspend(whileDefinitionIs: nil)
@@ -201,8 +212,8 @@ public final class MenuBarTextController {
                 guard self != nil else { return }
 
                 let content: MenuBarTextContent
-                if let action = self?.scriptAction(for: definition.scriptID) {
-                    content = .scriptResult(await runScript(action))
+                if let command = self?.scriptCommand(for: definition.scriptID) {
+                    content = .scriptResult(await scriptRunner.run(command))
                 } else {
                     content = .unavailable
                 }
@@ -211,7 +222,7 @@ public final class MenuBarTextController {
                 guard state.definition == definition else { continue }
                 guard self?.owns(state) == true else { return }
 
-                self?.apply(content, to: lineKey)
+                self?.stage(content, for: definition, at: lineKey)
                 await state.suspend(
                     whileDefinitionIs: definition,
                     for: .seconds(definition.refreshIntervalSeconds)
@@ -225,26 +236,59 @@ public final class MenuBarTextController {
         refreshJobs[state.lineKey]?.state === state
     }
 
-    private func scriptAction(for scriptID: UUID) -> ShortcutAction? {
-        store.shortcuts.first(where: { $0.id == scriptID }).flatMap { shortcut in
-            switch shortcut.action {
-            case .runScript, .runScriptFile:
-                shortcut.action
-            case .launchApp:
-                nil
-            }
-        }
+    private func scriptCommand(for scriptID: UUID) -> ScriptCommand? {
+        store.shortcuts.first(where: { $0.id == scriptID })?.action.scriptCommand
     }
 
-    private func apply(_ content: MenuBarTextContent, to lineKey: MenuBarTextLineKey) {
+    private func stage(
+        _ content: MenuBarTextContent,
+        for definition: MenuBarTextRefreshDefinition,
+        at lineKey: MenuBarTextLineKey
+    ) {
         guard let slot = slots.first(where: { $0.id == lineKey.slotID }),
             slot.layout.activeLinePositions.contains(lineKey.position),
-            slot[lineKey.position].scriptID != nil
+            slot[lineKey.position].scriptID != nil,
+            refreshJobs[lineKey]?.state.definition == definition
         else {
             return
         }
 
-        contentByLineKey[lineKey] = content
+        pendingContentByLineKey[lineKey] = MenuBarTextPendingContent(
+            definition: definition,
+            content: content
+        )
+    }
+
+    private func startContentPublication() {
+        guard publicationTask == nil else { return }
+        let publicationInterval = publicationInterval
+        publicationTask = Task { [weak self, publicationInterval] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: publicationInterval)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, let self else { return }
+                publishPendingContent()
+            }
+        }
+    }
+
+    private func publishPendingContent() {
+        guard !pendingContentByLineKey.isEmpty else { return }
+
+        var nextContentByLineKey = contentByLineKey
+        for (lineKey, pendingContent) in pendingContentByLineKey {
+            guard refreshJobs[lineKey]?.state.definition == pendingContent.definition else {
+                continue
+            }
+            nextContentByLineKey[lineKey] = pendingContent.content
+        }
+        pendingContentByLineKey.removeAll()
+
+        guard nextContentByLineKey != contentByLineKey else { return }
+        contentByLineKey = nextContentByLineKey
     }
 
     private func saveConfiguration() {
@@ -283,6 +327,11 @@ private struct MenuBarTextLineKey: Hashable, Sendable {
 private struct MenuBarTextRefreshDefinition: Equatable, Sendable {
     let scriptID: UUID
     let refreshIntervalSeconds: Int
+}
+
+private struct MenuBarTextPendingContent: Sendable {
+    let definition: MenuBarTextRefreshDefinition
+    let content: MenuBarTextContent
 }
 
 private struct MenuBarTextRefreshJob {

@@ -9,14 +9,14 @@ struct ScriptsView: View {
     @Environment(ShortcutStore.self) private var store
     @Environment(HotkeyService.self) private var hotkeyService
     @Environment(ScriptLogStore.self) private var logStore
+    @Environment(ShortcutExecutor.self) private var shortcutExecutor
 
     @State private var selectedID: UUID?
     @State private var showingDeleteConfirmation = false
     @State private var deletingShortcutID: UUID?
     @State private var showingLogs = false
     @State private var logsShortcutID: UUID?
-    @State private var runningShortcutID: UUID?
-    @State private var runStartLogID: String?
+    @State private var editorRunIDs: [UUID: UUID] = [:]
     @State private var recordingShortcutID: UUID?
 
     /// Only script-type shortcuts (runScript / runScriptFile).
@@ -151,7 +151,7 @@ struct ScriptsView: View {
         if let shortcut = selectedShortcut {
             ScriptEditView(
                 shortcut: shortcut,
-                isRunning: runningShortcutID == shortcut.id,
+                isRunning: isEditorRunActive(for: shortcut.id),
                 hasLogs: !logStore.recentLogs(for: shortcut.id).isEmpty,
                 onSave: { updated in
                     store.updateScript(updated)
@@ -168,9 +168,6 @@ struct ScriptsView: View {
                 }
             )
             .id(shortcut.id)
-            .onChange(of: recentLogIDs) { _, _ in
-                finishRunIfNeeded()
-            }
         } else {
             ContentUnavailableView {
                 Label("No Selection", systemImage: "cursorarrow.click")
@@ -208,36 +205,19 @@ struct ScriptsView: View {
         hotkeyService.restart(store: store)
     }
 
-    private var recentLogIDs: [String] {
-        logStore.recentLogs.map(\.id)
-    }
-
     private func showLogs(for shortcutID: UUID) {
         logsShortcutID = shortcutID
         showingLogs = true
     }
 
     private func run(shortcutID: UUID) {
-        guard let shortcut = store.shortcuts.first(where: { $0.id == shortcutID }) else { return }
-
-        runningShortcutID = shortcutID
-        runStartLogID = logStore.latestLog(for: shortcutID)?.id
-        hotkeyService.trigger(shortcut: shortcut, store: store)
+        guard let runID = shortcutExecutor.execute(shortcutID: shortcutID) else { return }
+        editorRunIDs[shortcutID] = runID
     }
 
-    private func finishRunIfNeeded() {
-        guard let runningShortcutID,
-            let latestLogID = logStore.latestLog(for: runningShortcutID)?.id,
-            latestLogID != runStartLogID
-        else { return }
-
-        self.runningShortcutID = nil
-        runStartLogID = nil
-    }
-
-    private func clearRunningState() {
-        runningShortcutID = nil
-        runStartLogID = nil
+    private func isEditorRunActive(for shortcutID: UUID) -> Bool {
+        guard let runID = editorRunIDs[shortcutID] else { return false }
+        return shortcutExecutor.isRunning(runID: runID)
     }
 
     private func deleteShortcut(id: UUID) {
@@ -246,7 +226,7 @@ struct ScriptsView: View {
         }
         store.remove(id: id)
         hotkeyService.restart(store: store)
-        clearRunningState()
+        editorRunIDs[id] = nil
     }
 }
 
@@ -608,7 +588,7 @@ struct ScriptEditView: View {
             }
             .disabled(!hasLogs)
             .controlSize(.small)
-            .help("Review the 12 most recent script executions")
+            .help("Review the \(ScriptLogStore.recentLogLimit) most recent script executions")
         }
     }
 
