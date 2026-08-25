@@ -18,7 +18,8 @@
   it is already key.
 - Escape hides the reusable Settings window, keeps TapTick running, and returns focus to the latest
   external foreground app. Native close paths perform the same focus handoff.
-- Dock or Finder reopen always shows Settings. Login-item launch creates no window and takes no focus.
+- Activating TapTick through the Dock, Finder, or app switcher shows Settings when no TapTick
+  interactive window is visible. Login-item launch creates no window and takes no focus.
 - The Dock icon follows only `showDockIcon`. Changing it does not dismiss Settings, and dismissing
   Settings does not change it.
 - New installations start without a Dock icon; users who already selected a Dock preference retain it.
@@ -41,5 +42,5 @@
 
 - Strict formatting and linting.
 - Full unit suite and Debug build.
-- UI coverage for manual Settings launch, navigation, Escape dismissal, process survival, and focus
-  handoff to the background state.
+- UI coverage for manual Settings launch, navigation, Escape dismissal, process survival, focus
+  handoff to the background state, and Settings restoration when the windowless app is activated.

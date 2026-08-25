@@ -68,6 +68,12 @@ final class TapTickUITests: XCTestCase {
             .completed,
             "Dismissing Settings should return focus to the previous app"
         )
+
+        app.activate()
+        XCTAssertTrue(
+            window.waitForExistence(timeout: 3),
+            "Activating TapTick with no visible window should reopen Settings"
+        )
     }
 
     // MARK: - Menu Bar

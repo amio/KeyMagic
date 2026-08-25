@@ -57,6 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private weak var observedSettingsWindow: NSWindow?
     private var lastExternalActiveApp: NSRunningApplication?
     private var appliedDockIconVisibility: Bool?
+    private var isReadyForActivationPresentation = false
+    private var isSettingsPresentationPending = false
     private var isTerminating = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -128,10 +130,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        isReadyForActivationPresentation = true
         if shouldOpenSettings {
             // Manual and first launches present Settings. Login-item launches remain quiet.
             openSettingsWindow()
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard isReadyForActivationPresentation else { return }
+
+        if let settingsWindow = currentSettingsWindow(),
+            settingsWindow.isVisible || settingsWindow.isMiniaturized
+        {
+            return
+        }
+        guard !hasVisibleInteractiveWindow() else { return }
+
+        openSettingsWindow()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -152,6 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.identifier = settingsWindowIdentifier
         window.styleMask.remove(.resizable)
         AppState.shared.settingsWindow = window
+        isSettingsPresentationPending = false
 
         guard observedSettingsWindow !== window else { return }
 
@@ -185,11 +202,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openSettingsWindow() {
         rememberExternalApp(NSWorkspace.shared.frontmostApplication)
         NSApp.unhide(nil)
-        NSApp.activate()
+        if !NSApp.isActive {
+            NSApp.activate()
+        }
 
         if let window = currentSettingsWindow() {
+            isSettingsPresentationPending = false
             window.makeKeyAndOrderFront(nil)
-        } else {
+        } else if !isSettingsPresentationPending {
+            isSettingsPresentationPending = true
             AppState.shared.openSettingsTrigger += 1
         }
     }
@@ -215,12 +236,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         AppState.shared.settingsWindow = nil
         observedSettingsWindow = nil
+        isSettingsPresentationPending = false
         handOffFocusIfNeeded(excluding: window)
     }
 
     private func handOffFocusIfNeeded(excluding settingsWindow: NSWindow) {
         guard !isTerminating, NSApp.isActive else { return }
-        guard !hasOtherVisibleInteractiveWindow(excluding: settingsWindow) else { return }
+        guard !hasVisibleInteractiveWindow(excluding: settingsWindow) else { return }
 
         guard let target = lastExternalActiveApp, !target.isTerminated else {
             // A cold launch may not have observed the previously active process. Hiding lets
@@ -233,10 +255,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         target.activate()
     }
 
-    private func hasOtherVisibleInteractiveWindow(excluding settingsWindow: NSWindow) -> Bool {
+    private func hasVisibleInteractiveWindow(excluding excludedWindow: NSWindow? = nil) -> Bool {
         NSApp.windows.contains { window in
-            window !== settingsWindow
-                && window.isVisible
+            if let excludedWindow, window === excludedWindow { return false }
+            return window.isVisible
                 && window.canBecomeKey
                 && !window.styleMask.contains(.nonactivatingPanel)
         }
