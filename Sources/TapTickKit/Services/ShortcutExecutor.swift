@@ -93,7 +93,8 @@ final class ShortcutExecutor {
                     shortcutID: shortcutID,
                     output: result.output,
                     exitCode: result.exitCode,
-                    timestamp: Date()
+                    timestamp: Date(),
+                    duration: result.duration
                 )
                 await callback(log)
             }
@@ -101,6 +102,10 @@ final class ShortcutExecutor {
     }
 
     nonisolated static func executeScript(action: ShortcutAction) async -> ScriptExecutionResult {
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        let elapsed: () -> TimeInterval = {
+            TimeInterval(DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000_000
+        }
         let process = Process()
         let pipe = Pipe()
 
@@ -114,14 +119,19 @@ final class ShortcutExecutor {
                 print("TapTick: Script file not found: \(expandedPath)")
                 return ScriptExecutionResult(
                     output: "Script file not found: \(expandedPath)",
-                    exitCode: -1
+                    exitCode: -1,
+                    duration: elapsed()
                 )
             }
 
             process.executableURL = URL(fileURLWithPath: shell.rawValue)
             process.arguments = [expandedPath]
         case .launchApp:
-            return ScriptExecutionResult(output: "Error: Not a script action.", exitCode: -1)
+            return ScriptExecutionResult(
+                output: "Error: Not a script action.",
+                exitCode: -1,
+                duration: elapsed()
+            )
         }
 
         process.standardOutput = pipe
@@ -139,12 +149,17 @@ final class ShortcutExecutor {
                 print("TapTick: Script exited with code \(exitCode)")
             }
 
-            return ScriptExecutionResult(output: output, exitCode: exitCode)
+            return ScriptExecutionResult(
+                output: output,
+                exitCode: exitCode,
+                duration: elapsed()
+            )
         } catch {
             print("TapTick: Failed to run script: \(error)")
             return ScriptExecutionResult(
                 output: "Error: \(error.localizedDescription)",
-                exitCode: -1
+                exitCode: -1,
+                duration: elapsed()
             )
         }
     }

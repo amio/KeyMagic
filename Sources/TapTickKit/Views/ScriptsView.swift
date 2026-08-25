@@ -13,8 +13,10 @@ struct ScriptsView: View {
     @State private var selectedID: UUID?
     @State private var showingDeleteConfirmation = false
     @State private var deletingShortcutID: UUID?
-    @State private var presentedLog: ScriptExecutionLog?
+    @State private var showingLogs = false
+    @State private var logsShortcutID: UUID?
     @State private var runningShortcutID: UUID?
+    @State private var runStartLogID: String?
     @State private var recordingShortcutID: UUID?
 
     /// Only script-type shortcuts (runScript / runScriptFile).
@@ -55,8 +57,13 @@ struct ScriptsView: View {
                 .keyboardShortcut("n", modifiers: .command)
             }
         }
-        .sheet(item: $presentedLog) { log in
-            RunOutputView(log: log)
+        .sheet(isPresented: $showingLogs) {
+            if let logsShortcutID {
+                ScriptLogsView(
+                    logs: logStore.recentLogs(for: logsShortcutID),
+                    scriptName: store.shortcuts.first { $0.id == logsShortcutID }?.name ?? "Deleted Script"
+                )
+            }
         }
         .confirmationDialog(
             "Delete Script?",
@@ -65,10 +72,7 @@ struct ScriptsView: View {
         ) {
             Button("Delete", role: .destructive) {
                 if let id = deletingShortcutID {
-                    // Clear selection if deleting the selected item
-                    if selectedID == id { selectedID = nil }
-                    store.remove(id: id)
-                    hotkeyService.restart(store: store)
+                    deleteShortcut(id: id)
                     deletingShortcutID = nil
                 }
             }
@@ -148,17 +152,15 @@ struct ScriptsView: View {
             ScriptEditView(
                 shortcut: shortcut,
                 isRunning: runningShortcutID == shortcut.id,
-                hasLog: logStore.logs[shortcut.id] != nil,
+                hasLogs: !logStore.recentLogs(for: shortcut.id).isEmpty,
                 onSave: { updated in
                     store.updateScript(updated)
                 },
-                onRun: { script, shell in
-                    testRun(id: shortcut.id, script: script, shell: shell)
+                onRun: {
+                    run(shortcutID: shortcut.id)
                 },
                 onShowLog: {
-                    if let log = logStore.logs[shortcut.id] {
-                        presentedLog = log
-                    }
+                    showLogs(for: shortcut.id)
                 },
                 onDelete: {
                     deletingShortcutID = shortcut.id
@@ -166,6 +168,9 @@ struct ScriptsView: View {
                 }
             )
             .id(shortcut.id)
+            .onChange(of: recentLogIDs) { _, _ in
+                finishRunIfNeeded()
+            }
         } else {
             ContentUnavailableView {
                 Label("No Selection", systemImage: "cursorarrow.click")
@@ -203,25 +208,45 @@ struct ScriptsView: View {
         hotkeyService.restart(store: store)
     }
 
-    private func testRun(id: UUID, script: String, shell: ShortcutAction.ShellType) {
-        runningShortcutID = id
-        presentedLog = nil
+    private var recentLogIDs: [String] {
+        logStore.recentLogs.map(\.id)
+    }
 
-        let action = ShortcutAction.runScript(script: script, shell: shell)
-        Task.detached {
-            let result = await ShortcutExecutor.executeScript(action: action)
-            let log = ScriptExecutionLog(
-                shortcutID: id,
-                output: result.output,
-                exitCode: result.exitCode,
-                timestamp: Date()
-            )
-            await MainActor.run { [logStore] in
-                logStore.record(log)
-                presentedLog = log
-                runningShortcutID = nil
-            }
+    private func showLogs(for shortcutID: UUID) {
+        logsShortcutID = shortcutID
+        showingLogs = true
+    }
+
+    private func run(shortcutID: UUID) {
+        guard let shortcut = store.shortcuts.first(where: { $0.id == shortcutID }) else { return }
+
+        runningShortcutID = shortcutID
+        runStartLogID = logStore.latestLog(for: shortcutID)?.id
+        hotkeyService.trigger(shortcut: shortcut, store: store)
+    }
+
+    private func finishRunIfNeeded() {
+        guard let runningShortcutID,
+            let latestLogID = logStore.latestLog(for: runningShortcutID)?.id,
+            latestLogID != runStartLogID
+        else { return }
+
+        self.runningShortcutID = nil
+        runStartLogID = nil
+    }
+
+    private func clearRunningState() {
+        runningShortcutID = nil
+        runStartLogID = nil
+    }
+
+    private func deleteShortcut(id: UUID) {
+        if selectedID == id {
+            selectedID = nil
         }
+        store.remove(id: id)
+        hotkeyService.restart(store: store)
+        clearRunningState()
     }
 }
 
@@ -331,9 +356,9 @@ struct ScriptEditorDraftState {
 struct ScriptEditView: View {
     let shortcut: Shortcut
     let isRunning: Bool
-    let hasLog: Bool
+    let hasLogs: Bool
     let onSave: (Shortcut) -> Void
-    let onRun: (String, ShortcutAction.ShellType) -> Void
+    let onRun: () -> Void
     let onShowLog: () -> Void
     let onDelete: () -> Void
 
@@ -559,7 +584,7 @@ struct ScriptEditView: View {
             .controlSize(.small)
             .immediateHelp(aiUnavailableReason ?? "Generate script from comments using Apple Intelligence")
 
-            // Run button — executes the current editor content directly
+            // Run button — dispatches the stored shortcut through the normal trigger path
             Button {
                 run()
             } label: {
@@ -575,15 +600,15 @@ struct ScriptEditView: View {
             .controlSize(.small)
             .help("Test run this script")
 
-            // Last execution output — shows the log from the most recent hotkey trigger
+            // Logs — reviews the most recent script executions
             Button {
                 onShowLog()
             } label: {
-                Label("Output", systemImage: "doc.text")
+                Label("Logs", systemImage: "doc.text.magnifyingglass")
             }
-            .disabled(!hasLog)
+            .disabled(!hasLogs)
             .controlSize(.small)
-            .help("View last execution output")
+            .help("Review the 12 most recent script executions")
         }
     }
 
@@ -619,7 +644,7 @@ struct ScriptEditView: View {
 
     private func run() {
         flushAutosave()
-        onRun(draftState.draft.scriptContent, draftState.draft.shellType)
+        onRun()
     }
 
     private func loadFrom(_ shortcut: Shortcut) {
@@ -709,16 +734,17 @@ struct ScriptEditView: View {
     }
 }
 
-// MARK: - Run Output View
+// MARK: - Script Logs View
 
-private struct RunOutputView: View {
-    let log: ScriptExecutionLog
+private struct ScriptLogsView: View {
+    let logs: [ScriptExecutionLog]
+    let scriptName: String
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Script Output")
+                Text("\(scriptName) Logs")
                     .font(.headline)
                 Spacer()
                 Button("Done") { dismiss() }
@@ -728,14 +754,63 @@ private struct RunOutputView: View {
 
             Divider()
 
-            ScrollView {
-                Text(log.displayText)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding()
+            if logs.isEmpty {
+                ContentUnavailableView(
+                    "No Logs",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text("Run a script to create an execution log.")
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(logs.enumerated()), id: \.element.id) { index, log in
+                            ScriptLogRow(
+                                log: log,
+                                showsDivider: index < logs.count - 1
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
+                }
             }
         }
-        .frame(minWidth: 480, minHeight: 300)
+        .frame(minWidth: 640, minHeight: 460)
+    }
+}
+
+private struct ScriptLogRow: View {
+    let log: ScriptExecutionLog
+    let showsDivider: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: log.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(log.succeeded ? .green : .red)
+                Text(
+                    log.timestamp,
+                    format: .dateTime.year().month().day().hour().minute().second()
+                )
+                .font(.headline)
+                .monospacedDigit()
+                Spacer()
+                Text(log.durationText)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(log.displayText)
+                .font(.system(.body, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 14)
+        .overlay(alignment: .bottom) {
+            if showsDivider {
+                Divider()
+            }
+        }
     }
 }

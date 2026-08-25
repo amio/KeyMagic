@@ -61,4 +61,128 @@ struct ScriptExecutionLogTests {
         #expect(log.subtitleText == nil)
         #expect(log.displayText == "(No output)")
     }
+
+    @Test("Execution logs format the measured duration for review")
+    func durationTextUsesReadableUnits() {
+        let shortcutID = UUID()
+
+        let milliseconds = ScriptExecutionLog(
+            shortcutID: shortcutID,
+            output: "",
+            exitCode: 0,
+            timestamp: Date(),
+            duration: 0.125
+        )
+        let seconds = ScriptExecutionLog(
+            shortcutID: shortcutID,
+            output: "",
+            exitCode: 0,
+            timestamp: Date(),
+            duration: 1.25
+        )
+        let minutes = ScriptExecutionLog(
+            shortcutID: shortcutID,
+            output: "",
+            exitCode: 0,
+            timestamp: Date(),
+            duration: 125
+        )
+
+        #expect(milliseconds.durationText == "125 ms")
+        #expect(seconds.durationText == "1.25 sec")
+        #expect(minutes.durationText == "2 min, 5 sec")
+    }
+
+    @Test("Log store keeps the 12 most recent executions in completion order")
+    @MainActor
+    func logStoreKeepsRecentHistory() {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ScriptLogStore(directory: directory)
+        let shortcutID = UUID()
+        let logs = (0..<14).map { index in
+            ScriptExecutionLog(
+                shortcutID: shortcutID,
+                output: "run \(index)",
+                exitCode: 0,
+                timestamp: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+
+        for log in logs {
+            store.record(log)
+        }
+
+        #expect(store.recentLogs.count == ScriptLogStore.recentLogLimit)
+        #expect(store.recentLogs.map(\.output) == (2..<14).reversed().map { "run \($0)" })
+        #expect(store.latestLog(for: shortcutID)?.output == "run 13")
+    }
+
+    @Test("Log store keeps repeated executions while exposing the latest per shortcut")
+    @MainActor
+    func logStoreKeepsRepeatedExecutions() {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ScriptLogStore(directory: directory)
+        let shortcutID = UUID()
+        let first = ScriptExecutionLog(
+            shortcutID: shortcutID,
+            output: "first",
+            exitCode: 0,
+            timestamp: Date(timeIntervalSince1970: 1)
+        )
+        let second = ScriptExecutionLog(
+            shortcutID: shortcutID,
+            output: "second",
+            exitCode: 1,
+            timestamp: Date(timeIntervalSince1970: 2)
+        )
+
+        store.record(first)
+        store.record(second)
+
+        #expect(store.recentLogs.map(\.output) == ["second", "first"])
+        #expect(store.logs.count == 1)
+        #expect(store.latestLog(for: shortcutID)?.output == "second")
+    }
+
+    @Test("Log store persists history and filters it by shortcut")
+    @MainActor
+    func logStorePersistsAndFiltersHistory() {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let currentShortcutID = UUID()
+        let otherShortcutID = UUID()
+        let currentLog = ScriptExecutionLog(
+            shortcutID: currentShortcutID,
+            output: "current",
+            exitCode: 0,
+            timestamp: Date(timeIntervalSince1970: 10),
+            duration: 0.25
+        )
+        let otherLog = ScriptExecutionLog(
+            shortcutID: otherShortcutID,
+            output: "other",
+            exitCode: 0,
+            timestamp: Date(timeIntervalSince1970: 9),
+            duration: 0.5
+        )
+
+        let store = ScriptLogStore(directory: directory)
+        store.record(otherLog)
+        store.record(currentLog)
+
+        let reloadedStore = ScriptLogStore(directory: directory)
+        #expect(reloadedStore.recentLogs.map(\.output) == ["current", "other"])
+        #expect(reloadedStore.recentLogs(for: currentShortcutID).map(\.output) == ["current"])
+        #expect(reloadedStore.latestLog(for: currentShortcutID)?.duration == 0.25)
+    }
+
+    private func makeDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickScriptLogs-\(UUID().uuidString)")
+    }
 }

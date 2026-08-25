@@ -66,9 +66,7 @@ public final class HotkeyService: @unchecked Sendable {
 
     /// Trigger a shortcut action directly (e.g. from menu bar click).
     func trigger(shortcut: Shortcut, store: ShortcutStore) {
-        store.markTriggered(id: shortcut.id)
-        let exec = executor ?? ShortcutExecutor()
-        exec.execute(action: shortcut.action, shortcutID: shortcut.id)
+        dispatch(shortcut: shortcut, store: store)
     }
 
     /// Returns true when a combo conflicts with either a user shortcut or the reserved settings hotkey.
@@ -219,8 +217,7 @@ public final class HotkeyService: @unchecked Sendable {
                 let shortcut = store.shortcuts.first(where: { $0.id == shortcutID })
             else { return }
 
-            store.markTriggered(id: shortcut.id)
-            executor?.execute(action: shortcut.action, shortcutID: shortcut.id)
+            dispatch(shortcut: shortcut, store: store)
 
         case .toggleSettingsWindow:
             NotificationCenter.default.post(name: .toggleSettingsWindow, object: nil)
@@ -228,6 +225,25 @@ public final class HotkeyService: @unchecked Sendable {
         case .toggleUtility(let featureID, let action):
             utilities?.handleHotkey(for: featureID, action: action)
         }
+    }
+
+    /// Owns the complete shortcut-trigger side effect shared by Carbon events and
+    /// explicit UI triggers: update local trigger metadata, then execute the
+    /// current action through the process-lifetime executor.
+    private func dispatch(shortcut: Shortcut, store: ShortcutStore) {
+        store.markTriggered(id: shortcut.id)
+
+        let exec: ShortcutExecutor
+        if let executor {
+            exec = executor
+        } else {
+            let newExecutor = ShortcutExecutor()
+            newExecutor.onScriptCompleted = onScriptCompleted
+            executor = newExecutor
+            exec = newExecutor
+        }
+
+        exec.execute(action: shortcut.action, shortcutID: shortcut.id)
     }
 
     private func rebuildActiveRegistrationsIfPossible() {
