@@ -1,14 +1,16 @@
 import AppKit
+import Observation
 import ServiceManagement
 import SwiftUI
 import TapTickKit
 
 @MainActor
-final class AppState: ObservableObject {
+@Observable
+final class AppState {
     static let shared = AppState()
 
-    @Published var openSettingsTrigger = 0
-    weak var settingsWindow: NSWindow?
+    private(set) var openSettingsTrigger = 0
+    @ObservationIgnored weak var settingsWindow: NSWindow?
 
     // MARK: - Shared Services
 
@@ -24,6 +26,7 @@ final class AppState: ObservableObject {
     let menuBarTextController: MenuBarTextController
 
     /// Native NSStatusItem + NSMenu controller — retained for the lifetime of the app.
+    @ObservationIgnored
     var menuBarController: MenuBarController?
 
     private init() {
@@ -41,6 +44,10 @@ final class AppState: ObservableObject {
             outputPresenter: scriptOutputPresenter
         )
         self.menuBarTextController = MenuBarTextController(store: store)
+    }
+
+    func requestSettingsOpen() {
+        openSettingsTrigger &+= 1
     }
 }
 
@@ -258,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard !isSettingsSceneOpening else { return }
         isSettingsSceneOpening = true
-        AppState.shared.openSettingsTrigger += 1
+        AppState.shared.requestSettingsOpen()
     }
 
     private func presentSettingsWindow(_ window: NSWindow) {
@@ -421,7 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct TapTickApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var appState = AppState.shared
+    @State private var appState = AppState.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
@@ -447,10 +454,12 @@ struct TapTickApp: App {
                     }
                 )
                 .frame(
-                    minWidth: 980, idealWidth: 980, maxWidth: 980,
-                    minHeight: 600, idealHeight: 600, maxHeight: 600)
+                    minWidth: 880,
+                    minHeight: 560
+                )
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 1_020, height: 680)
+        .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: true))
         .windowStyle(.titleBar)
         .defaultLaunchBehavior(.suppressed)
@@ -458,6 +467,7 @@ struct TapTickApp: App {
             openWindow(id: "settings")
         }
         .commands {
+            SidebarCommands()
             TextEditingCommands()
 
             CommandGroup(after: .appInfo) {
@@ -474,7 +484,7 @@ private let settingsWindowIdentifier = NSUserInterfaceItemIdentifier("TapTick.se
 
 /// Captures the underlying NSWindow for the SwiftUI settings scene once it exists.
 private struct SettingsWindowObserver: NSViewRepresentable {
-    let onResolve: (NSWindow?) -> Void
+    let onResolve: @MainActor (NSWindow?) -> Void
 
     func makeNSView(context: Context) -> SettingsWindowObserverView {
         let view = SettingsWindowObserverView()
@@ -486,10 +496,15 @@ private struct SettingsWindowObserver: NSViewRepresentable {
         nsView.onResolve = onResolve
         nsView.resolveWindow()
     }
+
+    static func dismantleNSView(_ nsView: SettingsWindowObserverView, coordinator: Void) {
+        nsView.onResolve = nil
+    }
 }
 
+@MainActor
 private final class SettingsWindowObserverView: NSView {
-    var onResolve: ((NSWindow?) -> Void)?
+    var onResolve: (@MainActor (NSWindow?) -> Void)?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -497,8 +512,10 @@ private final class SettingsWindowObserverView: NSView {
     }
 
     func resolveWindow() {
-        DispatchQueue.main.async { [weak self] in
-            self?.onResolve?(self?.window)
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            onResolve?(window)
         }
     }
 }

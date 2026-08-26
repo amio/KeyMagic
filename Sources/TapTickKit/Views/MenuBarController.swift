@@ -8,7 +8,7 @@ import AppKit
 /// - Observation-driven menu rebuilds and text slot rendering
 /// - Dynamic show/hide via UserDefaults KVO for `"showMenuBarIcon"`
 @MainActor
-public final class MenuBarController: NSObject, NSMenuDelegate, @unchecked Sendable {
+public final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var statusContentView: MenuBarStatusContentView?
     private let store: ShortcutStore

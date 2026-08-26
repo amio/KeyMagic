@@ -28,18 +28,11 @@ struct UtilitiesView: View {
     }
 
     private var featureDirectory: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(utilities.catalog.enumerated()), id: \.element.id) { index, feature in
-                    UtilityRow(
-                        feature: feature,
-                        isOdd: !index.isMultiple(of: 2),
-                        isSelected: selectedFeatureID == feature.id
-                    )
-                    .onTapGesture { selectedFeatureID = feature.id }
-                }
-            }
+        List(utilities.catalog, selection: $selectedFeatureID) { feature in
+            UtilityRow(feature: feature)
+                .tag(feature.id)
         }
+        .listStyle(.inset)
     }
 
     @ViewBuilder
@@ -68,28 +61,23 @@ private struct UtilityRow: View {
     @Environment(UtilitiesController.self) private var utilities
 
     let feature: UtilityDescriptor
-    var isOdd: Bool = false
-    var isSelected: Bool = false
 
     private let iconColumnWidth: CGFloat = 22
 
     var body: some View {
-        ListRowContainer(
-            isOdd: isOdd, accentBackground: isSelected ? Color.accentColor.opacity(0.10) : .clear, verticalPadding: 8
-        ) {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
-                GridRow(alignment: .center) {
-                    utilityIcon
-                    titleRow
-                }
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+            GridRow(alignment: .center) {
+                utilityIcon
+                titleRow
+            }
 
-                GridRow {
-                    Color.clear
-                        .frame(width: iconColumnWidth, height: 1)
-                    summaryRow
-                }
+            GridRow {
+                Color.clear
+                    .frame(width: iconColumnWidth, height: 1)
+                summaryRow
             }
         }
+        .padding(.vertical, 4)
     }
 
     private var utilityIcon: some View {

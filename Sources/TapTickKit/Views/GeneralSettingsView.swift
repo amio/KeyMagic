@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// General settings pane for operational app behavior such as startup, sync, and hotkeys.
 struct GeneralSettingsView: View {
@@ -10,6 +11,11 @@ struct GeneralSettingsView: View {
     @AppStorage("showDockIcon") private var showDockIcon = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @State private var isRecordingSettingsWindowHotkey = false
+    @State private var isImportingShortcuts = false
+    @State private var isExportingShortcuts = false
+    @State private var exportDocument: ShortcutExportDocument?
+    @State private var fileOperationError = ""
+    @State private var isShowingFileOperationError = false
 
     var body: some View {
         Form {
@@ -19,6 +25,28 @@ struct GeneralSettingsView: View {
             dataAndSyncSection
         }
         .settingsFormStyle()
+        .fileImporter(
+            isPresented: $isImportingShortcuts,
+            allowedContentTypes: [.json]
+        ) { result in
+            importShortcuts(from: result)
+        }
+        .fileExporter(
+            isPresented: $isExportingShortcuts,
+            document: exportDocument,
+            contentType: .json,
+            defaultFilename: "taptick-shortcuts"
+        ) { result in
+            exportDocument = nil
+            if case .failure(let error) = result {
+                presentFileOperationError(error)
+            }
+        }
+        .alert("Shortcut File Error", isPresented: $isShowingFileOperationError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(fileOperationError)
+        }
     }
 
     // MARK: - Status
@@ -133,8 +161,8 @@ struct GeneralSettingsView: View {
             // Shortcut counts + Export/Import in one row
             LabeledContent {
                 HStack(spacing: 8) {
-                    Button("Export...") { exportShortcuts() }
-                    Button("Import...") { importShortcuts() }
+                    Button("Export…") { prepareShortcutExport() }
+                    Button("Import…") { isImportingShortcuts = true }
                 }
             } label: {
                 Text(
@@ -160,7 +188,7 @@ struct GeneralSettingsView: View {
                         HStack(spacing: 8) {
                             if cloudSync.isSyncing {
                                 ProgressView().controlSize(.small)
-                                Text("Syncing...")
+                                Text("Syncing…")
                             } else {
                                 Circle().fill(.green).frame(width: 8, height: 8)
                                 Text("Up to date")
@@ -200,28 +228,55 @@ struct GeneralSettingsView: View {
 
     // MARK: - Export / Import
 
-    private func exportShortcuts() {
-        guard let data = try? store.exportData() else { return }
-
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "taptick-shortcuts.json"
-
-        if panel.runModal() == .OK, let url = panel.url {
-            try? data.write(to: url)
+    private func prepareShortcutExport() {
+        do {
+            exportDocument = ShortcutExportDocument(data: try store.exportData())
+            isExportingShortcuts = true
+        } catch {
+            presentFileOperationError(error)
         }
     }
 
-    private func importShortcuts() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.json]
-
-        if panel.runModal() == .OK, let url = panel.url {
-            if let data = try? Data(contentsOf: url) {
-                try? store.importData(data)
+    private func importShortcuts(from result: Result<URL, Error>) {
+        do {
+            let url = try result.get()
+            let isAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if isAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
             }
+
+            try store.importData(Data(contentsOf: url))
+            hotkeyService.restart(store: store)
+        } catch {
+            presentFileOperationError(error)
         }
+    }
+
+    private func presentFileOperationError(_ error: Error) {
+        fileOperationError = error.localizedDescription
+        isShowingFileOperationError = true
+    }
+}
+
+private struct ShortcutExportDocument: FileDocument {
+    static let readableContentTypes: [UTType] = [.json]
+
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }

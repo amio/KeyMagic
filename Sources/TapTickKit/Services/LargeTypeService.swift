@@ -645,7 +645,7 @@ private struct LargeTypeOverlay: View {
         }
         .buttonStyle(.plain)
         .disabled(model.text.isEmpty)
-        .immediateHelp(model.showsQRCode ? "Show text only · ⌥" : "Show QR code · ⌥")
+        .help(model.showsQRCode ? "Show text only · ⌥" : "Show QR code · ⌥")
         .onHover { isHovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHoveringQRToggle = isHovering
@@ -787,7 +787,8 @@ private final class LargeTypeInputTextView: NSTextView {
     private func fulfillFirstResponderRequestIfPossible() {
         guard shouldBecomeFirstResponder, let window else { return }
         shouldBecomeFirstResponder = false
-        DispatchQueue.main.async { [weak self, weak window] in
+        Task { @MainActor [weak self, weak window] in
+            await Task.yield()
             guard let self, let window else { return }
             window.makeFirstResponder(self)
         }

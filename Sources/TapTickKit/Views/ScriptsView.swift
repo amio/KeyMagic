@@ -1,8 +1,6 @@
 import FoundationModels
 import SwiftUI
 
-private let scriptHotkeyColumnWidth: CGFloat = 97
-
 private struct ScriptLogsPresentation: Identifiable {
     let shortcutID: UUID
 
@@ -10,7 +8,8 @@ private struct ScriptLogsPresentation: Identifiable {
 }
 
 /// The Scripts settings view: manages script-type shortcuts.
-/// Fixed two-panel layout: 240px list on the left, edit panel on the right.
+/// The secondary source list and editor use separate surfaces so hierarchy does not
+/// depend on decorative divider lines.
 struct ScriptsView: View {
     @Environment(ShortcutStore.self) private var store
     @Environment(HotkeyService.self) private var hotkeyService
@@ -23,6 +22,7 @@ struct ScriptsView: View {
     @State private var logsPresentation: ScriptLogsPresentation?
     @State private var editorRunIDs: [UUID: UUID] = [:]
     @State private var recordingShortcutID: UUID?
+    @FocusState private var isScriptListFocused: Bool
 
     /// Only script-type shortcuts (runScript / runScriptFile).
     private var scriptShortcuts: [Shortcut] {
@@ -41,25 +41,16 @@ struct ScriptsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left: script list (fixed 260px)
             scriptListPanel
-                .frame(width: 260)
+                .frame(width: 280)
+                .background(Color(nsColor: .controlBackgroundColor))
 
-            Divider()
-
-            // Right: edit panel (fills remaining width)
             editPanel
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: .windowBackgroundColor))
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    addNewScript()
-                } label: {
-                    Label("Add Script", systemImage: "plus")
-                }
-                .keyboardShortcut("n", modifiers: .command)
-            }
+        .onChange(of: selectedID) { _, shortcutID in
+            restoreScriptListFocus(afterSelecting: shortcutID)
         }
         .sheet(item: $logsPresentation) { presentation in
             ScriptLogsView(
@@ -90,6 +81,8 @@ struct ScriptsView: View {
     @ViewBuilder
     private var scriptListPanel: some View {
         VStack(spacing: 0) {
+            scriptListHeader
+
             if scriptShortcuts.isEmpty {
                 Spacer()
                 ContentUnavailableView {
@@ -103,48 +96,64 @@ struct ScriptsView: View {
                 }
                 Spacer()
             } else {
-                // Header
-                ListTableHeader(trailingPadding: 8) {
-                    Text("Name")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Hotkey")
-                        .frame(width: scriptHotkeyColumnWidth, alignment: .leading)
-                }
-
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(scriptShortcuts.enumerated()), id: \.element.id) { index, shortcut in
-                            ScriptRow(
-                                shortcut: shortcut,
-                                isOdd: !index.isMultiple(of: 2),
-                                isSelected: selectedID == shortcut.id,
-                                isRecording: recordingShortcutID == shortcut.id,
-                                onStartRecording: {
-                                    recordingShortcutID = shortcut.id
-                                },
-                                onRecordKey: { combo in
-                                    bindHotkey(combo, to: shortcut)
-                                    recordingShortcutID = nil
-                                },
-                                onCancelRecording: {
-                                    recordingShortcutID = nil
-                                },
-                                onClearHotkey: {
-                                    clearHotkey(for: shortcut)
-                                },
-                                checkConflict: { combo in
-                                    hotkeyService.hasConflict(
-                                        keyCombo: combo,
-                                        excludingShortcutID: shortcut.id
-                                    )
-                                }
+                List(scriptShortcuts, selection: $selectedID) { shortcut in
+                    ScriptRow(
+                        shortcut: shortcut,
+                        isSelected: selectedID == shortcut.id,
+                        usesEmphasizedSelection: selectedID == shortcut.id && isScriptListFocused,
+                        isRecording: recordingShortcutID == shortcut.id,
+                        onStartRecording: {
+                            recordingShortcutID = shortcut.id
+                        },
+                        onRecordKey: { combo in
+                            bindHotkey(combo, to: shortcut)
+                            recordingShortcutID = nil
+                        },
+                        onCancelRecording: {
+                            recordingShortcutID = nil
+                        },
+                        onClearHotkey: {
+                            clearHotkey(for: shortcut)
+                        },
+                        checkConflict: { combo in
+                            hotkeyService.hasConflict(
+                                keyCombo: combo,
+                                excludingShortcutID: shortcut.id
                             )
-                            .onTapGesture { selectedID = shortcut.id }
                         }
-                    }
+                    )
+                    .tag(shortcut.id)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 5, bottom: 4, trailing: 0))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .focused($isScriptListFocused)
             }
         }
+    }
+
+    private var scriptListHeader: some View {
+        HStack(spacing: 8) {
+            Text("All Scripts")
+                .font(.headline)
+
+            Spacer()
+
+            Button {
+                addNewScript()
+            } label: {
+                Label("Add Script", systemImage: "plus")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .keyboardShortcut("n", modifiers: .command)
+            .help("Add Script (⌘N)")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
     }
 
     // MARK: - Right Panel: Edit / Placeholder
@@ -181,6 +190,18 @@ struct ScriptsView: View {
     }
 
     // MARK: - Actions
+
+    /// Rebuilding the selected editor can leave the window without the list as first responder.
+    /// Restore it after the selection transaction while preserving later editor focus changes.
+    private func restoreScriptListFocus(afterSelecting shortcutID: UUID?) {
+        guard let shortcutID else { return }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard selectedID == shortcutID, !isScriptListFocused else { return }
+            isScriptListFocused = true
+        }
+    }
 
     private func addNewScript() {
         let newShortcut = Shortcut(
@@ -236,8 +257,8 @@ struct ScriptsView: View {
 
 private struct ScriptRow: View {
     let shortcut: Shortcut
-    let isOdd: Bool
     let isSelected: Bool
+    let usesEmphasizedSelection: Bool
     let isRecording: Bool
     let onStartRecording: () -> Void
     let onRecordKey: (KeyCombo) -> Void
@@ -245,21 +266,19 @@ private struct ScriptRow: View {
     let onClearHotkey: () -> Void
     var checkConflict: ((KeyCombo) -> Bool)?
 
+    @State private var isHovered = false
+
+    private var showsHotkeyControl: Bool {
+        shortcut.keyCombo != nil || isRecording || isSelected || isHovered
+    }
+
     var body: some View {
-        ListRowContainer(
-            isOdd: isOdd,
-            accentBackground: isSelected ? Color.accentColor.opacity(0.12) : .clear,
-            verticalPadding: 6,
-            trailingPadding: 8
-        ) {
-            // Name + availability warning
+        HStack(spacing: 8) {
             HStack(spacing: 6) {
                 Text(shortcut.name)
                     .lineLimit(1)
                     .fontWeight(.medium)
-                    .font(.callout)
 
-                // Warn when a script file doesn't exist on this Mac (e.g. synced from another device).
                 if !shortcut.isAvailableOnThisDevice {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
@@ -269,19 +288,23 @@ private struct ScriptRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Hotkey cell with recording / edit / delete
-            HotkeyCellView(
-                keyCombo: shortcut.keyCombo,
-                isRecording: isRecording,
-                onStartRecording: onStartRecording,
-                onRecordKey: onRecordKey,
-                onCancelRecording: onCancelRecording,
-                onClearHotkey: onClearHotkey,
-                checkConflict: checkConflict
-            )
-            .frame(width: scriptHotkeyColumnWidth, alignment: .leading)
+            if showsHotkeyControl {
+                HotkeyBindingControl(
+                    keyCombo: shortcut.keyCombo,
+                    isRecording: isRecording,
+                    onStartRecording: onStartRecording,
+                    onRecordKey: onRecordKey,
+                    onCancelRecording: onCancelRecording,
+                    onClearHotkey: onClearHotkey,
+                    checkConflict: checkConflict,
+                    emptyTitle: "Set Hotkey",
+                    usesEmphasizedAppearance: usesEmphasizedSelection
+                )
+            }
         }
+        .frame(height: 24)
         .opacity(shortcut.isEnabled ? 1.0 : 0.6)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -351,6 +374,8 @@ struct ScriptEditView: View {
     // AI generation state
     @State private var isGenerating = false
     @State private var generationError: String?
+    @State private var generationTask: Task<Void, Never>?
+    @State private var generationRequestID: UUID?
 
     private var isValid: Bool {
         draftState.draft.isValid
@@ -358,15 +383,11 @@ struct ScriptEditView: View {
 
     /// Whether the on-device Foundation Models framework is usable on this system.
     private var isAIAvailable: Bool {
-        guard #available(macOS 26, *) else { return false }
-        return SystemLanguageModel.default.availability == .available
+        SystemLanguageModel.default.availability == .available
     }
 
     /// Human-readable reason when AI generation is unavailable.
     private var aiUnavailableReason: String? {
-        guard #available(macOS 26, *) else {
-            return "Requires macOS 26 or later"
-        }
         switch SystemLanguageModel.default.availability {
         case .available:
             return nil
@@ -388,10 +409,7 @@ struct ScriptEditView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header: title + action buttons
             headerBar
-
-            Divider()
 
             // Form body. Keep the metadata grouped in one row so the editor remains the
             // visual focus without shrinking the controls or their labels.
@@ -427,7 +445,10 @@ struct ScriptEditView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { loadFrom(shortcut) }
-        .onDisappear { flushAutosave() }
+        .onDisappear {
+            flushAutosave()
+            cancelGeneration()
+        }
         .onChange(of: draftState.draft) { scheduleAutosave() }
     }
 
@@ -442,36 +463,38 @@ struct ScriptEditView: View {
 
             Spacer()
 
-            // Delete button
-            Button(role: .destructive) {
-                onDelete()
+            Menu {
+                Button("Delete Script", systemImage: "trash", role: .destructive) {
+                    onDelete()
+                }
             } label: {
-                Label("Delete", systemImage: "trash")
+                Image(systemName: "ellipsis.circle")
             }
-            .frame(minWidth: headerActionMinWidth)
+            .menuStyle(.borderlessButton)
             .controlSize(.regular)
-            .help("Delete this script")
-
+            .help("More script actions")
+            .accessibilityLabel("More script actions")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
-
-    // Keep header action buttons aligned and stable in width.
-    private var headerActionMinWidth: CGFloat { 60 }
 
     @ViewBuilder
     private var saveStatus: some View {
         if draftState.hasUnsavedChanges {
             if isValid {
                 Label("Unsaved changes", systemImage: "clock")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 Label("Name required", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
                     .foregroundStyle(.orange)
             }
         } else {
             Label("Saved", systemImage: "checkmark.circle.fill")
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
@@ -554,7 +577,7 @@ struct ScriptEditView: View {
     /// Generate and Run buttons sitting above the editor's top-right corner.
     private var editorActionButtons: some View {
         HStack(spacing: 6) {
-            // AI Generate button — disabled with an instant tooltip when unavailable
+            // AI Generate button
             Button {
                 handleGenerate()
             } label: {
@@ -568,7 +591,7 @@ struct ScriptEditView: View {
             }
             .disabled(!isAIAvailable || isGenerating || isRunning)
             .controlSize(.small)
-            .immediateHelp(aiUnavailableReason ?? "Generate script from comments using Apple Intelligence")
+            .help(aiUnavailableReason ?? "Generate script from comments using Apple Intelligence")
 
             // Run button — dispatches the stored shortcut through the normal trigger path
             Button {
@@ -583,6 +606,7 @@ struct ScriptEditView: View {
                 }
             }
             .disabled(draftState.draft.scriptContent.isEmpty || isRunning)
+            .buttonStyle(.borderedProminent)
             .controlSize(.small)
             .help("Test run this script")
 
@@ -656,19 +680,29 @@ struct ScriptEditView: View {
             return
         }
 
-        guard #available(macOS 26, *) else { return }
         generateWithModel()
     }
 
     /// Calls the on-device Foundation Model to generate script code from the user's comments.
-    @available(macOS 26, *)
     private func generateWithModel() {
+        generationTask?.cancel()
+
         let shell = draftState.draft.shellType
         let input = draftState.draft.scriptContent
+        let requestID = UUID()
+        generationRequestID = requestID
         isGenerating = true
         generationError = nil
 
-        Task {
+        generationTask = Task { @MainActor in
+            defer {
+                if generationRequestID == requestID {
+                    isGenerating = false
+                    generationTask = nil
+                    generationRequestID = nil
+                }
+            }
+
             do {
                 let session = LanguageModelSession(
                     instructions: """
@@ -689,17 +723,25 @@ struct ScriptEditView: View {
                     """
 
                 let response = try await session.respond(to: prompt)
+                try Task.checkCancellation()
                 guard draftState.draft.scriptContent == input else {
                     generationError = "Script changed while generating. Generate again to use the latest content."
-                    isGenerating = false
                     return
                 }
                 editorController.replaceAll(with: response.content, actionName: "Generate Script")
             } catch {
-                generationError = error.localizedDescription
+                if !Task.isCancelled {
+                    generationError = error.localizedDescription
+                }
             }
-            isGenerating = false
         }
+    }
+
+    private func cancelGeneration() {
+        generationTask?.cancel()
+        generationTask = nil
+        generationRequestID = nil
+        isGenerating = false
     }
 
     /// Returns a starter comment template that teaches the user how to use AI generation.

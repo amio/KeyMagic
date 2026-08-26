@@ -3,7 +3,7 @@ import Observation
 
 @Observable
 @MainActor
-public final class UtilitiesController: @unchecked Sendable {
+public final class UtilitiesController {
     public init(directory: URL? = nil) {
         let baseDirectory =
             directory

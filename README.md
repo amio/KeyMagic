@@ -17,7 +17,7 @@ Install from [GitHub Releases](https://github.com/amio/TapTick/releases)
 
 ## Development
 
-TapTick is built with SwiftUI and Swift 6, targeting macOS 15+.
+TapTick is built with SwiftUI and Swift 6, targeting macOS 26+.
 
 Use `make` commands for common tasks:
 

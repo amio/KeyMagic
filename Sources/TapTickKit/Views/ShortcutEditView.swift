@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The edit/create form for a shortcut. Presented as a sheet.
 struct ShortcutEditView: View {
@@ -23,6 +24,9 @@ struct ShortcutEditView: View {
     @State private var scriptFilePath: String = ""
     @State private var shellType: ShortcutAction.ShellType = .zsh
     @State private var useScriptFile: Bool = false
+    @State private var isSelectingScriptFile = false
+    @State private var scriptFilePickerError = ""
+    @State private var isShowingScriptFilePickerError = false
 
     enum ActionType: String, CaseIterable {
         case launchApp = "Launch App"
@@ -83,8 +87,8 @@ struct ShortcutEditView: View {
                         HStack {
                             TextField("Script path", text: $scriptFilePath)
                                 .textFieldStyle(.roundedBorder)
-                            Button("Browse...") {
-                                browseScriptFile()
+                            Button("Browse…") {
+                                isSelectingScriptFile = true
                             }
                         }
                     } else {
@@ -130,6 +134,17 @@ struct ShortcutEditView: View {
             }
         }
         .navigationTitle(editingShortcut != nil ? "Edit Shortcut" : "New Shortcut")
+        .fileImporter(
+            isPresented: $isSelectingScriptFile,
+            allowedContentTypes: [.item]
+        ) { result in
+            selectScriptFile(from: result)
+        }
+        .alert("Unable to Choose Script", isPresented: $isShowingScriptFilePickerError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(scriptFilePickerError)
+        }
         .onAppear {
             if let shortcut = editingShortcut {
                 loadFromShortcut(shortcut)
@@ -194,15 +209,13 @@ struct ShortcutEditView: View {
         }
     }
 
-    private func browseScriptFile() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.message = "Select a script file"
-
-        if panel.runModal() == .OK, let url = panel.url {
+    private func selectScriptFile(from result: Result<URL, Error>) {
+        do {
+            let url = try result.get()
             scriptFilePath = url.path
+        } catch {
+            scriptFilePickerError = error.localizedDescription
+            isShowingScriptFilePickerError = true
         }
     }
 }

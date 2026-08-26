@@ -7,13 +7,13 @@
 - Use Makefile workflows for repository operations. Do not format Swift manually: after code changes, run `make format`, `make lint`, focused risk-based tests, and the proportionate build target.
 - After completing and non-interactively validating code changes, automatically run `make run` to replace and launch the modified app for the user to test. Launching the app is a handoff, not authorization for Codex to interact with its UI.
 - Do not use Computer Use, UI automation, or simulated mouse or keyboard input to validate TapTick because they take over the user's active Mac session, unless the user explicitly authorizes that specific interaction.
-- Preserve Swift 6 strict concurrency and macOS 15 compatibility. Keep shared mutable runtime state under an explicit owner, normally isolated to `@MainActor`; do not bypass an owner with parallel state or lifecycle machinery.
+- Preserve Swift 6 strict concurrency and macOS 26 compatibility. Keep shared mutable runtime state under an explicit owner, normally isolated to `@MainActor`; do not bypass an owner with parallel state or lifecycle machinery.
 - Do not add standalone examples or speculative scaffolding; changes must be production-ready and integrated into the owning module.
 
 # PROJECT CONTEXT
 
 - **Stack**: Swift 6, SwiftUI plus focused AppKit integration, and an SPM monorepo containing the `TapTickKit` library and `TapTick` app. XcodeGen generates Xcode 27 project metadata.
-- **Platform**: macOS 15+ menu-bar utility. Carbon owns permission-free registered global hotkeys; AppKit owns native status items, panels, process launching, and macOS permission or workspace integration where SwiftUI is not the correct boundary.
+- **Platform**: macOS 26+ menu-bar utility. Carbon owns permission-free registered global hotkeys; AppKit owns native status items, panels, process launching, and macOS permission or workspace integration where SwiftUI is not the correct boundary.
 - **Constraints**: The app executes user-selected shell scripts. Generated project state, release signing/notarization, Sparkle appcast inputs, macOS privacy identity, and forward-compatible stored data must remain consistent across local and CI workflows.
 - **Stage**: iCloud shortcut-sync code and migration support exist, but distribution entitlements remain disabled pending provisioning. Do not present sync as release-enabled or enable the commented entitlements without an explicit provisioning and rollout decision.
 

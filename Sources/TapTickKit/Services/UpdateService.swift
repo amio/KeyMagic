@@ -10,7 +10,7 @@ import Sparkle
 /// verification, installation, and relaunch automatically.
 @Observable
 @MainActor
-public final class UpdateService: @unchecked Sendable {
+public final class UpdateService {
 
     // MARK: - Published State
 

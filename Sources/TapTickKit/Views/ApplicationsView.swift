@@ -180,6 +180,7 @@ struct ApplicationsView: View {
                         }
                     }
                 }
+                .scrollEdgeEffectStyle(.hard, for: .top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -346,12 +347,6 @@ private struct AppRow: View {
             // Enabled toggle
             enabledCell
                 .frame(width: 70, alignment: .trailing)
-        }
-        // Tapping anywhere on the row toggles enabled; only active when a shortcut exists.
-        // Child controls (Toggle, hotkey binding buttons) intercept their own gestures first.
-        .onTapGesture {
-            guard shortcut != nil else { return }
-            onToggleEnabled()
         }
     }
 

@@ -96,7 +96,7 @@ public struct ScriptExecutionLog: Codable, Identifiable, Sendable {
 /// Owns the bounded, persisted execution history used by the UI.
 @Observable
 @MainActor
-public final class ScriptLogStore: @unchecked Sendable {
+public final class ScriptLogStore {
     /// Maximum persisted executions retained independently for each script.
     public static let recentLogLimit = 32
 

@@ -8,13 +8,15 @@ public struct SettingsView: View {
     @Environment(CloudSyncService.self) private var cloudSync
     @Environment(UpdateService.self) private var updateService
 
-    enum Tab: String, Hashable, CaseIterable {
+    enum SettingsSection: String, Hashable, CaseIterable, Identifiable {
         case general = "General"
         case applications = "Applications"
         case scripts = "Scripts"
         case menuBar = "Menu Bar"
         case utilities = "Utilities"
         case about = "About"
+
+        var id: Self { self }
 
         var systemImage: String {
             switch self {
@@ -26,51 +28,50 @@ public struct SettingsView: View {
             case .about: return "info.circle"
             }
         }
-
-        var iconPointSize: CGFloat {
-            switch self {
-            case .utilities:
-                12
-            case .general, .applications, .scripts, .menuBar, .about:
-                14
-            }
-        }
     }
 
-    @State private var selectedTab: Tab = .applications
+    @State private var selectedSection: SettingsSection = .applications
+    @FocusState private var isSidebarFocused: Bool
 
     public var body: some View {
         NavigationSplitView {
             sidebar
         } detail: {
             selectedPane
-                .navigationTitle(selectedTab.rawValue)
+                .navigationTitle(selectedSection.rawValue)
         }
         .navigationSplitViewStyle(.balanced)
-        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+        .onChange(of: selectedSection) { _, section in
+            restoreSidebarFocus(afterSelecting: section)
+        }
     }
 
     private var sidebar: some View {
-        List(Tab.allCases, id: \.self, selection: $selectedTab) { tab in
-            HStack(spacing: 12) {
-                Image(systemName: tab.systemImage)
-                    .font(.system(size: tab.iconPointSize, weight: .regular))
-                    .frame(width: 22)
-
-                Text(tab.rawValue)
-            }
+        List(SettingsSection.allCases, selection: $selectedSection) { section in
+            Label(section.rawValue, systemImage: section.systemImage)
         }
         .navigationSplitViewColumnWidth(
-            min: Self.sidebarWidth,
-            ideal: Self.sidebarWidth,
-            max: Self.sidebarWidth
+            min: 180,
+            ideal: 210,
+            max: 260
         )
         .listStyle(.sidebar)
+        .focused($isSidebarFocused)
+    }
+
+    /// Replacing the detail can interrupt AppKit's first-responder handoff from the click.
+    /// Restore it after the selection transaction so the sidebar keeps native list focus.
+    private func restoreSidebarFocus(afterSelecting section: SettingsSection) {
+        Task { @MainActor in
+            await Task.yield()
+            guard selectedSection == section, !isSidebarFocused else { return }
+            isSidebarFocused = true
+        }
     }
 
     @ViewBuilder
     private var selectedPane: some View {
-        switch selectedTab {
+        switch selectedSection {
         case .general:
             GeneralSettingsView()
                 .environment(cloudSync)
@@ -88,6 +89,4 @@ public struct SettingsView: View {
                 .environment(updateService)
         }
     }
-
-    private static let sidebarWidth: CGFloat = 180
 }

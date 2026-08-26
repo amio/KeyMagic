@@ -4,7 +4,7 @@ import SwiftUI
 
 // MARK: - Data Types
 
-enum AnnotationMode: String, Sendable, CaseIterable, Codable {
+enum AnnotationMode: String, Sendable, CaseIterable, Codable, Hashable {
     case freehand
     case rectangle
 
@@ -108,14 +108,6 @@ final class AnnotationToolbarModel {
 private let canvasMargin: CGFloat = 16
 /// Height of the standard system title bar.
 private let titleBarHeight: CGFloat = 28
-/// Corner radius of the window's blur background (continuous / squircle curve).
-private let windowCornerRadius: CGFloat = 24
-/// Standard close button center x ≈ 13pt; shift the cluster so it clears the corner tangent.
-private let trafficLightShift: CGFloat = windowCornerRadius - 13  // = 13
-/// Extra padding to push controls away from the window's top edge (accounts for large corner radius).
-private let verticalPadding: CGFloat = 8
-/// Toolbar leading inset: zoom trailing (59) + shift + gap (36).
-private let toolbarLeadingInset: CGFloat = 59 + (windowCornerRadius - 13) + 36
 
 /// NSHostingView subclass that refuses window-drag so toolbar buttons stay interactive.
 private final class NonDraggableHostingView<Content: View>: NSHostingView<Content> {
@@ -128,13 +120,11 @@ final class ScreenshotPreviewWindow: NSPanel {
     var onAnnotationSettingsChanged: ((AnnotationMode, Int) -> Void)?
     private let canvasView: AnnotationCanvasView
     private let toolbarModel: AnnotationToolbarModel
-    /// Retained so it can be shifted alongside the traffic lights in show().
-    private var toolbarHostingView: NSView?
     private var isOptionPressed = false
     private var didUseOptionPressAsModifier = false
     private var didActivateTemporaryModeSwitch = false
-    private var optionHoldActivationWorkItem: DispatchWorkItem?
-    private let optionHoldThreshold: TimeInterval = 0.22
+    private var optionHoldActivationTask: Task<Void, Never>?
+    private let optionHoldThreshold: Duration = .milliseconds(220)
 
     init(image: NSImage, initialMode: AnnotationMode = .freehand, initialColorIndex: Int = 0) {
         let screenFrame =
@@ -203,22 +193,6 @@ final class ScreenshotPreviewWindow: NSPanel {
 
     func show() {
         makeKeyAndOrderFront(nil)
-        adaptTitlebarControls()
-    }
-
-    /// Shifts traffic lights and toolbar away from the large rounded corner after AppKit layout.
-    private func adaptTitlebarControls() {
-        guard let titlebarView = standardWindowButton(.closeButton)?.superview else { return }
-        // isFlipped: Y increases downward → positive delta moves away from top.
-        // !isFlipped: Y increases upward  → negative delta moves away from top.
-        let yDelta = verticalPadding * (titlebarView.isFlipped ? 1 : -1)
-
-        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-            guard let btn = standardWindowButton(type) else { continue }
-            btn.frame.origin.x += trafficLightShift
-            btn.frame.origin.y += yDelta
-        }
-        toolbarHostingView?.frame.origin.y += yDelta
     }
 
     override func close() {
@@ -288,21 +262,25 @@ final class ScreenshotPreviewWindow: NSPanel {
         didUseOptionPressAsModifier = false
         didActivateTemporaryModeSwitch = false
 
-        let workItem = DispatchWorkItem { [weak self] in
+        let threshold = optionHoldThreshold
+        optionHoldActivationTask?.cancel()
+        optionHoldActivationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: threshold)
+            } catch {
+                return
+            }
+
             guard let self, self.isOptionPressed else { return }
             self.didActivateTemporaryModeSwitch = true
             self.toolbarModel.setTemporaryModeSwitchActive(true)
             self.canvasView.needsDisplay = true
         }
-
-        optionHoldActivationWorkItem?.cancel()
-        optionHoldActivationWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + optionHoldThreshold, execute: workItem)
     }
 
     private func endOptionModeInteraction() {
-        optionHoldActivationWorkItem?.cancel()
-        optionHoldActivationWorkItem = nil
+        optionHoldActivationTask?.cancel()
+        optionHoldActivationTask = nil
 
         if didActivateTemporaryModeSwitch {
             toolbarModel.setTemporaryModeSwitchActive(false)
@@ -318,8 +296,8 @@ final class ScreenshotPreviewWindow: NSPanel {
     }
 
     private func resetOptionModeInteraction() {
-        optionHoldActivationWorkItem?.cancel()
-        optionHoldActivationWorkItem = nil
+        optionHoldActivationTask?.cancel()
+        optionHoldActivationTask = nil
         toolbarModel.setTemporaryModeSwitchActive(false)
         isOptionPressed = false
         didUseOptionPressAsModifier = false
@@ -336,16 +314,19 @@ final class ScreenshotPreviewWindow: NSPanel {
         let hostingView = NonDraggableHostingView(rootView: toolbarView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         titlebarView.addSubview(hostingView)
-        toolbarHostingView = hostingView
+
+        let titlebarSafeArea = titlebarView.layoutGuide(
+            for: .safeArea(cornerAdaptation: .horizontal)
+        )
 
         NSLayoutConstraint.activate([
-            // Fixed inset from the titlebar's left edge — pre-accounts for the traffic light
-            // shift applied in show(), keeping the gap independent of AppKit re-layouts.
             hostingView.leadingAnchor.constraint(
-                equalTo: titlebarView.leadingAnchor, constant: toolbarLeadingInset
+                equalTo: closeButton.trailingAnchor,
+                constant: 16
             ),
             hostingView.trailingAnchor.constraint(
-                equalTo: titlebarView.trailingAnchor, constant: -16
+                equalTo: titlebarSafeArea.trailingAnchor,
+                constant: -8
             ),
             hostingView.centerYAnchor.constraint(
                 equalTo: closeButton.centerYAnchor
@@ -356,14 +337,8 @@ final class ScreenshotPreviewWindow: NSPanel {
     private func buildContentHierarchy(displaySize: NSSize) {
         guard let rootView = contentView else { return }
 
-        // Clip the window shape here so NSVisualEffectView's internal blending
-        // machinery is never disturbed by external layer surgery.
-        rootView.wantsLayer = true
-        rootView.layer?.cornerRadius = windowCornerRadius
-        rootView.layer?.cornerCurve = .continuous
-        rootView.layer?.masksToBounds = true
-
-        // 1. Blurred background filling the entire window behind the title bar.
+        // AppKit owns the Tahoe window shape; this material remains a content backdrop,
+        // while Liquid Glass is reserved for the interactive titlebar controls.
         let blur = NSVisualEffectView()
         blur.material = .menu
         blur.blendingMode = .behindWindow
@@ -378,7 +353,7 @@ final class ScreenshotPreviewWindow: NSPanel {
             blur.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
         ])
 
-        // 2. Canvas view centered in the space below title bar with a drop shadow.
+        // Canvas view centered in the space below title bar with a drop shadow.
         canvasView.translatesAutoresizingMaskIntoConstraints = false
         canvasView.wantsLayer = true
         canvasView.layer?.cornerRadius = 12
@@ -719,79 +694,90 @@ private struct AnnotationToolbar: View {
     @Bindable var model: AnnotationToolbarModel
 
     var body: some View {
-        HStack {
-            HStack(spacing: 24) {
-                HStack(spacing: 6) {
-                    modeSwitch
-                    keycap("⌥")
-                }
-                HStack(spacing: 6) {
-                    colorIndicator
-                    keycap("TAB")
+        GlassEffectContainer(spacing: 12) {
+            HStack(spacing: 12) {
+                modeControl
+                colorControl
+                Spacer(minLength: 16)
+                copyControl
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Annotation controls")
+    }
+
+    // MARK: - Controls
+
+    private var modeControl: some View {
+        HStack(spacing: 6) {
+            Picker("Annotation Tool", selection: modeSelection) {
+                ForEach(AnnotationMode.allCases, id: \.self) { mode in
+                    Label(mode.label, systemImage: mode.systemImage)
+                        .labelStyle(.iconOnly)
+                        .tag(mode)
                 }
             }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .fixedSize()
+            .accessibilityLabel("Annotation Tool")
+            .accessibilityValue(model.currentMode.label)
+            .help("Choose line or rectangle · tap Option to switch")
 
-            Spacer()
-
-            HStack(spacing: 24) {
-                HStack(spacing: 6) {
-                    copyButton
-                    keycap("↩")
-                }
-            }
+            keycap("⌥")
         }
     }
 
-    // MARK: - Mode Switch (Segmented)
-
-    private var modeSwitch: some View {
-        HStack(spacing: 1) {
-            ForEach(AnnotationMode.allCases, id: \.label) { mode in
-                modeSegment(mode)
+    private var colorControl: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.cycleColor()
+            } label: {
+                Circle()
+                    .fill(model.currentSwiftUIColor)
+                    .frame(width: 14, height: 14)
+                    .overlay {
+                        Circle().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5)
+                    }
+                    .padding(3)
             }
+            .buttonStyle(.glass)
+            .controlSize(.small)
+            .accessibilityLabel("Annotation Color")
+            .accessibilityValue(model.currentColorName)
+            .help("Cycle annotation color · Tab")
+
+            keycap("TAB")
         }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 5.5)
-                .fill(Color.primary.opacity(0.06))
+    }
+
+    private var copyControl: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.onDone?()
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            .buttonStyle(.glassProminent)
+            .controlSize(.small)
+            .accessibilityHint("Copies the annotated image and closes the preview")
+            .help("Copy and close · Return")
+
+            keycap("↩")
+        }
+    }
+
+    private var modeSelection: Binding<AnnotationMode> {
+        Binding(
+            get: { model.currentMode },
+            set: { model.setSelectedMode($0) }
         )
     }
 
-    private func modeSegment(_ mode: AnnotationMode) -> some View {
-        let isActive = model.currentMode == mode
-        return Image(systemName: mode.systemImage)
-            .font(.system(size: 11, weight: isActive ? .medium : .regular))
-            .foregroundStyle(isActive ? .primary : .tertiary)
-            .frame(width: 26, height: 18)
-            .background {
-                if isActive {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                        .shadow(color: .black.opacity(0.08), radius: 0.5, y: 0.5)
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { model.setSelectedMode(mode) }
-    }
-
-    // MARK: - Color Indicator
-
-    private var colorIndicator: some View {
-        Circle()
-            .fill(model.currentSwiftUIColor)
-            .frame(width: 12, height: 12)
-            .overlay(
-                Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
-            )
-            .contentShape(Circle())
-            .onTapGesture { model.cycleColor() }
-    }
-
-    // MARK: - Keycap Badge
-
     private func keycap(_ label: String) -> some View {
         Text(label)
-            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .font(.system(.caption2, design: .rounded, weight: .medium))
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
@@ -799,22 +785,7 @@ private struct AnnotationToolbar: View {
                 RoundedRectangle(cornerRadius: 3.5)
                     .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
             )
-    }
-
-    // MARK: - Copy Button
-
-    private var copyButton: some View {
-        Text("Copy")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.primary.opacity(0.06))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 5))
-            .onTapGesture { model.onDone?() }
+            .accessibilityHidden(true)
     }
 }
 

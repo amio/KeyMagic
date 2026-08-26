@@ -6,20 +6,15 @@ struct ListTableHeader<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                content()
-            }
-            .font(.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(.secondary)
-            .padding(.leading, 20)
-            .padding(.trailing, trailingPadding)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Divider()
+        HStack(spacing: 0) {
+            content()
         }
+        .font(.caption)
+        .fontWeight(.medium)
+        .foregroundStyle(.secondary)
+        .padding(.leading, 20)
+        .padding(.trailing, trailingPadding)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

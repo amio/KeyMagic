@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -7,6 +8,8 @@ struct AppPickerButton: View {
     @Binding var selectedAppName: String
 
     @State private var isShowingPicker = false
+    @State private var pickerError = ""
+    @State private var isShowingPickerError = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -25,29 +28,51 @@ struct AppPickerButton: View {
 
             Spacer()
 
-            Button("Choose App...") {
-                pickApp()
+            Button("Choose App…") {
+                isShowingPicker = true
             }
+        }
+        .fileImporter(
+            isPresented: $isShowingPicker,
+            allowedContentTypes: [.applicationBundle]
+        ) { result in
+            selectApp(from: result)
+        }
+        .alert("Unable to Choose App", isPresented: $isShowingPickerError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(pickerError)
         }
     }
 
-    private func pickApp() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.application]
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        panel.message = "Select an application to launch"
-
-        if panel.runModal() == .OK, let url = panel.url {
-            if let bundle = Bundle(url: url),
-                let bundleID = bundle.bundleIdentifier
-            {
-                selectedBundleID = bundleID
-                selectedAppName = url.deletingPathExtension().lastPathComponent
+    private func selectApp(from result: Result<URL, Error>) {
+        do {
+            let url = try result.get()
+            let isAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if isAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
             }
+
+            guard let bundleID = Bundle(url: url)?.bundleIdentifier else {
+                throw AppPickerError.missingBundleIdentifier
+            }
+
+            selectedBundleID = bundleID
+            selectedAppName = url.deletingPathExtension().lastPathComponent
+        } catch {
+            pickerError = error.localizedDescription
+            isShowingPickerError = true
         }
+    }
+}
+
+private enum AppPickerError: LocalizedError {
+    case missingBundleIdentifier
+
+    var errorDescription: String? {
+        "The selected item is not an application with a bundle identifier."
     }
 }
 

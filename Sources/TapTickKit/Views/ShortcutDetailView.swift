@@ -65,8 +65,7 @@ struct ShortcutDetailView: View {
                             GridRow {
                                 Text("Last Triggered")
                                     .foregroundStyle(.secondary)
-                                Text(lastTriggered, style: .relative)
-                                    + Text(" ago")
+                                Text("\(Text(lastTriggered, style: .relative)) ago")
                             }
                         }
                         GridRow {

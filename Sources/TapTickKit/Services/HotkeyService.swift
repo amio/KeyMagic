@@ -10,7 +10,7 @@ import Observation
 /// only when that exact combination is pressed.
 @Observable
 @MainActor
-public final class HotkeyService: @unchecked Sendable {
+public final class HotkeyService {
     public init() {}
 
     private(set) var isListening = false

@@ -17,6 +17,7 @@ struct HotkeyBindingControl: View {
     var onClearHotkey: (() -> Void)? = nil
     var checkConflict: ((KeyCombo) -> Bool)?
     var emptyTitle = "Record Hotkey"
+    var usesEmphasizedAppearance = false
 
     @State private var monitor: Any?
     /// Live preview text shown while recording. nil = nothing pressed yet.
@@ -33,6 +34,7 @@ struct HotkeyBindingControl: View {
                 emptyContent
             }
         }
+        .frame(height: 22)
         .onDisappear {
             if isRecording {
                 stopLocalMonitor()
@@ -56,25 +58,29 @@ struct HotkeyBindingControl: View {
     private var recordingContent: some View {
         HStack(spacing: 6) {
             Image(systemName: "record.circle")
-                .foregroundStyle(.red)
+                .foregroundStyle(recordingIndicatorColor)
                 .symbolEffect(.pulse)
             if let previewText {
                 Text(previewText)
                     .font(.body)
                     .fontWeight(.medium)
                     .tracking(1)
+                    .foregroundStyle(usesEmphasizedAppearance ? Color.white : Color.primary)
             } else {
                 Text("Press keys...")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(
+                        usesEmphasizedAppearance ? Color.white.opacity(0.85) : Color.secondary
+                    )
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 3)
         .padding(.vertical, 3)
-        .frame(width: 97, height: 20, alignment: .leading)
-        .background(
+        .frame(width: 87, height: 20, alignment: .leading)
+        .background(recordingBackground, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(.red.opacity(0.5), lineWidth: 1)
+                .stroke(recordingBorder, lineWidth: 1)
         )
         .onAppear { startLocalMonitor() }
         .onDisappear { stopLocalMonitor() }
@@ -84,13 +90,10 @@ struct HotkeyBindingControl: View {
 
     private func boundContent(_ combo: KeyCombo) -> some View {
         HStack(spacing: 4) {
-            Button {
-                onStartRecording()
-            } label: {
+            hotkeyButton(action: onStartRecording) {
                 Text(combo.displayString)
                     .tracking(1.5)
             }
-            .buttonStyle(.bordered)
             .controlSize(.small)
             .help("Click to re-bind hotkey")
 
@@ -102,7 +105,9 @@ struct HotkeyBindingControl: View {
                         .font(.system(size: 13))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(
+                    usesEmphasizedAppearance ? Color.white.opacity(0.9) : Color.secondary
+                )
                 .help("Remove hotkey")
             }
         }
@@ -111,11 +116,36 @@ struct HotkeyBindingControl: View {
     // MARK: - Empty State
 
     private var emptyContent: some View {
-        Button(emptyTitle) {
-            onStartRecording()
+        hotkeyButton(action: onStartRecording) {
+            Text(emptyTitle)
         }
-        .buttonStyle(.bordered)
         .controlSize(.small)
+    }
+
+    @ViewBuilder
+    private func hotkeyButton<Label: View>(
+        action: @escaping () -> Void,
+        @ViewBuilder label: @escaping () -> Label
+    ) -> some View {
+        if usesEmphasizedAppearance {
+            Button(action: action, label: label)
+                .buttonStyle(EmphasizedHotkeyButtonStyle())
+        } else {
+            Button(action: action, label: label)
+                .buttonStyle(.bordered)
+        }
+    }
+
+    private var recordingBackground: Color {
+        usesEmphasizedAppearance ? .white.opacity(0.16) : .clear
+    }
+
+    private var recordingBorder: Color {
+        usesEmphasizedAppearance ? .white.opacity(0.4) : .red.opacity(0.5)
+    }
+
+    private var recordingIndicatorColor: Color {
+        usesEmphasizedAppearance ? .white.opacity(0.9) : .red.opacity(0.7)
     }
 
     // MARK: - Key Recording
@@ -177,5 +207,20 @@ struct HotkeyBindingControl: View {
         if hadMonitor {
             hotkeyService.resumeRegistrations()
         }
+    }
+}
+
+/// Keeps compact Hotkey actions legible without competing with the active selection fill.
+private struct EmphasizedHotkeyButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 22)
+            .background(
+                .white.opacity(configuration.isPressed ? 0.28 : 0.18),
+                in: RoundedRectangle(cornerRadius: 6)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6))
     }
 }
