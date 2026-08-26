@@ -26,6 +26,28 @@ final class TapTickUITests: XCTestCase {
         )
     }
 
+    func testSettingsSidebarToggleWorks() throws {
+        let app = launchApp()
+        defer { app.terminate() }
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+
+        let sidebarToggle = window.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Sidebar")
+        ).firstMatch
+        XCTAssertTrue(
+            sidebarToggle.waitForExistence(timeout: 3),
+            "Settings should expose the native sidebar toggle"
+        )
+
+        sidebarToggle.click()
+        XCTAssertTrue(
+            window.buttons["Show Sidebar"].waitForExistence(timeout: 3),
+            "The native toggle should collapse the Settings sidebar"
+        )
+    }
+
     func testCanNavigateToGeneralSettings() throws {
         let app = launchApp()
         defer { app.terminate() }

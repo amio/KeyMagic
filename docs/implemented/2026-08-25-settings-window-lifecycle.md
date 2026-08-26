@@ -29,9 +29,18 @@
 - `AppDelegate` is the sole app-presentation owner. It registers the SwiftUI-created Settings window,
   observes native close events, tracks the most recent non-TapTick activation through `NSWorkspace`,
   and applies activation policy from `UserDefaults`.
-- Opening uses `NSApp.activate()`. Dismissal uses cooperative activation by yielding to the remembered
-  `NSRunningApplication` before activating it; if no valid target exists, hiding TapTick lets macOS
-  select the next active app. Focus is retained when another interactive TapTick window is visible.
+- Opening records a presentation request independently from SwiftUI scene creation. Once the
+  `NSWindow` resolves, the app requests activation and makes that window key; the request remains
+  pending until AppKit confirms key-window status. Reopening always requests activation so it also
+  cancels an unfinished cooperative yield from a preceding dismissal.
+- Settings uses one persistent unified window toolbar and a native `NavigationSplitView`. AppKit owns
+  the standard controls, titlebar geometry, hover tracking, active-window appearance, and button
+  actions; application code never repositions those controls. The functional system sidebar toggle
+  remains the root toolbar item so every page preserves the same toolbar geometry, while the window
+  owns one explicit titlebar separator style rather than deriving it from page scrolling content.
+- Dismissal uses cooperative activation by yielding to the remembered `NSRunningApplication` before
+  activating it; if no valid target exists, hiding TapTick lets macOS select the next active app.
+  Focus is retained when another interactive TapTick window is visible.
 - `keyAELaunchedAsLogInItem` in the launch Apple Event is the authoritative quiet-launch signal;
   parent-process names are not used because LaunchServices can route manual UIElement launches through
   `launchd` too.

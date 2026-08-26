@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The main settings view with a sidebar for navigation across global and feature-specific areas.
+/// Owns the persistent Settings window structure and its sidebar navigation.
 public struct SettingsView: View {
     public init() {}
 
@@ -38,24 +38,34 @@ public struct SettingsView: View {
     }
 
     @State private var selectedTab: Tab = .applications
+
     public var body: some View {
         NavigationSplitView {
-            List(Tab.allCases, id: \.self, selection: $selectedTab) { tab in
-                HStack(spacing: 12) {
-                    Image(systemName: tab.systemImage)
-                        .font(.system(size: tab.iconPointSize, weight: .regular))
-                        .frame(width: 22)
-
-                    Text(tab.rawValue)
-                }
-            }
-            .frame(minWidth: 180, idealWidth: 180, maxWidth: 180)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
-            .listStyle(.sidebar)
+            sidebar
         } detail: {
             selectedPane
                 .navigationTitle(selectedTab.rawValue)
         }
+        .navigationSplitViewStyle(.balanced)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+    }
+
+    private var sidebar: some View {
+        List(Tab.allCases, id: \.self, selection: $selectedTab) { tab in
+            HStack(spacing: 12) {
+                Image(systemName: tab.systemImage)
+                    .font(.system(size: tab.iconPointSize, weight: .regular))
+                    .frame(width: 22)
+
+                Text(tab.rawValue)
+            }
+        }
+        .navigationSplitViewColumnWidth(
+            min: Self.sidebarWidth,
+            ideal: Self.sidebarWidth,
+            max: Self.sidebarWidth
+        )
+        .listStyle(.sidebar)
     }
 
     @ViewBuilder
@@ -78,4 +88,6 @@ public struct SettingsView: View {
                 .environment(updateService)
         }
     }
+
+    private static let sidebarWidth: CGFloat = 180
 }

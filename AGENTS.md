@@ -5,7 +5,8 @@
 - Before changing code, inspect the relevant owner and its callers, persistence, and runtime boundaries. Fix root causes at the highest coherent owner and raise disproportionate complexity or architecture costs before implementing non-essential requirements.
 - Treat `project.yml` as the source for generated Xcode metadata. Run `make gen` after changing it; do not hand-maintain generated `TapTick.xcodeproj` state.
 - Use Makefile workflows for repository operations. Do not format Swift manually: after code changes, run `make format`, `make lint`, focused risk-based tests, and the proportionate build target.
-- After completing and validating any code changes, automatically run `make run` to launch the modified app for the user to inspect; do not stop after tests or a successful build.
+- After completing and non-interactively validating code changes, automatically run `make run` to replace and launch the modified app for the user to test. Launching the app is a handoff, not authorization for Codex to interact with its UI.
+- Do not use Computer Use, UI automation, or simulated mouse or keyboard input to validate TapTick because they take over the user's active Mac session, unless the user explicitly authorizes that specific interaction.
 - Preserve Swift 6 strict concurrency and macOS 15 compatibility. Keep shared mutable runtime state under an explicit owner, normally isolated to `@MainActor`; do not bypass an owner with parallel state or lifecycle machinery.
 - Do not add standalone examples or speculative scaffolding; changes must be production-ready and integrated into the owning module.
 

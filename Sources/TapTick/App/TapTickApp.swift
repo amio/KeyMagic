@@ -62,13 +62,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsNotificationObserver: Any?
     private var toggleSettingsNotificationObserver: Any?
     private var settingsWindowCloseObserver: Any?
+    private var settingsWindowKeyObserver: Any?
     private var workspaceActivationObserver: Any?
     private var defaultsObserver: Any?
     private weak var observedSettingsWindow: NSWindow?
     private var lastExternalActiveApp: NSRunningApplication?
     private var appliedDockIconVisibility: Bool?
     private var isReadyForActivationPresentation = false
-    private var isSettingsPresentationPending = false
+    private var isSettingsSceneOpening = false
+    private var isSettingsPresentationRequested = false
     private var isTerminating = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -149,12 +151,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         guard isReadyForActivationPresentation else { return }
 
-        if let settingsWindow = currentSettingsWindow(),
-            settingsWindow.isVisible || settingsWindow.isMiniaturized
-        {
+        if let settingsWindow = currentSettingsWindow() {
+            if isSettingsPresentationRequested {
+                presentSettingsWindow(settingsWindow)
+                return
+            }
+
+            if settingsWindow.isMiniaturized {
+                return
+            }
+
+            if settingsWindow.isVisible {
+                if NSApp.keyWindow == nil {
+                    settingsWindow.makeKeyAndOrderFront(nil)
+                }
+                return
+            }
+        }
+
+        guard !hasVisibleInteractiveWindow() else {
             return
         }
-        guard !hasVisibleInteractiveWindow() else { return }
 
         openSettingsWindow()
     }
@@ -175,33 +192,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func registerSettingsWindow(_ window: NSWindow) {
         window.identifier = settingsWindowIdentifier
-        window.styleMask.remove(.resizable)
-        // The automatic style changes with the active detail pane's scrolling context.
-        // Settings has a persistent header, so its boundary must be a window-level invariant.
+        // Inner pages own independent scrollers, but the window owns one stable toolbar boundary.
         window.titlebarSeparatorStyle = .line
         AppState.shared.settingsWindow = window
-        isSettingsPresentationPending = false
+        isSettingsSceneOpening = false
 
-        guard observedSettingsWindow !== window else { return }
+        if observedSettingsWindow !== window {
+            if let settingsWindowCloseObserver {
+                NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
+            }
+            if let settingsWindowKeyObserver {
+                NotificationCenter.default.removeObserver(settingsWindowKeyObserver)
+            }
 
-        if let settingsWindowCloseObserver {
-            NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
+            observedSettingsWindow = window
+            settingsWindowCloseObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self, weak window] _ in
+                Task { @MainActor [weak self, weak window] in
+                    guard let window else { return }
+                    self?.settingsWindowWillClose(window)
+                }
+            }
+            settingsWindowKeyObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didBecomeKeyNotification,
+                object: window,
+                queue: .main
+            ) { [weak self, weak window] _ in
+                Task { @MainActor [weak self, weak window] in
+                    guard let self, let window, self.observedSettingsWindow === window else {
+                        return
+                    }
+                    self.isSettingsPresentationRequested = false
+                }
+            }
         }
 
-        observedSettingsWindow = window
-        settingsWindowCloseObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: window,
-            queue: .main
-        ) { [weak self, weak window] _ in
-            Task { @MainActor [weak self, weak window] in
-                guard let window else { return }
-                self?.settingsWindowWillClose(window)
-            }
+        if isSettingsPresentationRequested {
+            presentSettingsWindow(window)
         }
     }
 
     func dismissSettingsWindow() {
+        isSettingsPresentationRequested = false
+
         guard let window = currentSettingsWindow(), window.isVisible else {
             return
         }
@@ -213,17 +249,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openSettingsWindow() {
         rememberExternalApp(NSWorkspace.shared.frontmostApplication)
-        NSApp.unhide(nil)
-        if !NSApp.isActive {
-            NSApp.activate()
-        }
+        isSettingsPresentationRequested = true
 
         if let window = currentSettingsWindow() {
-            isSettingsPresentationPending = false
-            window.makeKeyAndOrderFront(nil)
-        } else if !isSettingsPresentationPending {
-            isSettingsPresentationPending = true
-            AppState.shared.openSettingsTrigger += 1
+            presentSettingsWindow(window)
+            return
+        }
+
+        guard !isSettingsSceneOpening else { return }
+        isSettingsSceneOpening = true
+        AppState.shared.openSettingsTrigger += 1
+    }
+
+    private func presentSettingsWindow(_ window: NSWindow) {
+        NSApp.unhide(nil)
+        // Settings presentation only follows an explicit user action or a manual launch. The
+        // cooperative API can leave LSUIElement windows behind the active app on macOS 26 and 27
+        // (FB23508310), so keep this compatibility call at the app-presentation boundary.
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+
+        if window.isKeyWindow {
+            isSettingsPresentationRequested = false
         }
     }
 
@@ -246,9 +293,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
             self.settingsWindowCloseObserver = nil
         }
+        if let settingsWindowKeyObserver {
+            NotificationCenter.default.removeObserver(settingsWindowKeyObserver)
+            self.settingsWindowKeyObserver = nil
+        }
         AppState.shared.settingsWindow = nil
         observedSettingsWindow = nil
-        isSettingsPresentationPending = false
+        isSettingsSceneOpening = false
+        isSettingsPresentationRequested = false
         handOffFocusIfNeeded(excluding: window)
     }
 
@@ -315,17 +367,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyDockIconPolicyFromDefaults() {
         let isVisible = UserDefaults.standard.bool(forKey: "showDockIcon")
         guard appliedDockIconVisibility != isVisible else { return }
-        appliedDockIconVisibility = isVisible
 
         let settingsWindow = currentSettingsWindow()
-        let shouldRestoreSettingsFocus = settingsWindow?.isKeyWindow == true
-        NSApp.setActivationPolicy(isVisible ? .regular : .accessory)
+        let shouldRestoreSettingsFocus =
+            settingsWindow?.isKeyWindow == true || isSettingsPresentationRequested
+        guard NSApp.setActivationPolicy(isVisible ? .regular : .accessory) else { return }
+        appliedDockIconVisibility = isVisible
 
         guard shouldRestoreSettingsFocus else { return }
-        Task { @MainActor [weak settingsWindow] in
+        isSettingsPresentationRequested = true
+        Task { @MainActor [weak self, weak settingsWindow] in
             await Task.yield()
-            NSApp.activate()
-            settingsWindow?.makeKeyAndOrderFront(nil)
+            guard let self, let settingsWindow else { return }
+            self.presentSettingsWindow(settingsWindow)
         }
     }
 
@@ -333,7 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let center = NotificationCenter.default
         [
             settingsNotificationObserver, toggleSettingsNotificationObserver,
-            settingsWindowCloseObserver, defaultsObserver,
+            settingsWindowCloseObserver, settingsWindowKeyObserver, defaultsObserver,
         ]
         .compactMap { $0 }
         .forEach(center.removeObserver)
@@ -345,6 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsNotificationObserver = nil
         toggleSettingsNotificationObserver = nil
         settingsWindowCloseObserver = nil
+        settingsWindowKeyObserver = nil
         workspaceActivationObserver = nil
         defaultsObserver = nil
     }
@@ -382,11 +437,9 @@ struct TapTickApp: App {
                 .environment(appState.scriptLogStore)
                 .environment(appState.shortcutExecutor)
                 .environment(appState.menuBarTextController)
-                .background(
-                    SettingsWindowEscapeShortcut {
-                        appDelegate.dismissSettingsWindow()
-                    }
-                )
+                .onExitCommand {
+                    appDelegate.dismissSettingsWindow()
+                }
                 .background(
                     SettingsWindowObserver { window in
                         guard let window else { return }
@@ -399,6 +452,7 @@ struct TapTickApp: App {
         }
         .windowResizability(.contentSize)
         .windowToolbarStyle(.unified(showsTitle: true))
+        .windowStyle(.titleBar)
         .defaultLaunchBehavior(.suppressed)
         .onChange(of: appState.openSettingsTrigger) {
             openWindow(id: "settings")
@@ -417,20 +471,6 @@ struct TapTickApp: App {
 }
 
 private let settingsWindowIdentifier = NSUserInterfaceItemIdentifier("TapTick.settingsWindow")
-
-private struct SettingsWindowEscapeShortcut: View {
-    let onDismiss: () -> Void
-
-    var body: some View {
-        Button("Dismiss Settings", action: onDismiss)
-            .keyboardShortcut(.cancelAction)
-            .labelsHidden()
-            .frame(width: 0, height: 0)
-            .opacity(0.001)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-}
 
 /// Captures the underlying NSWindow for the SwiftUI settings scene once it exists.
 private struct SettingsWindowObserver: NSViewRepresentable {
