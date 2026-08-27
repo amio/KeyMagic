@@ -1,3 +1,4 @@
+import AppKit
 import FoundationModels
 import SwiftUI
 
@@ -13,6 +14,7 @@ struct ScriptsDirectoryView: View {
     @Environment(HotkeyService.self) private var hotkeyService
 
     @Binding var selection: UUID?
+    @Binding var nameSelectionRequestID: UUID?
 
     @State private var recordingShortcutID: UUID?
     @FocusState private var isScriptListFocused: Bool
@@ -30,7 +32,18 @@ struct ScriptsDirectoryView: View {
     var body: some View {
         scriptListPanel
             .onChange(of: selection) { _, shortcutID in
+                if let requestID = nameSelectionRequestID {
+                    guard requestID != shortcutID else { return }
+                    nameSelectionRequestID = nil
+                }
                 restoreScriptListFocus(afterSelecting: shortcutID)
+            }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Add Script", systemImage: "plus", action: addNewScript)
+                        .keyboardShortcut("n", modifiers: .command)
+                        .help("Add Script (⌘N)")
+                }
             }
     }
 
@@ -39,8 +52,6 @@ struct ScriptsDirectoryView: View {
     @ViewBuilder
     private var scriptListPanel: some View {
         VStack(spacing: 0) {
-            scriptListHeader
-
             if scriptShortcuts.isEmpty {
                 Spacer()
                 ContentUnavailableView {
@@ -93,52 +104,30 @@ struct ScriptsDirectoryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var scriptListHeader: some View {
-        HStack(spacing: 8) {
-            Text("All Scripts")
-                .font(.headline)
-
-            Spacer()
-
-            Button {
-                addNewScript()
-            } label: {
-                Label("Add Script", systemImage: "plus")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.borderless)
-            .keyboardShortcut("n", modifiers: .command)
-            .help("Add Script (⌘N)")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 6)
-    }
-
     // MARK: - Actions
 
-    /// Rebuilding the selected editor can leave the window without the list as first responder.
-    /// Restore it after the selection transaction while preserving later editor focus changes.
+    /// Keep native list focus after its selection transaction without overriding later editor focus.
     private func restoreScriptListFocus(afterSelecting shortcutID: UUID?) {
         guard let shortcutID else { return }
 
         Task { @MainActor in
             await Task.yield()
-            guard selection == shortcutID, !isScriptListFocused else { return }
+            guard
+                selection == shortcutID,
+                nameSelectionRequestID != shortcutID,
+                !isScriptListFocused
+            else { return }
             isScriptListFocused = true
         }
     }
 
     private func addNewScript() {
-        let newShortcut = Shortcut(
-            name: "Untitled Script",
-            keyCombo: nil,
-            action: .runScript(script: "", shell: .zsh),
-            isEnabled: true
+        let shortcutID = createNewScript(
+            in: store,
+            hotkeyService: hotkeyService
         )
-        store.add(newShortcut)
-        hotkeyService.restart(store: store)
-        selection = newShortcut.id
+        nameSelectionRequestID = shortcutID
+        selection = shortcutID
     }
 
     private func bindHotkey(_ combo: KeyCombo, to shortcut: Shortcut) {
@@ -156,7 +145,23 @@ struct ScriptsDirectoryView: View {
     }
 }
 
-enum ScriptEditorSaveStatus: Equatable {
+@MainActor
+private func createNewScript(
+    in store: ShortcutStore,
+    hotkeyService: HotkeyService
+) -> UUID {
+    let newShortcut = Shortcut(
+        name: "Untitled Script",
+        keyCombo: nil,
+        action: .runScript(script: "", shell: .zsh),
+        isEnabled: true
+    )
+    store.add(newShortcut)
+    hotkeyService.restart(store: store)
+    return newShortcut.id
+}
+
+private enum ScriptEditorSaveStatus: Equatable {
     case saved
     case unsaved
     case nameRequired
@@ -170,12 +175,12 @@ struct ScriptDetailView: View {
     @Environment(ShortcutExecutor.self) private var shortcutExecutor
 
     @Binding var selection: UUID?
+    @Binding var nameSelectionRequestID: UUID?
 
     @State private var showingDeleteConfirmation = false
     @State private var deletingShortcutID: UUID?
     @State private var logsPresentation: ScriptLogsPresentation?
     @State private var editorRunIDs: [UUID: UUID] = [:]
-    @State private var editorSaveStatus: ScriptEditorSaveStatus = .saved
 
     private var selectedShortcut: Shortcut? {
         guard let shortcut = store.shortcuts.first(where: { $0.id == selection }) else {
@@ -194,15 +199,6 @@ struct ScriptDetailView: View {
         editPanel
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
-            .background {
-                DetailColumnHeaderAccessory {
-                    detailHeader
-                }
-                .frame(width: 0, height: 0)
-            }
-            .onChange(of: selection) {
-                editorSaveStatus = .saved
-            }
             .sheet(item: $logsPresentation) { presentation in
                 ScriptLogsView(
                     logs: logStore.recentLogs(for: presentation.shortcutID),
@@ -235,7 +231,7 @@ struct ScriptDetailView: View {
                 shortcut: shortcut,
                 isRunning: isEditorRunActive(for: shortcut.id),
                 hasLogs: !logStore.recentLogs(for: shortcut.id).isEmpty,
-                saveStatus: $editorSaveStatus,
+                nameSelectionRequestID: nameSelectionRequestID,
                 onSave: { updated in
                     store.updateScript(updated)
                 },
@@ -244,6 +240,14 @@ struct ScriptDetailView: View {
                 },
                 onShowLog: {
                     showLogs(for: shortcut.id)
+                },
+                onDelete: {
+                    deletingShortcutID = shortcut.id
+                    showingDeleteConfirmation = true
+                },
+                onNameSelectionRequestHandled: {
+                    guard nameSelectionRequestID == shortcut.id else { return }
+                    nameSelectionRequestID = nil
                 }
             )
         } else {
@@ -252,56 +256,6 @@ struct ScriptDetailView: View {
             } description: {
                 Text("Select a script from the list to edit, or add a new one.")
             }
-        }
-    }
-
-    private var detailHeader: some View {
-        HStack(spacing: 8) {
-            if let shortcut = selectedShortcut {
-                DetailColumnHeaderTitle(
-                    title: "Edit Script",
-                    systemImage: "terminal"
-                )
-
-                saveStatusLabel
-
-                Spacer()
-
-                Menu {
-                    Button("Delete Script", systemImage: "trash", role: .destructive) {
-                        deletingShortcutID = shortcut.id
-                        showingDeleteConfirmation = true
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .controlSize(.regular)
-                .help("More script actions")
-                .accessibilityLabel("More script actions")
-            }
-        }
-        .font(.headline)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity)
-    }
-
-    @ViewBuilder
-    private var saveStatusLabel: some View {
-        switch editorSaveStatus {
-        case .saved:
-            Label("Saved", systemImage: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .unsaved:
-            Label("Unsaved changes", systemImage: "clock")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .nameRequired:
-            Label("Name required", systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
-                .foregroundStyle(.orange)
         }
     }
 
@@ -456,14 +410,151 @@ struct ScriptEditorDraftState {
     }
 }
 
+private struct ScriptDetailHeader: View {
+    private struct CompactStatusLabelStyle: LabelStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            HStack(spacing: 3) {
+                configuration.icon
+                configuration.title
+            }
+        }
+    }
+
+    private struct NameSelectionTaskID: Equatable {
+        let shortcutID: UUID
+        let requestID: UUID?
+    }
+
+    let shortcutID: UUID
+    @Binding var name: String
+    let saveStatus: ScriptEditorSaveStatus
+    let nameSelectionRequestID: UUID?
+    let onSubmit: () -> Void
+    let onDelete: () -> Void
+    let onNameSelectionRequestHandled: () -> Void
+
+    @State private var isDeleteHovered = false
+    @State private var isNameHovered = false
+    @FocusState private var isNameFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "terminal")
+                .contentShape(.rect)
+                .gesture(WindowDragGesture())
+
+            nameField
+
+            saveStatusLabel
+
+            Spacer()
+                .contentShape(.rect)
+                .gesture(WindowDragGesture())
+
+            Button("Delete Script", systemImage: "trash", role: .destructive) {
+                onDelete()
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .controlSize(.regular)
+            .frame(width: 32, height: 32)
+            .contentShape(Circle())
+            .glassEffect(
+                isDeleteHovered ? .regular.interactive() : .identity,
+                in: .circle
+            )
+            .onHover { isDeleteHovered = $0 }
+            .help("Delete Script")
+            .accessibilityLabel("Delete Script")
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 10)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .allowsWindowActivationEvents()
+    }
+
+    private var nameField: some View {
+        Text(name.isEmpty ? " " : name)
+            .font(.headline)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .hidden()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(minWidth: 50, alignment: .leading)
+            .overlay(alignment: .leading) {
+                TextField("Script Name", text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .focused($isNameFocused)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .onSubmit { onSubmit() }
+                    .accessibilityLabel("Script Name")
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(nameBorderColor, lineWidth: 1)
+                    .opacity(isNameHovered || isNameFocused ? 1 : 0)
+            }
+            .onHover { isNameHovered = $0 }
+            .task(
+                id: NameSelectionTaskID(
+                    shortcutID: shortcutID,
+                    requestID: nameSelectionRequestID
+                )
+            ) {
+                await selectNameForNewScriptIfNeeded()
+            }
+    }
+
+    private var nameBorderColor: Color {
+        isNameFocused ? .accentColor : Color(nsColor: .separatorColor)
+    }
+
+    private var saveStatusLabel: some View {
+        Group {
+            switch saveStatus {
+            case .saved:
+                Label("Saved", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            case .unsaved:
+                Label("Unsaved changes", systemImage: "clock")
+                    .foregroundStyle(.secondary)
+            case .nameRequired:
+                Label("Name required", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
+        }
+        .font(.caption)
+        .labelStyle(CompactStatusLabelStyle())
+    }
+
+    @MainActor
+    private func selectNameForNewScriptIfNeeded() async {
+        guard nameSelectionRequestID == shortcutID else { return }
+
+        isNameFocused = true
+        await Task.yield()
+
+        guard !Task.isCancelled, nameSelectionRequestID == shortcutID else { return }
+        NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: nil)
+        onNameSelectionRequestHandled()
+    }
+}
+
 struct ScriptEditView: View {
     let shortcut: Shortcut
     let isRunning: Bool
     let hasLogs: Bool
-    @Binding var saveStatus: ScriptEditorSaveStatus
+    let nameSelectionRequestID: UUID?
     let onSave: (Shortcut) -> Void
     let onRun: () -> Void
     let onShowLog: () -> Void
+    let onDelete: () -> Void
+    let onNameSelectionRequestHandled: () -> Void
 
     @State private var draftState: ScriptEditorDraftState
     @State private var autosaveTask: Task<Void, Never>?
@@ -479,18 +570,22 @@ struct ScriptEditView: View {
         shortcut: Shortcut,
         isRunning: Bool,
         hasLogs: Bool,
-        saveStatus: Binding<ScriptEditorSaveStatus>,
+        nameSelectionRequestID: UUID?,
         onSave: @escaping (Shortcut) -> Void,
         onRun: @escaping () -> Void,
-        onShowLog: @escaping () -> Void
+        onShowLog: @escaping () -> Void,
+        onDelete: @escaping () -> Void,
+        onNameSelectionRequestHandled: @escaping () -> Void
     ) {
         self.shortcut = shortcut
         self.isRunning = isRunning
         self.hasLogs = hasLogs
-        _saveStatus = saveStatus
+        self.nameSelectionRequestID = nameSelectionRequestID
         self.onSave = onSave
         self.onRun = onRun
         self.onShowLog = onShowLog
+        self.onDelete = onDelete
+        self.onNameSelectionRequestHandled = onNameSelectionRequestHandled
         _draftState = State(initialValue: ScriptEditorDraftState(shortcut: shortcut))
     }
 
@@ -530,15 +625,9 @@ struct ScriptEditView: View {
     }
 
     var body: some View {
-        // Keep the metadata grouped in one row so the editor remains the visual focus
-        // without shrinking the controls or their labels.
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 16) {
-                nameField
-                    .frame(maxWidth: .infinity)
-                shellPicker
-                    .frame(width: 240, alignment: .trailing)
-            }
+            shellPicker
+                .frame(width: 240, alignment: .leading)
 
             scriptEditor
 
@@ -561,6 +650,12 @@ struct ScriptEditView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            DetailColumnHeaderAccessory {
+                detailHeader
+            }
+            .frame(width: 0, height: 0)
+        }
         .onDisappear {
             flushAutosave()
             cancelGeneration()
@@ -569,22 +664,23 @@ struct ScriptEditView: View {
             switchTo(shortcut)
         }
         .onChange(of: draftState.draft) { scheduleAutosave() }
-        .onChange(of: currentSaveStatus, initial: true) { _, status in
-            saveStatus = status
-        }
+    }
+
+    // MARK: - Header
+
+    private var detailHeader: some View {
+        ScriptDetailHeader(
+            shortcutID: shortcut.id,
+            name: $draftState.draft.name,
+            saveStatus: currentSaveStatus,
+            nameSelectionRequestID: nameSelectionRequestID,
+            onSubmit: flushAutosave,
+            onDelete: onDelete,
+            onNameSelectionRequestHandled: onNameSelectionRequestHandled
+        )
     }
 
     // MARK: - Form Fields
-
-    private var nameField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Name")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField("e.g. Deploy Script", text: $draftState.draft.name)
-                .textFieldStyle(.roundedBorder)
-        }
-    }
 
     private var shellPicker: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -704,7 +800,7 @@ struct ScriptEditView: View {
         guard draftState.hasUnsavedChanges, isValid else { return }
 
         autosaveTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             save()
         }

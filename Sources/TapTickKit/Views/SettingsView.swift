@@ -31,6 +31,7 @@ public struct SettingsView: View {
 
     @State private var selectedSection: SettingsSection = .applications
     @State private var selectedScriptID: UUID?
+    @State private var scriptNameSelectionRequestID: UUID?
     @State private var selectedUtilityID: UtilityID? = .keystrokeOverlay
     @FocusState private var isSidebarFocused: Bool
 
@@ -56,15 +57,21 @@ public struct SettingsView: View {
         NavigationSplitView {
             sidebar
         } content: {
-            ScriptsDirectoryView(selection: $selectedScriptID)
-                .navigationTitle(SettingsSection.scripts.rawValue)
-                .navigationSplitViewColumnWidth(
-                    min: 250,
-                    ideal: 280,
-                    max: 340
-                )
+            ScriptsDirectoryView(
+                selection: $selectedScriptID,
+                nameSelectionRequestID: $scriptNameSelectionRequestID
+            )
+            .navigationTitle(SettingsSection.scripts.rawValue)
+            .navigationSplitViewColumnWidth(
+                min: 250,
+                ideal: 280,
+                max: 340
+            )
         } detail: {
-            ScriptDetailView(selection: $selectedScriptID)
+            ScriptDetailView(
+                selection: $selectedScriptID,
+                nameSelectionRequestID: $scriptNameSelectionRequestID
+            )
         }
     }
 

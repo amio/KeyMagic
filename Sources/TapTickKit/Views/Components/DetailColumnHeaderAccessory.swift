@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SwiftUI
 
 /// Installs SwiftUI content in the titlebar segment aligned with the detail split column.
@@ -28,16 +29,27 @@ struct DetailColumnHeaderAccessory<Content: View>: NSViewRepresentable {
     }
 }
 
+/// Keeps the hosting root stable so content updates do not relayout the AppKit titlebar.
+@Observable
+@MainActor
+private final class DetailColumnHeaderModel<Content: View> {
+    var content: Content
+    var dividerThickness: CGFloat = 0
+    var dividerColor: NSColor = .clear
+
+    init(content: Content) {
+        self.content = content
+    }
+}
+
 private struct DetailColumnHeaderSurface<Content: View>: View {
-    let content: Content
-    let dividerThickness: CGFloat
-    let dividerColor: NSColor
+    let model: DetailColumnHeaderModel<Content>
 
     var body: some View {
         HStack(spacing: 0) {
-            NativeSplitViewDivider(color: dividerColor)
-                .frame(width: dividerThickness)
-            content
+            NativeSplitViewDivider(color: model.dividerColor)
+                .frame(width: model.dividerThickness)
+            model.content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -138,8 +150,11 @@ final class DetailColumnHeaderInstallerView<Content: View>: NSView {
 
     func update(content: Content) {
         self.content = content
-        accessoryViewController?.update(content: content)
-        scheduleInstallation()
+        if let accessoryViewController {
+            accessoryViewController.update(content: content)
+        } else {
+            scheduleInstallation()
+        }
     }
 
     func uninstall() {
@@ -277,20 +292,14 @@ private final class DetailColumnHeaderAccessoryViewController<Content: View>:
     NSTitlebarAccessoryViewController,
     DetailColumnHeaderAccessoryController
 {
-    private var content: Content
-    private var dividerThickness: CGFloat = 0
-    private var dividerColor: NSColor = .clear
+    private let model: DetailColumnHeaderModel<Content>
     private let hostingView: NSHostingView<DetailColumnHeaderSurface<Content>>
 
     init(content: Content) {
-        self.content = content
-        hostingView = NSHostingView(
-            rootView: DetailColumnHeaderSurface(
-                content: content,
-                dividerThickness: 0,
-                dividerColor: .clear
-            )
-        )
+        let model = DetailColumnHeaderModel(content: content)
+        self.model = model
+        hostingView = NSHostingView(rootView: DetailColumnHeaderSurface(model: model))
+        hostingView.sizingOptions = [.intrinsicContentSize]
         super.init(nibName: nil, bundle: nil)
         layoutAttribute = .trailing
     }
@@ -306,21 +315,11 @@ private final class DetailColumnHeaderAccessoryViewController<Content: View>:
 
     func setLayout(width: CGFloat, dividerThickness: CGFloat, dividerColor: NSColor) {
         hostingView.frame.size.width = max(0, width)
-        self.dividerThickness = max(0, dividerThickness)
-        self.dividerColor = dividerColor
-        updateRootView()
+        model.dividerThickness = max(0, dividerThickness)
+        model.dividerColor = dividerColor
     }
 
     func update(content: Content) {
-        self.content = content
-        updateRootView()
-    }
-
-    private func updateRootView() {
-        hostingView.rootView = DetailColumnHeaderSurface(
-            content: content,
-            dividerThickness: dividerThickness,
-            dividerColor: dividerColor
-        )
+        model.content = content
     }
 }
