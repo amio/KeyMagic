@@ -5,7 +5,7 @@ import Testing
 @MainActor
 @Suite("Screenshot Preview Window", .serialized)
 struct ScreenshotPreviewWindowTests {
-    @Test("Tiny captures preserve the complete titlebar toolbar")
+    @Test("Tiny captures inherit appearance and preserve the complete titlebar toolbar")
     func tinyCapturesPreserveToolbar() async throws {
         let window = ScreenshotPreviewWindow(
             image: NSImage(size: NSSize(width: 1, height: 1))
@@ -17,9 +17,7 @@ struct ScreenshotPreviewWindowTests {
         try await Task.sleep(for: .milliseconds(100))
         window.contentView?.superview?.layoutSubtreeIfNeeded()
 
-        #expect(
-            window.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        )
+        #expect(window.appearance == nil)
         #expect(window.frame.width >= window.minSize.width)
         #expect(window.frame.height >= window.minSize.height)
 

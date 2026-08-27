@@ -171,9 +171,6 @@ final class ScreenshotPreviewWindow: NSPanel {
             defer: false
         )
 
-        // Screenshot content can contain any luminance. A stable dark chrome gives the system
-        // materials and controls enough contrast without changing the captured image itself.
-        appearance = NSAppearance(named: .darkAqua)
         title = "Screenshot"
         titlebarAppearsTransparent = true
         titleVisibility = .hidden
