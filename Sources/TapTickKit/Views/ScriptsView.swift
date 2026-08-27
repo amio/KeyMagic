@@ -39,7 +39,9 @@ struct ScriptsDirectoryView: View {
                 restoreScriptListFocus(afterSelecting: shortcutID)
             }
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarSpacer(.flexible)
+
+                ToolbarItem(placement: .automatic) {
                     Button("Add Script", systemImage: "plus", action: addNewScript)
                         .keyboardShortcut("n", modifiers: .command)
                         .help("Add Script (⌘N)")
@@ -430,10 +432,8 @@ private struct ScriptDetailHeader: View {
     let saveStatus: ScriptEditorSaveStatus
     let nameSelectionRequestID: UUID?
     let onSubmit: () -> Void
-    let onDelete: () -> Void
     let onNameSelectionRequestHandled: () -> Void
 
-    @State private var isDeleteHovered = false
     @State private var isNameHovered = false
     @FocusState private var isNameFocused: Bool
 
@@ -446,32 +446,7 @@ private struct ScriptDetailHeader: View {
             nameField
 
             saveStatusLabel
-
-            Spacer()
-                .contentShape(.rect)
-                .gesture(WindowDragGesture())
-
-            Button("Delete Script", systemImage: "trash", role: .destructive) {
-                onDelete()
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .controlSize(.regular)
-            .frame(width: 32, height: 32)
-            .contentShape(Circle())
-            .glassEffect(
-                isDeleteHovered ? .regular.interactive() : .identity,
-                in: .circle
-            )
-            .onHover { isDeleteHovered = $0 }
-            .help("Delete Script")
-            .accessibilityLabel("Delete Script")
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 10)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity)
-        .allowsWindowActivationEvents()
     }
 
     private var nameField: some View {
@@ -650,11 +625,17 @@ struct ScriptEditView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            DetailColumnHeaderAccessory {
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
                 detailHeader
             }
-            .frame(width: 0, height: 0)
+            .sharedBackgroundVisibility(.hidden)
+
+            ToolbarSpacer(.flexible)
+
+            ToolbarItem(placement: .automatic) {
+                deleteButton
+            }
         }
         .onDisappear {
             flushAutosave()
@@ -675,9 +656,17 @@ struct ScriptEditView: View {
             saveStatus: currentSaveStatus,
             nameSelectionRequestID: nameSelectionRequestID,
             onSubmit: flushAutosave,
-            onDelete: onDelete,
             onNameSelectionRequestHandled: onNameSelectionRequestHandled
         )
+    }
+
+    private var deleteButton: some View {
+        Button("Delete Script", systemImage: "trash", role: .destructive) {
+            onDelete()
+        }
+        .labelStyle(.iconOnly)
+        .help("Delete Script")
+        .accessibilityLabel("Delete Script")
     }
 
     // MARK: - Form Fields

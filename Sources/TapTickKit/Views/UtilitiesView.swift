@@ -11,6 +11,11 @@ struct UtilitiesDirectoryView: View {
                 .tag(feature.id)
         }
         .listStyle(.inset)
+        .toolbar {
+            // Establish this split column's otherwise-empty native toolbar section so
+            // detail items are scoped after its tracking separator.
+            ToolbarSpacer(.flexible)
+        }
     }
 }
 
@@ -27,14 +32,23 @@ struct UtilityDetailView: View {
     var body: some View {
         featureDetail
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
-                DetailColumnHeaderAccessory {
-                    UtilityDetailHeaderContent(
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Label(selectedFeature.title, systemImage: selectedFeature.systemImage)
+                        .font(.headline)
+                        .labelStyle(.titleAndIcon)
+                }
+                .sharedBackgroundVisibility(.hidden)
+
+                ToolbarSpacer(.flexible)
+
+                ToolbarItem(placement: .automatic) {
+                    UtilityDetailHeaderControl(
                         feature: selectedFeature,
                         isEnabled: enabledBinding
                     )
                 }
-                .frame(width: 0, height: 0)
+                .sharedBackgroundVisibility(.hidden)
             }
     }
 
@@ -94,29 +108,12 @@ struct UtilityDetailView: View {
     }
 }
 
-private struct UtilityDetailHeaderContent: View {
+private struct UtilityDetailHeaderControl: View {
     let feature: UtilityDescriptor
     @Binding var isEnabled: Bool
 
-    var body: some View {
-        HStack(spacing: 8) {
-            DetailColumnHeaderTitle(
-                title: feature.title,
-                systemImage: feature.systemImage
-            )
-
-            Spacer(minLength: 16)
-
-            headerControl
-        }
-        .font(.headline)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity)
-    }
-
     @ViewBuilder
-    private var headerControl: some View {
+    var body: some View {
         switch feature.availability {
         case .available:
             Toggle("Enable \(feature.title)", isOn: $isEnabled)
