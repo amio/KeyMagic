@@ -8,6 +8,7 @@
 - After completing and non-interactively validating code changes, automatically run `make run` to replace and launch the modified app for the user to test. Launching the app is a handoff, not authorization for Codex to interact with its UI.
 - Do not use Computer Use, UI automation, or simulated mouse or keyboard input to validate TapTick because they take over the user's active Mac session, unless the user explicitly authorizes that specific interaction.
 - Preserve Swift 6 strict concurrency and macOS 26 compatibility. Keep shared mutable runtime state under an explicit owner, normally isolated to `@MainActor`; do not bypass an owner with parallel state or lifecycle machinery.
+- Treat SwiftUI API knowledge—especially for macOS 26+ components—as unverified until confirmed. Before using these APIs, consult the official documentation or run a focused compile/runtime probe; never code from memory, analogy, or guessed signatures and behavior.
 - Do not add standalone examples or speculative scaffolding; changes must be production-ready and integrated into the owning module.
 
 # PROJECT CONTEXT
