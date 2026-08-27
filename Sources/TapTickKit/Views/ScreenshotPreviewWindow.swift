@@ -106,8 +106,11 @@ final class AnnotationToolbarModel {
 // MARK: - Preview Window
 
 private let canvasMargin: CGFloat = 16
-/// Height of the standard system title bar.
-private let titleBarHeight: CGFloat = 28
+/// Height of the unified compact header installed by `configureHeader()`.
+private let headerHeight: CGFloat = 40
+/// Keeps tiny captures usable without coupling the window width to toolbar copy or font metrics.
+private let minimumCanvasHeight: CGFloat = 160
+private let minimumHeaderBreathingRoom: CGFloat = 32
 
 /// NSHostingView subclass that refuses window-drag so toolbar buttons stay interactive.
 private final class NonDraggableHostingView<Content: View>: NSHostingView<Content> {
@@ -131,7 +134,7 @@ final class ScreenshotPreviewWindow: NSPanel {
             NSScreen.screenWithMouse?.visibleFrame
             ?? NSScreen.main?.visibleFrame ?? .zero
 
-        let chromeHeight = titleBarHeight + canvasMargin * 2
+        let chromeHeight = headerHeight + canvasMargin * 2
         let chromeWidth = canvasMargin * 2
         let maxImageWidth = screenFrame.width * 0.8 - chromeWidth
         let maxImageHeight = screenFrame.height * 0.8 - chromeHeight
@@ -168,6 +171,9 @@ final class ScreenshotPreviewWindow: NSPanel {
             defer: false
         )
 
+        // Screenshot content can contain any luminance. A stable dark chrome gives the system
+        // materials and controls enough contrast without changing the captured image itself.
+        appearance = NSAppearance(named: .darkAqua)
         title = "Screenshot"
         titlebarAppearsTransparent = true
         titleVisibility = .hidden
@@ -176,6 +182,7 @@ final class ScreenshotPreviewWindow: NSPanel {
         hasShadow = true
         isOpaque = false
         backgroundColor = .clear
+        configureHeader()
 
         toolbarModel.onDone = { [weak self] in
             self?.commitAndClose()
@@ -184,7 +191,7 @@ final class ScreenshotPreviewWindow: NSPanel {
             self?.onAnnotationSettingsChanged?(mode, colorIndex)
         }
 
-        installTitlebarAccessory()
+        installTitlebarAccessories()
         buildContentHierarchy(displaySize: displaySize)
     }
 
@@ -216,7 +223,7 @@ final class ScreenshotPreviewWindow: NSPanel {
             toolbarModel.cycleColor()
             canvasView.needsDisplay = true
 
-        case kVK_Return:
+        case kVK_Return, kVK_ANSI_KeypadEnter:
             commitAndClose()
 
         case kVK_Escape:
@@ -305,42 +312,95 @@ final class ScreenshotPreviewWindow: NSPanel {
         canvasView.needsDisplay = true
     }
 
-    private func installTitlebarAccessory() {
-        guard let closeButton = standardWindowButton(.closeButton),
-            let titlebarView = closeButton.superview
-        else { return }
+    private func configureHeader() {
+        let toolbar = NSToolbar(identifier: "ScreenshotPreview.Header")
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        toolbar.displayMode = .iconOnly
+        self.toolbar = toolbar
+        toolbarStyle = .unifiedCompact
+        titlebarSeparatorStyle = .none
+    }
 
-        let toolbarView = AnnotationToolbar(model: toolbarModel)
-        let hostingView = NonDraggableHostingView(rootView: toolbarView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        titlebarView.addSubview(hostingView)
-
-        let titlebarSafeArea = titlebarView.layoutGuide(
-            for: .safeArea(cornerAdaptation: .horizontal)
+    private func installTitlebarAccessories() {
+        let toolsWidth = addTitlebarAccessory(
+            AnnotationToolbar(model: toolbarModel, section: .tools),
+            at: .left
         )
+        let completionWidth = addTitlebarAccessory(
+            AnnotationToolbar(model: toolbarModel, section: .completion),
+            at: .right
+        )
+        enforceMinimumWindowSize(
+            toolsWidth: toolsWidth,
+            completionWidth: completionWidth
+        )
+    }
 
-        NSLayoutConstraint.activate([
-            hostingView.leadingAnchor.constraint(
-                equalTo: closeButton.trailingAnchor,
-                constant: 16
+    private func addTitlebarAccessory<Content: View>(
+        _ content: Content,
+        at layoutAttribute: NSLayoutConstraint.Attribute
+    ) -> CGFloat {
+        let hostingView = NonDraggableHostingView(rootView: content)
+        hostingView.sizingOptions = .intrinsicContentSize
+        let fittingSize = hostingView.fittingSize
+        hostingView.frame.size = fittingSize
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = layoutAttribute
+        accessory.view = hostingView
+        addTitlebarAccessoryViewController(accessory)
+        return fittingSize.width
+    }
+
+    private func enforceMinimumWindowSize(toolsWidth: CGFloat, completionWidth: CGFloat) {
+        let titlebarView = standardWindowButton(.closeButton)?.superview
+        titlebarView?.layoutSubtreeIfNeeded()
+
+        let trafficLightTrailingEdge =
+            [
+                NSWindow.ButtonType.closeButton,
+                .miniaturizeButton,
+                .zoomButton,
+            ]
+            .compactMap { standardWindowButton($0) }
+            .map { $0.convert($0.bounds, to: nil).maxX }
+            .max() ?? 0
+
+        let minimumFrameSize = NSSize(
+            width: ceil(
+                trafficLightTrailingEdge + toolsWidth + completionWidth
+                    + minimumHeaderBreathingRoom
             ),
-            hostingView.trailingAnchor.constraint(
-                equalTo: titlebarSafeArea.trailingAnchor,
-                constant: -8
+            height: headerHeight + canvasMargin * 2 + minimumCanvasHeight
+        )
+        minSize = minimumFrameSize
+        let effectiveMinimumFrameSize = minSize
+
+        let targetSize = NSSize(
+            width: max(frame.width, effectiveMinimumFrameSize.width),
+            height: max(frame.height, effectiveMinimumFrameSize.height)
+        )
+        guard targetSize != frame.size else { return }
+
+        setFrame(
+            NSRect(
+                x: frame.midX - targetSize.width / 2,
+                y: frame.midY - targetSize.height / 2,
+                width: targetSize.width,
+                height: targetSize.height
             ),
-            hostingView.centerYAnchor.constraint(
-                equalTo: closeButton.centerYAnchor
-            ),
-        ])
+            display: false
+        )
     }
 
     private func buildContentHierarchy(displaySize: NSSize) {
         guard let rootView = contentView else { return }
 
-        // AppKit owns the Tahoe window shape; this material remains a content backdrop,
-        // while Liquid Glass is reserved for the interactive titlebar controls.
+        // Match the system preview panel: a HUD material owns the blur, tint, and accessibility
+        // adaptation while AppKit keeps the native window shape.
         let blur = NSVisualEffectView()
-        blur.material = .menu
+        blur.material = .hudWindow
         blur.blendingMode = .behindWindow
         blur.state = .active
         blur.translatesAutoresizingMaskIntoConstraints = false
@@ -374,14 +434,17 @@ final class ScreenshotPreviewWindow: NSPanel {
 
         NSLayoutConstraint.activate([
             shadowContainer.topAnchor.constraint(
-                equalTo: rootView.safeAreaLayoutGuide.topAnchor,
+                greaterThanOrEqualTo: rootView.safeAreaLayoutGuide.topAnchor,
                 constant: canvasMargin
             ),
-            shadowContainer.centerXAnchor.constraint(equalTo: rootView.centerXAnchor),
+            shadowContainer.centerYAnchor.constraint(
+                equalTo: rootView.safeAreaLayoutGuide.centerYAnchor
+            ),
             shadowContainer.bottomAnchor.constraint(
-                equalTo: rootView.bottomAnchor,
+                lessThanOrEqualTo: rootView.bottomAnchor,
                 constant: -canvasMargin
             ),
+            shadowContainer.centerXAnchor.constraint(equalTo: rootView.centerXAnchor),
 
             canvasView.topAnchor.constraint(equalTo: shadowContainer.topAnchor),
             canvasView.leadingAnchor.constraint(equalTo: shadowContainer.leadingAnchor),
@@ -690,20 +753,55 @@ final class AnnotationCanvasView: NSView {
 
 // MARK: - Title Bar Toolbar (SwiftUI)
 
+private enum AnnotationToolbarSection {
+    case tools
+    case completion
+}
+
+private struct AnnotationToolbarIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 26, height: 20)
+            .background {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.14 : 0.08))
+            }
+            .contentShape(.rect(cornerRadius: 6))
+    }
+}
+
 private struct AnnotationToolbar: View {
     @Bindable var model: AnnotationToolbarModel
+    let section: AnnotationToolbarSection
 
     var body: some View {
-        GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) {
-                modeControl
-                colorControl
-                Spacer(minLength: 16)
+        Group {
+            switch section {
+            case .tools:
+                toolControls
+            case .completion:
                 copyControl
             }
         }
+        .padding(.horizontal, 8)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Annotation controls")
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var toolControls: some View {
+        HStack(spacing: 16) {
+            modeControl
+            colorControl
+        }
+    }
+
+    private var accessibilityLabel: String {
+        switch section {
+        case .tools:
+            "Annotation controls"
+        case .completion:
+            "Screenshot actions"
+        }
     }
 
     // MARK: - Controls
@@ -723,10 +821,15 @@ private struct AnnotationToolbar: View {
             .fixedSize()
             .accessibilityLabel("Annotation Tool")
             .accessibilityValue(model.currentMode.label)
-            .help("Choose line or rectangle · tap Option to switch")
+            .accessibilityHint(
+                "Tap Option to switch tools. Hold Option to temporarily use the other tool."
+            )
 
-            keycap("⌥")
+            keycap("OPT")
         }
+        .help(
+            "Choose line or rectangle · Tap Option to switch; hold Option to temporarily use the other tool"
+        )
     }
 
     private var colorControl: some View {
@@ -740,32 +843,28 @@ private struct AnnotationToolbar: View {
                     .overlay {
                         Circle().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5)
                     }
-                    .padding(3)
             }
-            .buttonStyle(.glass)
-            .controlSize(.small)
+            .buttonStyle(AnnotationToolbarIconButtonStyle())
             .accessibilityLabel("Annotation Color")
             .accessibilityValue(model.currentColorName)
-            .help("Cycle annotation color · Tab")
+            .accessibilityHint("Press Tab to select the next annotation color.")
 
             keycap("TAB")
         }
+        .help("Cycle annotation color · Press Tab to select the next color")
     }
 
     private var copyControl: some View {
-        HStack(spacing: 6) {
-            Button {
-                model.onDone?()
-            } label: {
-                Label("Copy", systemImage: "doc.on.doc")
-            }
-            .buttonStyle(.glassProminent)
-            .controlSize(.small)
-            .accessibilityHint("Copies the annotated image and closes the preview")
-            .help("Copy and close · Return")
-
-            keycap("↩")
+        Button("Copy") {
+            model.onDone?()
         }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+        .accessibilityHint(
+            "Copies the annotated image and closes the preview. Press Enter to activate."
+        )
+        .help("Copy and close · Press Enter")
     }
 
     private var modeSelection: Binding<AnnotationMode> {
