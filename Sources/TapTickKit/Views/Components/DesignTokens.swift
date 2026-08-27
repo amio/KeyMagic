@@ -1,7 +1,19 @@
 import SwiftUI
 
 enum SettingsLayout {
-    static let detailToolbarTitleLeadingPadding: CGFloat = 12
+    static let toolbarTitleLeadingPadding: CGFloat = 12
+}
+
+struct SettingsToolbarTitle: View {
+    let title: String
+
+    var body: some View {
+        SettingsToolbarItemLayout {
+            Text(title)
+                .font(.headline)
+                .padding(.leading, SettingsLayout.toolbarTitleLeadingPadding)
+        }
+    }
 }
 
 /// Keeps dynamic custom toolbar content on a stable leading pixel boundary.

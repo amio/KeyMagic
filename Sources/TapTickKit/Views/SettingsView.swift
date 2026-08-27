@@ -61,7 +61,6 @@ public struct SettingsView: View {
                 selection: $selectedScriptID,
                 nameSelectionRequestID: $scriptNameSelectionRequestID
             )
-            .navigationTitle(SettingsSection.scripts.rawValue)
             .navigationSplitViewColumnWidth(
                 min: 250,
                 ideal: 280,
@@ -80,7 +79,14 @@ public struct SettingsView: View {
             sidebar
         } detail: {
             selectedPane
-                .navigationTitle(selectedSection.rawValue)
+                .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        SettingsToolbarTitle(title: selectedSection.rawValue)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+
+                    ToolbarSpacer(.flexible)
+                }
         }
     }
 
@@ -89,7 +95,6 @@ public struct SettingsView: View {
             sidebar
         } content: {
             UtilitiesDirectoryView(selection: $selectedUtilityID)
-                .navigationTitle(SettingsSection.utilities.rawValue)
                 .navigationSplitViewColumnWidth(
                     min: 250,
                     ideal: 280,

@@ -460,7 +460,9 @@ struct TapTickApp: App {
         }
         .defaultSize(width: 1_020, height: 680)
         .windowResizability(.contentMinSize)
-        .windowToolbarStyle(.unified(showsTitle: true))
+        // Column titles are explicit toolbar items so native tracking separators remain
+        // free to align with split dividers when the leading sidebar is collapsed.
+        .windowToolbarStyle(.unified(showsTitle: false))
         .windowStyle(.titleBar)
         .defaultLaunchBehavior(.suppressed)
         .onChange(of: appState.openSettingsTrigger) {

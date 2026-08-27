@@ -53,6 +53,11 @@ struct ScriptsDirectoryView: View {
                 restoreScriptListFocus(afterSelecting: shortcutID)
             }
             .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    SettingsToolbarTitle(title: "Scripts")
+                }
+                .sharedBackgroundVisibility(.hidden)
+
                 ToolbarSpacer(.flexible)
 
                 ToolbarItem(placement: .automatic) {
@@ -683,7 +688,7 @@ struct ScriptEditView: View {
             ToolbarItem(placement: .automatic) {
                 SettingsToolbarItemLayout {
                     detailHeader
-                        .padding(.leading, SettingsLayout.detailToolbarTitleLeadingPadding)
+                        .padding(.leading, SettingsLayout.toolbarTitleLeadingPadding)
                 }
             }
             .sharedBackgroundVisibility(.hidden)

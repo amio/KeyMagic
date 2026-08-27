@@ -17,8 +17,11 @@ struct UtilitiesDirectoryView: View {
             restoreUtilityListFocus(afterSelecting: featureID)
         }
         .toolbar {
-            // Establish this split column's otherwise-empty native toolbar section so
-            // detail items are scoped after its tracking separator.
+            ToolbarItem(placement: .automatic) {
+                SettingsToolbarTitle(title: "Utilities")
+            }
+            .sharedBackgroundVisibility(.hidden)
+
             ToolbarSpacer(.flexible)
         }
     }
@@ -53,7 +56,7 @@ struct UtilityDetailView: View {
                         Label(selectedFeature.title, systemImage: selectedFeature.systemImage)
                             .font(.headline)
                             .labelStyle(.titleAndIcon)
-                            .padding(.leading, SettingsLayout.detailToolbarTitleLeadingPadding)
+                            .padding(.leading, SettingsLayout.toolbarTitleLeadingPadding)
                     }
                 }
                 .sharedBackgroundVisibility(.hidden)
