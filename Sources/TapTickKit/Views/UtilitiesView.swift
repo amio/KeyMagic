@@ -34,9 +34,12 @@ struct UtilityDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    Label(selectedFeature.title, systemImage: selectedFeature.systemImage)
-                        .font(.headline)
-                        .labelStyle(.titleAndIcon)
+                    SettingsToolbarItemLayout {
+                        Label(selectedFeature.title, systemImage: selectedFeature.systemImage)
+                            .font(.headline)
+                            .labelStyle(.titleAndIcon)
+                            .padding(.leading, SettingsLayout.detailToolbarTitleLeadingPadding)
+                    }
                 }
                 .sharedBackgroundVisibility(.hidden)
 

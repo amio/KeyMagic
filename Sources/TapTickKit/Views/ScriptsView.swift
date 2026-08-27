@@ -627,7 +627,10 @@ struct ScriptEditView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                detailHeader
+                SettingsToolbarItemLayout {
+                    detailHeader
+                        .padding(.leading, SettingsLayout.detailToolbarTitleLeadingPadding)
+                }
             }
             .sharedBackgroundVisibility(.hidden)
 
