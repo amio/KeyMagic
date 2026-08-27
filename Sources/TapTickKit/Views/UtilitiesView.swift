@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct UtilitiesDirectoryView: View {
@@ -29,10 +28,12 @@ struct UtilityDetailView: View {
         featureDetail
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
-                UtilityDetailHeaderAccessoryInstaller(
-                    feature: selectedFeature,
-                    isEnabled: enabledBinding
-                )
+                DetailColumnHeaderAccessory {
+                    UtilityDetailHeaderContent(
+                        feature: selectedFeature,
+                        isEnabled: enabledBinding
+                    )
+                }
                 .frame(width: 0, height: 0)
             }
     }
@@ -93,220 +94,16 @@ struct UtilityDetailView: View {
     }
 }
 
-private struct UtilityDetailHeaderAccessoryInstaller: NSViewRepresentable {
-    let feature: UtilityDescriptor
-    let isEnabled: Binding<Bool>
-
-    func makeNSView(context: Context) -> UtilityDetailHeaderInstallerView {
-        UtilityDetailHeaderInstallerView(feature: feature, isEnabled: isEnabled)
-    }
-
-    func updateNSView(_ nsView: UtilityDetailHeaderInstallerView, context: Context) {
-        nsView.update(feature: feature, isEnabled: isEnabled)
-    }
-
-    static func dismantleNSView(_ nsView: UtilityDetailHeaderInstallerView, coordinator: Void) {
-        nsView.uninstall()
-    }
-}
-
-@MainActor
-private final class UtilityDetailHeaderInstallerView: NSView {
-    private var feature: UtilityDescriptor
-    private var isEnabled: Binding<Bool>
-    private var installationTask: Task<Void, Never>?
-    private weak var installedWindow: NSWindow?
-    private weak var observedSplitView: NSSplitView?
-    private weak var detailPane: NSView?
-    private var accessoryViewController: UtilityDetailHeaderAccessoryViewController?
-
-    init(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
-        self.feature = feature
-        self.isEnabled = isEnabled
-        super.init(frame: .zero)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-
-        if window == nil {
-            uninstall()
-        } else {
-            scheduleInstallation()
-        }
-    }
-
-    func update(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
-        self.feature = feature
-        self.isEnabled = isEnabled
-        accessoryViewController?.update(feature: feature, isEnabled: isEnabled)
-        scheduleInstallation()
-    }
-
-    func uninstall() {
-        installationTask?.cancel()
-        installationTask = nil
-        stopObservingSplitView()
-
-        guard
-            let installedWindow,
-            let accessoryViewController,
-            let index = installedWindow.titlebarAccessoryViewControllers.firstIndex(where: {
-                $0 === accessoryViewController
-            })
-        else {
-            self.installedWindow = nil
-            self.accessoryViewController = nil
-            return
-        }
-
-        installedWindow.removeTitlebarAccessoryViewController(at: index)
-        self.installedWindow = nil
-        self.accessoryViewController = nil
-    }
-
-    private func scheduleInstallation() {
-        installationTask?.cancel()
-        installationTask = Task { @MainActor [weak self] in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            self?.install()
-        }
-    }
-
-    private func install() {
-        guard let window, let (splitView, pane) = enclosingSplitPane() else { return }
-
-        if window === installedWindow, let accessoryViewController {
-            observe(splitView: splitView, detailPane: pane)
-            accessoryViewController.update(feature: feature, isEnabled: isEnabled)
-            updateAccessoryWidth()
-            return
-        }
-
-        uninstall()
-
-        for staleController in window.titlebarAccessoryViewControllers
-        where staleController is UtilityDetailHeaderAccessoryViewController {
-            staleController.removeFromParent()
-        }
-
-        let controller = UtilityDetailHeaderAccessoryViewController(
-            feature: feature,
-            isEnabled: isEnabled
-        )
-        controller.setWidth(pane.bounds.width)
-        window.addTitlebarAccessoryViewController(controller)
-        installedWindow = window
-        accessoryViewController = controller
-        observe(splitView: splitView, detailPane: pane)
-    }
-
-    private func enclosingSplitPane() -> (NSSplitView, NSView)? {
-        var ancestor = superview
-        while let view = ancestor {
-            if let splitView = view as? NSSplitView,
-                let pane = splitView.subviews.first(where: { isDescendant(of: $0) })
-            {
-                return (splitView, pane)
-            }
-            ancestor = view.superview
-        }
-        return nil
-    }
-
-    private func observe(splitView: NSSplitView, detailPane: NSView) {
-        guard splitView !== observedSplitView else {
-            self.detailPane = detailPane
-            return
-        }
-
-        stopObservingSplitView()
-        observedSplitView = splitView
-        self.detailPane = detailPane
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(splitViewDidResize(_:)),
-            name: NSSplitView.didResizeSubviewsNotification,
-            object: splitView
-        )
-    }
-
-    private func stopObservingSplitView() {
-        if let observedSplitView {
-            NotificationCenter.default.removeObserver(
-                self,
-                name: NSSplitView.didResizeSubviewsNotification,
-                object: observedSplitView
-            )
-        }
-        observedSplitView = nil
-        detailPane = nil
-    }
-
-    @objc private func splitViewDidResize(_: Notification) {
-        updateAccessoryWidth()
-    }
-
-    private func updateAccessoryWidth() {
-        guard let detailPane else { return }
-        accessoryViewController?.setWidth(detailPane.bounds.width)
-    }
-}
-
-@MainActor
-private final class UtilityDetailHeaderAccessoryViewController:
-    NSTitlebarAccessoryViewController
-{
-    private let hostingView: NSHostingView<UtilityDetailHeaderContent>
-
-    init(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
-        hostingView = NSHostingView(
-            rootView: UtilityDetailHeaderContent(feature: feature, isEnabled: isEnabled)
-        )
-        super.init(nibName: nil, bundle: nil)
-        layoutAttribute = .trailing
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func loadView() {
-        view = hostingView
-    }
-
-    func setWidth(_ width: CGFloat) {
-        hostingView.frame.size.width = max(0, width)
-    }
-
-    func update(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
-        hostingView.rootView = UtilityDetailHeaderContent(
-            feature: feature,
-            isEnabled: isEnabled
-        )
-    }
-}
-
 private struct UtilityDetailHeaderContent: View {
     let feature: UtilityDescriptor
-    let isEnabled: Binding<Bool>
+    @Binding var isEnabled: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: feature.systemImage)
-                Text(feature.title)
-            }
-            .contentShape(.rect)
-            .gesture(WindowDragGesture())
-            .allowsWindowActivationEvents()
+            DetailColumnHeaderTitle(
+                title: feature.title,
+                systemImage: feature.systemImage
+            )
 
             Spacer(minLength: 16)
 
@@ -322,7 +119,7 @@ private struct UtilityDetailHeaderContent: View {
     private var headerControl: some View {
         switch feature.availability {
         case .available:
-            Toggle("Enable \(feature.title)", isOn: isEnabled)
+            Toggle("Enable \(feature.title)", isOn: $isEnabled)
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)

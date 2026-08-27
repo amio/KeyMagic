@@ -7,20 +7,13 @@ private struct ScriptLogsPresentation: Identifiable {
     var id: UUID { shortcutID }
 }
 
-/// The Scripts settings view: manages script-type shortcuts.
-/// The secondary source list and editor use separate surfaces so hierarchy does not
-/// depend on decorative divider lines.
-struct ScriptsView: View {
+/// Owns the Scripts directory column and its list-specific interactions.
+struct ScriptsDirectoryView: View {
     @Environment(ShortcutStore.self) private var store
     @Environment(HotkeyService.self) private var hotkeyService
-    @Environment(ScriptLogStore.self) private var logStore
-    @Environment(ShortcutExecutor.self) private var shortcutExecutor
 
-    @State private var selectedID: UUID?
-    @State private var showingDeleteConfirmation = false
-    @State private var deletingShortcutID: UUID?
-    @State private var logsPresentation: ScriptLogsPresentation?
-    @State private var editorRunIDs: [UUID: UUID] = [:]
+    @Binding var selection: UUID?
+
     @State private var recordingShortcutID: UUID?
     @FocusState private var isScriptListFocused: Bool
 
@@ -34,49 +27,14 @@ struct ScriptsView: View {
         }
     }
 
-    /// The currently selected shortcut (derived from selectedID).
-    private var selectedShortcut: Shortcut? {
-        scriptShortcuts.first { $0.id == selectedID }
-    }
-
     var body: some View {
-        HStack(spacing: 0) {
-            scriptListPanel
-                .frame(width: 280)
-                .background(Color(nsColor: .controlBackgroundColor))
-
-            editPanel
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
-        }
-        .onChange(of: selectedID) { _, shortcutID in
-            restoreScriptListFocus(afterSelecting: shortcutID)
-        }
-        .sheet(item: $logsPresentation) { presentation in
-            ScriptLogsView(
-                logs: logStore.recentLogs(for: presentation.shortcutID),
-                scriptName: store.shortcuts.first { $0.id == presentation.shortcutID }?.name
-                    ?? "Deleted Script"
-            )
-        }
-        .confirmationDialog(
-            "Delete Script?",
-            isPresented: $showingDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let id = deletingShortcutID {
-                    deleteShortcut(id: id)
-                    deletingShortcutID = nil
-                }
+        scriptListPanel
+            .onChange(of: selection) { _, shortcutID in
+                restoreScriptListFocus(afterSelecting: shortcutID)
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This action cannot be undone.")
-        }
     }
 
-    // MARK: - Left Panel: Script List
+    // MARK: - Script List
 
     @ViewBuilder
     private var scriptListPanel: some View {
@@ -96,11 +54,11 @@ struct ScriptsView: View {
                 }
                 Spacer()
             } else {
-                List(scriptShortcuts, selection: $selectedID) { shortcut in
+                List(scriptShortcuts, selection: $selection) { shortcut in
                     ScriptRow(
                         shortcut: shortcut,
-                        isSelected: selectedID == shortcut.id,
-                        usesEmphasizedSelection: selectedID == shortcut.id && isScriptListFocused,
+                        isSelected: selection == shortcut.id,
+                        usesEmphasizedSelection: selection == shortcut.id && isScriptListFocused,
                         isRecording: recordingShortcutID == shortcut.id,
                         onStartRecording: {
                             recordingShortcutID = shortcut.id
@@ -132,6 +90,7 @@ struct ScriptsView: View {
                 .focused($isScriptListFocused)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var scriptListHeader: some View {
@@ -156,39 +115,6 @@ struct ScriptsView: View {
         .padding(.bottom, 6)
     }
 
-    // MARK: - Right Panel: Edit / Placeholder
-
-    @ViewBuilder
-    private var editPanel: some View {
-        if let shortcut = selectedShortcut {
-            ScriptEditView(
-                shortcut: shortcut,
-                isRunning: isEditorRunActive(for: shortcut.id),
-                hasLogs: !logStore.recentLogs(for: shortcut.id).isEmpty,
-                onSave: { updated in
-                    store.updateScript(updated)
-                },
-                onRun: {
-                    run(shortcutID: shortcut.id)
-                },
-                onShowLog: {
-                    showLogs(for: shortcut.id)
-                },
-                onDelete: {
-                    deletingShortcutID = shortcut.id
-                    showingDeleteConfirmation = true
-                }
-            )
-            .id(shortcut.id)
-        } else {
-            ContentUnavailableView {
-                Label("No Selection", systemImage: "cursorarrow.click")
-            } description: {
-                Text("Select a script from the list to edit, or add a new one.")
-            }
-        }
-    }
-
     // MARK: - Actions
 
     /// Rebuilding the selected editor can leave the window without the list as first responder.
@@ -198,7 +124,7 @@ struct ScriptsView: View {
 
         Task { @MainActor in
             await Task.yield()
-            guard selectedID == shortcutID, !isScriptListFocused else { return }
+            guard selection == shortcutID, !isScriptListFocused else { return }
             isScriptListFocused = true
         }
     }
@@ -212,7 +138,7 @@ struct ScriptsView: View {
         )
         store.add(newShortcut)
         hotkeyService.restart(store: store)
-        selectedID = newShortcut.id
+        selection = newShortcut.id
     }
 
     private func bindHotkey(_ combo: KeyCombo, to shortcut: Shortcut) {
@@ -227,6 +153,156 @@ struct ScriptsView: View {
         updated.keyCombo = nil
         store.update(updated)
         hotkeyService.restart(store: store)
+    }
+}
+
+enum ScriptEditorSaveStatus: Equatable {
+    case saved
+    case unsaved
+    case nameRequired
+}
+
+/// Owns the selected script's editor lifecycle and detail-only presentations.
+struct ScriptDetailView: View {
+    @Environment(ShortcutStore.self) private var store
+    @Environment(HotkeyService.self) private var hotkeyService
+    @Environment(ScriptLogStore.self) private var logStore
+    @Environment(ShortcutExecutor.self) private var shortcutExecutor
+
+    @Binding var selection: UUID?
+
+    @State private var showingDeleteConfirmation = false
+    @State private var deletingShortcutID: UUID?
+    @State private var logsPresentation: ScriptLogsPresentation?
+    @State private var editorRunIDs: [UUID: UUID] = [:]
+    @State private var editorSaveStatus: ScriptEditorSaveStatus = .saved
+
+    private var selectedShortcut: Shortcut? {
+        guard let shortcut = store.shortcuts.first(where: { $0.id == selection }) else {
+            return nil
+        }
+
+        switch shortcut.action {
+        case .runScript, .runScriptFile:
+            return shortcut
+        case .launchApp:
+            return nil
+        }
+    }
+
+    var body: some View {
+        editPanel
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .background {
+                DetailColumnHeaderAccessory {
+                    detailHeader
+                }
+                .frame(width: 0, height: 0)
+            }
+            .onChange(of: selection) {
+                editorSaveStatus = .saved
+            }
+            .sheet(item: $logsPresentation) { presentation in
+                ScriptLogsView(
+                    logs: logStore.recentLogs(for: presentation.shortcutID),
+                    scriptName: store.shortcuts.first {
+                        $0.id == presentation.shortcutID
+                    }?.name ?? "Deleted Script"
+                )
+            }
+            .confirmationDialog(
+                "Delete Script?",
+                isPresented: $showingDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let id = deletingShortcutID {
+                        deleteShortcut(id: id)
+                        deletingShortcutID = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This action cannot be undone.")
+            }
+    }
+
+    @ViewBuilder
+    private var editPanel: some View {
+        if let shortcut = selectedShortcut {
+            ScriptEditView(
+                shortcut: shortcut,
+                isRunning: isEditorRunActive(for: shortcut.id),
+                hasLogs: !logStore.recentLogs(for: shortcut.id).isEmpty,
+                saveStatus: $editorSaveStatus,
+                onSave: { updated in
+                    store.updateScript(updated)
+                },
+                onRun: {
+                    run(shortcutID: shortcut.id)
+                },
+                onShowLog: {
+                    showLogs(for: shortcut.id)
+                }
+            )
+        } else {
+            ContentUnavailableView {
+                Label("No Selection", systemImage: "cursorarrow.click")
+            } description: {
+                Text("Select a script from the list to edit, or add a new one.")
+            }
+        }
+    }
+
+    private var detailHeader: some View {
+        HStack(spacing: 8) {
+            if let shortcut = selectedShortcut {
+                DetailColumnHeaderTitle(
+                    title: "Edit Script",
+                    systemImage: "terminal"
+                )
+
+                saveStatusLabel
+
+                Spacer()
+
+                Menu {
+                    Button("Delete Script", systemImage: "trash", role: .destructive) {
+                        deletingShortcutID = shortcut.id
+                        showingDeleteConfirmation = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .controlSize(.regular)
+                .help("More script actions")
+                .accessibilityLabel("More script actions")
+            }
+        }
+        .font(.headline)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private var saveStatusLabel: some View {
+        switch editorSaveStatus {
+        case .saved:
+            Label("Saved", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .unsaved:
+            Label("Unsaved changes", systemImage: "clock")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .nameRequired:
+            Label("Name required", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
     }
 
     private func showLogs(for shortcutID: UUID) {
@@ -244,8 +320,8 @@ struct ScriptsView: View {
     }
 
     private func deleteShortcut(id: UUID) {
-        if selectedID == id {
-            selectedID = nil
+        if selection == id {
+            selection = nil
         }
         store.remove(id: id)
         hotkeyService.restart(store: store)
@@ -340,20 +416,42 @@ struct ScriptEditorDraft: Equatable {
 /// Derives dirty state from the current draft and its persisted baseline.
 struct ScriptEditorDraftState {
     var draft = ScriptEditorDraft()
+    private(set) var loadedShortcut: Shortcut?
     private var savedDraft: ScriptEditorDraft?
+
+    init() {}
+
+    init(shortcut: Shortcut) {
+        load(shortcut)
+    }
 
     var hasUnsavedChanges: Bool {
         guard let savedDraft else { return false }
         return draft != savedDraft
     }
 
+    var loadedShortcutID: UUID? {
+        loadedShortcut?.id
+    }
+
     mutating func load(_ shortcut: Shortcut) {
         let loadedDraft = ScriptEditorDraft(shortcut: shortcut)
+        loadedShortcut = shortcut
         draft = loadedDraft
         savedDraft = loadedDraft
     }
 
+    func shortcutWithCurrentDraft() -> Shortcut? {
+        guard var updated = loadedShortcut else { return nil }
+        updated.name = draft.name
+        updated.action = .runScript(script: draft.scriptContent, shell: draft.shellType)
+        return updated
+    }
+
     mutating func markSaved() {
+        if let updated = shortcutWithCurrentDraft() {
+            loadedShortcut = updated
+        }
         savedDraft = draft
     }
 }
@@ -362,12 +460,12 @@ struct ScriptEditView: View {
     let shortcut: Shortcut
     let isRunning: Bool
     let hasLogs: Bool
+    @Binding var saveStatus: ScriptEditorSaveStatus
     let onSave: (Shortcut) -> Void
     let onRun: () -> Void
     let onShowLog: () -> Void
-    let onDelete: () -> Void
 
-    @State private var draftState = ScriptEditorDraftState()
+    @State private var draftState: ScriptEditorDraftState
     @State private var autosaveTask: Task<Void, Never>?
     @State private var editorController = ScriptTextEditorController()
 
@@ -377,8 +475,32 @@ struct ScriptEditView: View {
     @State private var generationTask: Task<Void, Never>?
     @State private var generationRequestID: UUID?
 
+    init(
+        shortcut: Shortcut,
+        isRunning: Bool,
+        hasLogs: Bool,
+        saveStatus: Binding<ScriptEditorSaveStatus>,
+        onSave: @escaping (Shortcut) -> Void,
+        onRun: @escaping () -> Void,
+        onShowLog: @escaping () -> Void
+    ) {
+        self.shortcut = shortcut
+        self.isRunning = isRunning
+        self.hasLogs = hasLogs
+        _saveStatus = saveStatus
+        self.onSave = onSave
+        self.onRun = onRun
+        self.onShowLog = onShowLog
+        _draftState = State(initialValue: ScriptEditorDraftState(shortcut: shortcut))
+    }
+
     private var isValid: Bool {
         draftState.draft.isValid
+    }
+
+    private var currentSaveStatus: ScriptEditorSaveStatus {
+        guard draftState.hasUnsavedChanges else { return .saved }
+        return isValid ? .unsaved : .nameRequired
     }
 
     /// Whether the on-device Foundation Models framework is usable on this system.
@@ -408,94 +530,47 @@ struct ScriptEditView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerBar
-
-            // Form body. Keep the metadata grouped in one row so the editor remains the
-            // visual focus without shrinking the controls or their labels.
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 16) {
-                    nameField
-                        .frame(maxWidth: .infinity)
-                    shellPicker
-                        .frame(width: 240, alignment: .trailing)
-                }
-
-                scriptEditor
-
-                // Inline error banner for AI generation failures
-                if let error = generationError {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.yellow)
-                        Text(error)
-                            .font(.caption)
-                        Spacer()
-                        Button("Dismiss") { generationError = nil }
-                            .font(.caption)
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(8)
-                    .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                }
+        // Keep the metadata grouped in one row so the editor remains the visual focus
+        // without shrinking the controls or their labels.
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                nameField
+                    .frame(maxWidth: .infinity)
+                shellPicker
+                    .frame(width: 240, alignment: .trailing)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            scriptEditor
+
+            // Inline error banner for AI generation failures
+            if let error = generationError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                    Text(error)
+                        .font(.caption)
+                    Spacer()
+                    Button("Dismiss") { generationError = nil }
+                        .font(.caption)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(8)
+                .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            }
         }
+        .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { loadFrom(shortcut) }
         .onDisappear {
             flushAutosave()
             cancelGeneration()
         }
-        .onChange(of: draftState.draft) { scheduleAutosave() }
-    }
-
-    // MARK: - Header
-
-    private var headerBar: some View {
-        HStack(spacing: 8) {
-            Text("Edit Script")
-                .font(.headline)
-
-            saveStatus
-
-            Spacer()
-
-            Menu {
-                Button("Delete Script", systemImage: "trash", role: .destructive) {
-                    onDelete()
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .controlSize(.regular)
-            .help("More script actions")
-            .accessibilityLabel("More script actions")
+        .onChange(of: shortcut.id) {
+            switchTo(shortcut)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
-    }
-
-    @ViewBuilder
-    private var saveStatus: some View {
-        if draftState.hasUnsavedChanges {
-            if isValid {
-                Label("Unsaved changes", systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Label("Name required", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-        } else {
-            Label("Saved", systemImage: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        .onChange(of: draftState.draft) { scheduleAutosave() }
+        .onChange(of: currentSaveStatus, initial: true) { _, status in
+            saveStatus = status
         }
     }
 
@@ -643,11 +718,7 @@ struct ScriptEditView: View {
 
     private func save() {
         autosaveTask?.cancel()
-        let draft = draftState.draft
-        let action = ShortcutAction.runScript(script: draft.scriptContent, shell: draft.shellType)
-        var updated = shortcut
-        updated.name = draft.name
-        updated.action = action
+        guard let updated = draftState.shortcutWithCurrentDraft() else { return }
         draftState.markSaved()
         onSave(updated)
     }
@@ -657,7 +728,11 @@ struct ScriptEditView: View {
         onRun()
     }
 
-    private func loadFrom(_ shortcut: Shortcut) {
+    private func switchTo(_ shortcut: Shortcut) {
+        guard draftState.loadedShortcutID != shortcut.id else { return }
+        flushAutosave()
+        cancelGeneration()
+        generationError = nil
         autosaveTask?.cancel()
         draftState.load(shortcut)
         editorController.reset()

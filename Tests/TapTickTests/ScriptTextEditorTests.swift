@@ -49,6 +49,32 @@ struct ScriptTextEditorTests {
         #expect(!state.hasUnsavedChanges)
     }
 
+    @Test("Switching scripts retargets the draft without carrying editor state")
+    func switchingDraftRetargetsEditorState() throws {
+        let first = Shortcut(
+            name: "First",
+            action: .runScript(script: "echo first", shell: .zsh)
+        )
+        let second = Shortcut(
+            name: "Second",
+            action: .runScript(script: "echo second", shell: .bash)
+        )
+        var state = ScriptEditorDraftState(shortcut: first)
+
+        state.draft.name = "Edited First"
+        let firstUpdate = try #require(state.shortcutWithCurrentDraft())
+        #expect(firstUpdate.id == first.id)
+        #expect(firstUpdate.name == "Edited First")
+
+        state.load(second)
+
+        #expect(state.loadedShortcutID == second.id)
+        #expect(state.draft.name == "Second")
+        #expect(state.draft.scriptContent == "echo second")
+        #expect(state.draft.shellType == .bash)
+        #expect(!state.hasUnsavedChanges)
+    }
+
     @Test("Native undo and redo share the editor controller")
     func nativeUndoRedo() {
         let text = TextBox("a")

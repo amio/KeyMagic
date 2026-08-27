@@ -30,14 +30,17 @@ public struct SettingsView: View {
     }
 
     @State private var selectedSection: SettingsSection = .applications
+    @State private var selectedScriptID: UUID?
     @State private var selectedUtilityID: UtilityID? = .keystrokeOverlay
     @FocusState private var isSidebarFocused: Bool
 
     public var body: some View {
         // macOS always keeps the content column of a three-column split view visible,
-        // so Utilities uses three columns while the other settings retain two.
+        // so sections with their own directory use three columns.
         Group {
-            if selectedSection == .utilities {
+            if selectedSection == .scripts {
+                scriptsNavigation
+            } else if selectedSection == .utilities {
                 utilitiesNavigation
             } else {
                 standardNavigation
@@ -46,6 +49,22 @@ public struct SettingsView: View {
         .navigationSplitViewStyle(.balanced)
         .onChange(of: selectedSection) { _, section in
             restoreSidebarFocus(afterSelecting: section)
+        }
+    }
+
+    private var scriptsNavigation: some View {
+        NavigationSplitView {
+            sidebar
+        } content: {
+            ScriptsDirectoryView(selection: $selectedScriptID)
+                .navigationTitle(SettingsSection.scripts.rawValue)
+                .navigationSplitViewColumnWidth(
+                    min: 250,
+                    ideal: 280,
+                    max: 340
+                )
+        } detail: {
+            ScriptDetailView(selection: $selectedScriptID)
         }
     }
 
@@ -106,7 +125,7 @@ public struct SettingsView: View {
         case .applications:
             ApplicationsView()
         case .scripts:
-            ScriptsView()
+            EmptyView()
         case .menuBar:
             MenuBarTextSettingsView()
         case .utilities:

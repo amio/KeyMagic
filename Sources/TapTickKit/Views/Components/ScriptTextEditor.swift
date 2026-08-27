@@ -45,6 +45,11 @@ final class ScriptTextEditorController {
 
     func reset() {
         undoManager.removeAllActions()
+        if let textView {
+            let documentStart = NSRange(location: 0, length: 0)
+            textView.setSelectedRange(documentStart)
+            textView.scrollRangeToVisible(documentStart)
+        }
         refresh()
     }
 
