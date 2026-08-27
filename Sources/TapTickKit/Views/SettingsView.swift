@@ -4,7 +4,6 @@ import SwiftUI
 public struct SettingsView: View {
     public init() {}
 
-    @Environment(UtilitiesController.self) private var utilities
     @Environment(CloudSyncService.self) private var cloudSync
     @Environment(UpdateService.self) private var updateService
 
@@ -31,18 +30,47 @@ public struct SettingsView: View {
     }
 
     @State private var selectedSection: SettingsSection = .applications
+    @State private var selectedUtilityID: UtilityID? = .keystrokeOverlay
     @FocusState private var isSidebarFocused: Bool
 
     public var body: some View {
+        // macOS always keeps the content column of a three-column split view visible,
+        // so Utilities uses three columns while the other settings retain two.
+        Group {
+            if selectedSection == .utilities {
+                utilitiesNavigation
+            } else {
+                standardNavigation
+            }
+        }
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: selectedSection) { _, section in
+            restoreSidebarFocus(afterSelecting: section)
+        }
+    }
+
+    private var standardNavigation: some View {
         NavigationSplitView {
             sidebar
         } detail: {
             selectedPane
                 .navigationTitle(selectedSection.rawValue)
         }
-        .navigationSplitViewStyle(.balanced)
-        .onChange(of: selectedSection) { _, section in
-            restoreSidebarFocus(afterSelecting: section)
+    }
+
+    private var utilitiesNavigation: some View {
+        NavigationSplitView {
+            sidebar
+        } content: {
+            UtilitiesDirectoryView(selection: $selectedUtilityID)
+                .navigationTitle(SettingsSection.utilities.rawValue)
+                .navigationSplitViewColumnWidth(
+                    min: 250,
+                    ideal: 280,
+                    max: 340
+                )
+        } detail: {
+            UtilityDetailView(selectedFeatureID: selectedUtilityID)
         }
     }
 
@@ -82,8 +110,7 @@ public struct SettingsView: View {
         case .menuBar:
             MenuBarTextSettingsView()
         case .utilities:
-            UtilitiesView()
-                .environment(utilities)
+            EmptyView()
         case .about:
             AboutView()
                 .environment(updateService)

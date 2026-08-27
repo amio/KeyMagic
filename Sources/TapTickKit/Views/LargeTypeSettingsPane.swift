@@ -9,51 +9,16 @@ struct LargeTypeSettingsPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                paneHeader
-
-                Form {
-                    hotkeySection
-                    appearanceSection
-                    previewSection
-                    usageSection
-                }
-                .settingsFormStyle()
-                .scrollDisabled(true)
-                .fixedSize(horizontal: false, vertical: true)
+            Form {
+                hotkeySection
+                appearanceSection
+                previewSection
+                usageSection
             }
+            .settingsFormStyle()
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private var paneHeader: some View {
-        let descriptor = utilities.descriptor(for: .largeType)
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center) {
-                Label(descriptor.title, systemImage: descriptor.systemImage)
-                    .font(.title2.weight(.semibold))
-
-                Spacer()
-
-                Toggle(
-                    isOn: Binding(
-                        get: { utilities.largeType.isEnabled },
-                        set: { utilities.setLargeTypeEnabled($0) }
-                    )
-                ) { EmptyView() }
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .controlSize(.small)
-            }
-
-            Text(descriptor.summary)
-                .font(.body)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 28)
-        .padding(.top, 28)
-        .padding(.bottom, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var hotkeySection: some View {

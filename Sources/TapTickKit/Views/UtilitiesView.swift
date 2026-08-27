@@ -1,25 +1,40 @@
 import AppKit
 import SwiftUI
 
-struct UtilitiesView: View {
+struct UtilitiesDirectoryView: View {
     @Environment(UtilitiesController.self) private var utilities
 
-    @State private var selectedFeatureID: UtilityID? = .keystrokeOverlay
+    @Binding var selection: UtilityID?
+
+    var body: some View {
+        List(utilities.catalog, selection: $selection) { feature in
+            UtilityRow(feature: feature)
+                .tag(feature.id)
+        }
+        .listStyle(.inset)
+    }
+}
+
+struct UtilityDetailView: View {
+    @Environment(UtilitiesController.self) private var utilities
+
+    let selectedFeatureID: UtilityID?
+
     @State private var isRecordingKeystrokeOverlayHotkey = false
     @State private var isRecordingScreenshotCaptureHotkey = false
     @State private var isRecordingScreenshotMarkHotkey = false
     @State private var isRecordingLargeTypeHotkey = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            featureDirectory
-                .frame(width: 280)
-
-            Divider()
-
-            featureDetail
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        featureDetail
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                UtilityDetailHeaderAccessoryInstaller(
+                    feature: selectedFeature,
+                    isEnabled: enabledBinding
+                )
+                .frame(width: 0, height: 0)
+            }
     }
 
     private var selectedFeature: UtilityDescriptor {
@@ -27,12 +42,33 @@ struct UtilitiesView: View {
         return utilities.descriptor(for: resolvedFeatureID)
     }
 
-    private var featureDirectory: some View {
-        List(utilities.catalog, selection: $selectedFeatureID) { feature in
-            UtilityRow(feature: feature)
-                .tag(feature.id)
-        }
-        .listStyle(.inset)
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: {
+                switch selectedFeature.id {
+                case .keystrokeOverlay:
+                    utilities.keystrokeOverlay.isEnabled
+                case .screenshotTools:
+                    utilities.screenshotTools.isEnabled
+                case .largeType:
+                    utilities.largeType.isEnabled
+                case .windowManager:
+                    false
+                }
+            },
+            set: { isEnabled in
+                switch selectedFeature.id {
+                case .keystrokeOverlay:
+                    utilities.setKeystrokeOverlayEnabled(isEnabled)
+                case .screenshotTools:
+                    utilities.setScreenshotToolsEnabled(isEnabled)
+                case .largeType:
+                    utilities.setLargeTypeEnabled(isEnabled)
+                case .windowManager:
+                    break
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -53,6 +89,245 @@ struct UtilitiesView: View {
             )
         case .windowManager:
             PlannedUtilityPane(feature: selectedFeature)
+        }
+    }
+}
+
+private struct UtilityDetailHeaderAccessoryInstaller: NSViewRepresentable {
+    let feature: UtilityDescriptor
+    let isEnabled: Binding<Bool>
+
+    func makeNSView(context: Context) -> UtilityDetailHeaderInstallerView {
+        UtilityDetailHeaderInstallerView(feature: feature, isEnabled: isEnabled)
+    }
+
+    func updateNSView(_ nsView: UtilityDetailHeaderInstallerView, context: Context) {
+        nsView.update(feature: feature, isEnabled: isEnabled)
+    }
+
+    static func dismantleNSView(_ nsView: UtilityDetailHeaderInstallerView, coordinator: Void) {
+        nsView.uninstall()
+    }
+}
+
+@MainActor
+private final class UtilityDetailHeaderInstallerView: NSView {
+    private var feature: UtilityDescriptor
+    private var isEnabled: Binding<Bool>
+    private var installationTask: Task<Void, Never>?
+    private weak var installedWindow: NSWindow?
+    private weak var observedSplitView: NSSplitView?
+    private weak var detailPane: NSView?
+    private var accessoryViewController: UtilityDetailHeaderAccessoryViewController?
+
+    init(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
+        self.feature = feature
+        self.isEnabled = isEnabled
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+
+        if window == nil {
+            uninstall()
+        } else {
+            scheduleInstallation()
+        }
+    }
+
+    func update(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
+        self.feature = feature
+        self.isEnabled = isEnabled
+        accessoryViewController?.update(feature: feature, isEnabled: isEnabled)
+        scheduleInstallation()
+    }
+
+    func uninstall() {
+        installationTask?.cancel()
+        installationTask = nil
+        stopObservingSplitView()
+
+        guard
+            let installedWindow,
+            let accessoryViewController,
+            let index = installedWindow.titlebarAccessoryViewControllers.firstIndex(where: {
+                $0 === accessoryViewController
+            })
+        else {
+            self.installedWindow = nil
+            self.accessoryViewController = nil
+            return
+        }
+
+        installedWindow.removeTitlebarAccessoryViewController(at: index)
+        self.installedWindow = nil
+        self.accessoryViewController = nil
+    }
+
+    private func scheduleInstallation() {
+        installationTask?.cancel()
+        installationTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            self?.install()
+        }
+    }
+
+    private func install() {
+        guard let window, let (splitView, pane) = enclosingSplitPane() else { return }
+
+        if window === installedWindow, let accessoryViewController {
+            observe(splitView: splitView, detailPane: pane)
+            accessoryViewController.update(feature: feature, isEnabled: isEnabled)
+            updateAccessoryWidth()
+            return
+        }
+
+        uninstall()
+
+        for staleController in window.titlebarAccessoryViewControllers
+        where staleController is UtilityDetailHeaderAccessoryViewController {
+            staleController.removeFromParent()
+        }
+
+        let controller = UtilityDetailHeaderAccessoryViewController(
+            feature: feature,
+            isEnabled: isEnabled
+        )
+        controller.setWidth(pane.bounds.width)
+        window.addTitlebarAccessoryViewController(controller)
+        installedWindow = window
+        accessoryViewController = controller
+        observe(splitView: splitView, detailPane: pane)
+    }
+
+    private func enclosingSplitPane() -> (NSSplitView, NSView)? {
+        var ancestor = superview
+        while let view = ancestor {
+            if let splitView = view as? NSSplitView,
+                let pane = splitView.subviews.first(where: { isDescendant(of: $0) })
+            {
+                return (splitView, pane)
+            }
+            ancestor = view.superview
+        }
+        return nil
+    }
+
+    private func observe(splitView: NSSplitView, detailPane: NSView) {
+        guard splitView !== observedSplitView else {
+            self.detailPane = detailPane
+            return
+        }
+
+        stopObservingSplitView()
+        observedSplitView = splitView
+        self.detailPane = detailPane
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(splitViewDidResize(_:)),
+            name: NSSplitView.didResizeSubviewsNotification,
+            object: splitView
+        )
+    }
+
+    private func stopObservingSplitView() {
+        if let observedSplitView {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSSplitView.didResizeSubviewsNotification,
+                object: observedSplitView
+            )
+        }
+        observedSplitView = nil
+        detailPane = nil
+    }
+
+    @objc private func splitViewDidResize(_: Notification) {
+        updateAccessoryWidth()
+    }
+
+    private func updateAccessoryWidth() {
+        guard let detailPane else { return }
+        accessoryViewController?.setWidth(detailPane.bounds.width)
+    }
+}
+
+@MainActor
+private final class UtilityDetailHeaderAccessoryViewController:
+    NSTitlebarAccessoryViewController
+{
+    private let hostingView: NSHostingView<UtilityDetailHeaderContent>
+
+    init(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
+        hostingView = NSHostingView(
+            rootView: UtilityDetailHeaderContent(feature: feature, isEnabled: isEnabled)
+        )
+        super.init(nibName: nil, bundle: nil)
+        layoutAttribute = .trailing
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        view = hostingView
+    }
+
+    func setWidth(_ width: CGFloat) {
+        hostingView.frame.size.width = max(0, width)
+    }
+
+    func update(feature: UtilityDescriptor, isEnabled: Binding<Bool>) {
+        hostingView.rootView = UtilityDetailHeaderContent(
+            feature: feature,
+            isEnabled: isEnabled
+        )
+    }
+}
+
+private struct UtilityDetailHeaderContent: View {
+    let feature: UtilityDescriptor
+    let isEnabled: Binding<Bool>
+
+    var body: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: feature.systemImage)
+                Text(feature.title)
+            }
+            .contentShape(.rect)
+            .gesture(WindowDragGesture())
+            .allowsWindowActivationEvents()
+
+            Spacer(minLength: 16)
+
+            headerControl
+        }
+        .font(.headline)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private var headerControl: some View {
+        switch feature.availability {
+        case .available:
+            Toggle("Enable \(feature.title)", isOn: isEnabled)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+        case .planned:
+            StatusPill(title: "Planned", color: .secondary)
         }
     }
 }
@@ -138,67 +413,35 @@ private struct KeystrokeOverlaySettingsPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                paneHeader
-                Form {
-                    controlSection
-                    appearanceSection
-                    previewSection
-                    positionSection
-                    timingSection
-                }
-                .settingsFormStyle()
-                .scrollDisabled(true)
-                .fixedSize(horizontal: false, vertical: true)
-                .onChange(of: utilities.keystrokeOverlay.fontSize) {
-                    refreshLivePreview()
-                }
-                .onChange(of: utilities.keystrokeOverlay.foregroundColor) {
-                    refreshLivePreview()
-                }
-                .onChange(of: utilities.keystrokeOverlay.backgroundColor) {
-                    refreshLivePreview()
-                }
-                .onChange(of: utilities.keystrokeOverlay.verticalPosition) {
-                    refreshLivePreview()
-                }
-                .onChange(of: utilities.keystrokeOverlay.holdDuration) {
-                    refreshLivePreview()
-                }
-                .onChange(of: utilities.keystrokeOverlay.fadeOutDuration) {
-                    refreshLivePreview()
-                }
+            Form {
+                controlSection
+                appearanceSection
+                previewSection
+                positionSection
+                timingSection
+            }
+            .settingsFormStyle()
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
+            .onChange(of: utilities.keystrokeOverlay.fontSize) {
+                refreshLivePreview()
+            }
+            .onChange(of: utilities.keystrokeOverlay.foregroundColor) {
+                refreshLivePreview()
+            }
+            .onChange(of: utilities.keystrokeOverlay.backgroundColor) {
+                refreshLivePreview()
+            }
+            .onChange(of: utilities.keystrokeOverlay.verticalPosition) {
+                refreshLivePreview()
+            }
+            .onChange(of: utilities.keystrokeOverlay.holdDuration) {
+                refreshLivePreview()
+            }
+            .onChange(of: utilities.keystrokeOverlay.fadeOutDuration) {
+                refreshLivePreview()
             }
         }
-    }
-
-    // MARK: - Header
-
-    private var paneHeader: some View {
-        let d = utilities.descriptor(for: .keystrokeOverlay)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center) {
-                Label(d.title, systemImage: d.systemImage)
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                Toggle(
-                    isOn: Binding(
-                        get: { utilities.keystrokeOverlay.isEnabled },
-                        set: { utilities.setKeystrokeOverlayEnabled($0) }
-                    )
-                ) { EmptyView() }
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .controlSize(.small)
-            }
-            Text(d.summary)
-                .font(.body)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 28)
-        .padding(.top, 28)
-        .padding(.bottom, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var controlSection: some View {
@@ -464,46 +707,14 @@ private struct ScreenshotToolsSettingsPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                paneHeader
-                Form {
-                    hotkeysSection
-                    usageSection
-                }
-                .settingsFormStyle()
-                .scrollDisabled(true)
-                .fixedSize(horizontal: false, vertical: true)
+            Form {
+                hotkeysSection
+                usageSection
             }
+            .settingsFormStyle()
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    // MARK: - Header
-
-    private var paneHeader: some View {
-        let d = utilities.descriptor(for: .screenshotTools)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center) {
-                Label(d.title, systemImage: d.systemImage)
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                Toggle(
-                    isOn: Binding(
-                        get: { utilities.screenshotTools.isEnabled },
-                        set: { utilities.setScreenshotToolsEnabled($0) }
-                    )
-                ) { EmptyView() }
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .controlSize(.small)
-            }
-            Text(d.summary)
-                .font(.body)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 28)
-        .padding(.top, 28)
-        .padding(.bottom, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Hotkeys
@@ -675,17 +886,6 @@ private struct PlannedUtilityPane: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Label(feature.title, systemImage: feature.systemImage)
-                        .font(.title2.weight(.semibold))
-
-                    Text(feature.summary)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-
-                    StatusPill(title: "Planned", color: .secondary)
-                }
-
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Planned Surface")
                         .font(.headline)
