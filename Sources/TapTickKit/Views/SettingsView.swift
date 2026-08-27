@@ -32,7 +32,7 @@ public struct SettingsView: View {
     @State private var selectedSection: SettingsSection = .applications
     @State private var selectedScriptID: UUID?
     @State private var scriptNameSelectionRequestID: UUID?
-    @State private var selectedUtilityID: UtilityID? = .keystrokeOverlay
+    @State private var selectedUtilityID: UtilityID = .keystrokeOverlay
     @FocusState private var isSidebarFocused: Bool
 
     public var body: some View {

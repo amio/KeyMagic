@@ -29,8 +29,22 @@ struct ScriptsDirectoryView: View {
         }
     }
 
+    private var scriptShortcutIDs: [UUID] {
+        scriptShortcuts.map(\.id)
+    }
+
+    private var resolvedSelection: UUID? {
+        guard let selection, scriptShortcutIDs.contains(selection) else {
+            return scriptShortcutIDs.first
+        }
+        return selection
+    }
+
     var body: some View {
         scriptListPanel
+            .onChange(of: scriptShortcutIDs, initial: true) { _, shortcutIDs in
+                ensureValidSelection(in: shortcutIDs)
+            }
             .onChange(of: selection) { _, shortcutID in
                 if let requestID = nameSelectionRequestID {
                     guard requestID != shortcutID else { return }
@@ -66,12 +80,15 @@ struct ScriptsDirectoryView: View {
                         .controlSize(.small)
                 }
                 Spacer()
-            } else {
-                List(scriptShortcuts, selection: $selection) { shortcut in
+            } else if let fallbackSelection = scriptShortcutIDs.first {
+                List(
+                    scriptShortcuts,
+                    selection: listSelection(fallback: fallbackSelection)
+                ) { shortcut in
                     ScriptRow(
                         shortcut: shortcut,
-                        isSelected: selection == shortcut.id,
-                        usesEmphasizedSelection: selection == shortcut.id && isScriptListFocused,
+                        isSelected: resolvedSelection == shortcut.id,
+                        usesEmphasizedSelection: resolvedSelection == shortcut.id && isScriptListFocused,
                         isRecording: recordingShortcutID == shortcut.id,
                         onStartRecording: {
                             recordingShortcutID = shortcut.id
@@ -107,6 +124,24 @@ struct ScriptsDirectoryView: View {
     }
 
     // MARK: - Actions
+
+    /// Adapt the directory's empty-state-capable selection to SwiftUI's
+    /// non-optional List selection API while rows exist.
+    private func listSelection(fallback: UUID) -> Binding<UUID> {
+        Binding(
+            get: { resolvedSelection ?? fallback },
+            set: { proposedSelection in
+                selection = proposedSelection
+            }
+        )
+    }
+
+    private func ensureValidSelection(in shortcutIDs: [UUID]) {
+        guard let selection, shortcutIDs.contains(selection) else {
+            self.selection = shortcutIDs.first
+            return
+        }
+    }
 
     /// Keep native list focus after its selection transaction without overriding later editor focus.
     private func restoreScriptListFocus(afterSelecting shortcutID: UUID?) {
@@ -277,11 +312,30 @@ struct ScriptDetailView: View {
 
     private func deleteShortcut(id: UUID) {
         if selection == id {
-            selection = nil
+            selection = selectionAfterRemoving(id)
         }
         store.remove(id: id)
         hotkeyService.restart(store: store)
         editorRunIDs[id] = nil
+    }
+
+    /// Prefer the following script after deletion, falling back to the previous one.
+    private func selectionAfterRemoving(_ removedID: UUID) -> UUID? {
+        let scriptIDs = store.shortcuts.compactMap { shortcut -> UUID? in
+            switch shortcut.action {
+            case .runScript, .runScriptFile: shortcut.id
+            case .launchApp: nil
+            }
+        }
+        guard let removedIndex = scriptIDs.firstIndex(of: removedID) else {
+            return scriptIDs.first
+        }
+
+        let remainingIDs = scriptIDs.filter { $0 != removedID }
+        if remainingIDs.indices.contains(removedIndex) {
+            return remainingIDs[removedIndex]
+        }
+        return remainingIDs.last
     }
 }
 

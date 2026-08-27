@@ -3,7 +3,8 @@ import SwiftUI
 struct UtilitiesDirectoryView: View {
     @Environment(UtilitiesController.self) private var utilities
 
-    @Binding var selection: UtilityID?
+    @Binding var selection: UtilityID
+    @FocusState private var isUtilityListFocused: Bool
 
     var body: some View {
         List(utilities.catalog, selection: $selection) { feature in
@@ -11,10 +12,24 @@ struct UtilitiesDirectoryView: View {
                 .tag(feature.id)
         }
         .listStyle(.inset)
+        .focused($isUtilityListFocused)
+        .onChange(of: selection) { _, featureID in
+            restoreUtilityListFocus(afterSelecting: featureID)
+        }
         .toolbar {
             // Establish this split column's otherwise-empty native toolbar section so
             // detail items are scoped after its tracking separator.
             ToolbarSpacer(.flexible)
+        }
+    }
+
+    /// Replacing the detail can interrupt AppKit's first-responder handoff from the click.
+    /// Restore it after the selection transaction so the list keeps native focused selection.
+    private func restoreUtilityListFocus(afterSelecting featureID: UtilityID) {
+        Task { @MainActor in
+            await Task.yield()
+            guard selection == featureID, !isUtilityListFocused else { return }
+            isUtilityListFocused = true
         }
     }
 }
@@ -22,7 +37,7 @@ struct UtilitiesDirectoryView: View {
 struct UtilityDetailView: View {
     @Environment(UtilitiesController.self) private var utilities
 
-    let selectedFeatureID: UtilityID?
+    let selectedFeatureID: UtilityID
 
     @State private var isRecordingKeystrokeOverlayHotkey = false
     @State private var isRecordingScreenshotCaptureHotkey = false
@@ -56,8 +71,7 @@ struct UtilityDetailView: View {
     }
 
     private var selectedFeature: UtilityDescriptor {
-        let resolvedFeatureID = selectedFeatureID ?? .keystrokeOverlay
-        return utilities.descriptor(for: resolvedFeatureID)
+        utilities.descriptor(for: selectedFeatureID)
     }
 
     private var enabledBinding: Binding<Bool> {
