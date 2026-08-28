@@ -27,6 +27,11 @@ public struct SettingsView: View {
             case .about: return "info.circle"
             }
         }
+
+        var sidebarIconPointSize: CGFloat {
+            // The crossed tools fill more of their symbol canvas than the other icons.
+            self == .utilities ? 11 : 12
+        }
     }
 
     @State private var selectedSection: SettingsSection = .applications
@@ -107,7 +112,14 @@ public struct SettingsView: View {
 
     private var sidebar: some View {
         List(SettingsSection.allCases, selection: $selectedSection) { section in
-            Label(section.rawValue, systemImage: section.systemImage)
+            Label {
+                Text(section.rawValue)
+                    .fontWeight(.regular)
+            } icon: {
+                Image(systemName: section.systemImage)
+                    .font(.system(size: section.sidebarIconPointSize, weight: .regular))
+                    .frame(width: 20, height: 20)
+            }
         }
         .navigationSplitViewColumnWidth(
             min: 180,
