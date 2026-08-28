@@ -105,7 +105,10 @@ final class AnnotationToolbarModel {
 
 // MARK: - Preview Window
 
-private let canvasMargin: CGFloat = 16
+/// Matches the vertical inset around 20-point controls in the 40-point compact titlebar.
+private let canvasMargin: CGFloat = 10
+/// Keeps the canvas visually attached to the native titlebar without changing its geometry.
+private let canvasTopMargin: CGFloat = 0
 /// Height of the unified compact header installed by `configureHeader()`.
 private let headerHeight: CGFloat = 40
 /// Keeps tiny captures usable without coupling the window width to toolbar copy or font metrics.
@@ -123,6 +126,7 @@ final class ScreenshotPreviewWindow: NSPanel {
     var onAnnotationSettingsChanged: ((AnnotationMode, Int) -> Void)?
     private let canvasView: AnnotationCanvasView
     private let toolbarModel: AnnotationToolbarModel
+    private let intendedFrameSize: NSSize
     private var isOptionPressed = false
     private var didUseOptionPressAsModifier = false
     private var didActivateTemporaryModeSwitch = false
@@ -134,7 +138,7 @@ final class ScreenshotPreviewWindow: NSPanel {
             NSScreen.screenWithMouse?.visibleFrame
             ?? NSScreen.main?.visibleFrame ?? .zero
 
-        let chromeHeight = headerHeight + canvasMargin * 2
+        let chromeHeight = headerHeight + canvasTopMargin + canvasMargin
         let chromeWidth = canvasMargin * 2
         let maxImageWidth = screenFrame.width * 0.8 - chromeWidth
         let maxImageHeight = screenFrame.height * 0.8 - chromeHeight
@@ -146,15 +150,20 @@ final class ScreenshotPreviewWindow: NSPanel {
             height: (imageSize.height * scale).rounded()
         )
 
-        let windowWidth = displaySize.width + chromeWidth
-        let windowHeight = displaySize.height + chromeHeight
-
-        let contentRect = NSRect(
-            x: screenFrame.midX - windowWidth / 2,
-            y: screenFrame.midY - windowHeight / 2,
-            width: windowWidth,
-            height: windowHeight
+        let windowFrameSize = NSSize(
+            width: displaySize.width + chromeWidth,
+            height: displaySize.height + chromeHeight
         )
+        let styleMask: NSWindow.StyleMask = [
+            .titled, .closable, .nonactivatingPanel, .fullSizeContentView,
+        ]
+        let windowFrame = NSRect(
+            x: screenFrame.midX - windowFrameSize.width / 2,
+            y: screenFrame.midY - windowFrameSize.height / 2,
+            width: windowFrameSize.width,
+            height: windowFrameSize.height
+        )
+        let contentRect = Self.contentRect(forFrameRect: windowFrame, styleMask: styleMask)
 
         let toolbarModel = AnnotationToolbarModel(mode: initialMode, colorIndex: initialColorIndex)
         canvasView = AnnotationCanvasView(
@@ -163,10 +172,11 @@ final class ScreenshotPreviewWindow: NSPanel {
             frame: NSRect(origin: .zero, size: displaySize)
         )
         self.toolbarModel = toolbarModel
+        intendedFrameSize = windowFrameSize
 
         super.init(
             contentRect: contentRect,
-            styleMask: [.titled, .closable, .nonactivatingPanel, .fullSizeContentView],
+            styleMask: styleMask,
             backing: .buffered,
             defer: false
         )
@@ -350,7 +360,10 @@ final class ScreenshotPreviewWindow: NSPanel {
         return fittingSize.width
     }
 
-    private func enforceMinimumWindowSize(toolsWidth: CGFloat, completionWidth: CGFloat) {
+    private func enforceMinimumWindowSize(
+        toolsWidth: CGFloat,
+        completionWidth: CGFloat
+    ) {
         let titlebarView = standardWindowButton(.closeButton)?.superview
         titlebarView?.layoutSubtreeIfNeeded()
 
@@ -369,14 +382,13 @@ final class ScreenshotPreviewWindow: NSPanel {
                 trafficLightTrailingEdge + toolsWidth + completionWidth
                     + minimumHeaderBreathingRoom
             ),
-            height: headerHeight + canvasMargin * 2 + minimumCanvasHeight
+            height: headerHeight + canvasTopMargin + canvasMargin + minimumCanvasHeight
         )
         minSize = minimumFrameSize
         let effectiveMinimumFrameSize = minSize
-
         let targetSize = NSSize(
-            width: max(frame.width, effectiveMinimumFrameSize.width),
-            height: max(frame.height, effectiveMinimumFrameSize.height)
+            width: max(intendedFrameSize.width, effectiveMinimumFrameSize.width),
+            height: max(intendedFrameSize.height, effectiveMinimumFrameSize.height)
         )
         guard targetSize != frame.size else { return }
 
@@ -410,17 +422,18 @@ final class ScreenshotPreviewWindow: NSPanel {
             blur.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
         ])
 
-        // Canvas view centered in the space below title bar with a drop shadow.
+        // The canvas meets the titlebar and keeps the matching control inset on its other edges.
         canvasView.translatesAutoresizingMaskIntoConstraints = false
         canvasView.wantsLayer = true
         canvasView.layer?.cornerRadius = 12
         canvasView.layer?.cornerCurve = .continuous
         canvasView.layer?.masksToBounds = true
 
-        // Shadow container — wrapper needed because masksToBounds clips the shadow.
+        // The wrapper stays unmasked so the canvas shadow can extend into the titlebar.
         let shadowContainer = NSView()
         shadowContainer.translatesAutoresizingMaskIntoConstraints = false
         shadowContainer.wantsLayer = true
+        shadowContainer.layer?.masksToBounds = false
         shadowContainer.shadow = NSShadow()
         shadowContainer.layer?.shadowColor = NSColor.black.withAlphaComponent(0.35).cgColor
         shadowContainer.layer?.shadowOpacity = 1
@@ -429,20 +442,8 @@ final class ScreenshotPreviewWindow: NSPanel {
         rootView.addSubview(shadowContainer)
         shadowContainer.addSubview(canvasView)
 
-        NSLayoutConstraint.activate([
-            shadowContainer.topAnchor.constraint(
-                greaterThanOrEqualTo: rootView.safeAreaLayoutGuide.topAnchor,
-                constant: canvasMargin
-            ),
-            shadowContainer.centerYAnchor.constraint(
-                equalTo: rootView.safeAreaLayoutGuide.centerYAnchor
-            ),
-            shadowContainer.bottomAnchor.constraint(
-                lessThanOrEqualTo: rootView.bottomAnchor,
-                constant: -canvasMargin
-            ),
+        var canvasConstraints = [
             shadowContainer.centerXAnchor.constraint(equalTo: rootView.centerXAnchor),
-
             canvasView.topAnchor.constraint(equalTo: shadowContainer.topAnchor),
             canvasView.leadingAnchor.constraint(equalTo: shadowContainer.leadingAnchor),
             canvasView.trailingAnchor.constraint(equalTo: shadowContainer.trailingAnchor),
@@ -450,7 +451,36 @@ final class ScreenshotPreviewWindow: NSPanel {
 
             canvasView.widthAnchor.constraint(equalToConstant: displaySize.width),
             canvasView.heightAnchor.constraint(equalToConstant: displaySize.height),
-        ])
+        ]
+
+        if displaySize.height >= minimumCanvasHeight {
+            canvasConstraints += [
+                shadowContainer.topAnchor.constraint(
+                    equalTo: rootView.safeAreaLayoutGuide.topAnchor,
+                    constant: canvasTopMargin
+                ),
+                shadowContainer.bottomAnchor.constraint(
+                    equalTo: rootView.bottomAnchor,
+                    constant: -canvasMargin
+                ),
+            ]
+        } else {
+            canvasConstraints += [
+                shadowContainer.topAnchor.constraint(
+                    greaterThanOrEqualTo: rootView.safeAreaLayoutGuide.topAnchor,
+                    constant: canvasTopMargin
+                ),
+                shadowContainer.centerYAnchor.constraint(
+                    equalTo: rootView.safeAreaLayoutGuide.centerYAnchor,
+                    constant: (canvasMargin - canvasTopMargin) / 2
+                ),
+                shadowContainer.bottomAnchor.constraint(
+                    lessThanOrEqualTo: rootView.bottomAnchor,
+                    constant: -canvasMargin
+                ),
+            ]
+        }
+        NSLayoutConstraint.activate(canvasConstraints)
     }
 }
 
@@ -768,6 +798,7 @@ private struct AnnotationToolbarIconButtonStyle: ButtonStyle {
 }
 
 private struct AnnotationToolbar: View {
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Bindable var model: AnnotationToolbarModel
     let section: AnnotationToolbarSection
 
@@ -873,14 +904,21 @@ private struct AnnotationToolbar: View {
 
     private func keycap(_ label: String) -> some View {
         Text(label)
-            .font(.system(.caption2, design: .rounded, weight: .medium))
-            .foregroundStyle(.tertiary)
-            .padding(.horizontal, 5)
+            .font(.system(.caption2, design: .rounded, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(
+            .background {
                 RoundedRectangle(cornerRadius: 3.5)
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
-            )
+                    .fill(Color.primary.opacity(colorSchemeContrast == .increased ? 0.14 : 0.08))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 3.5)
+                    .strokeBorder(
+                        Color.primary.opacity(colorSchemeContrast == .increased ? 0.4 : 0.25),
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.75
+                    )
+            }
             .accessibilityHidden(true)
     }
 }
