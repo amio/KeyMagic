@@ -125,6 +125,24 @@ struct UtilitiesControllerTests {
         #expect(layout.lineLimit >= 3)
     }
 
+    @Test("Large Type keeps ordinary words intact in the narrow QR layout")
+    @MainActor
+    func largeTypeQRCodeWrappingPreservesWords() {
+        let availableSize = CGSize(width: 531, height: 807)
+        let layout = LargeTypeLayoutEngine.layout(
+            text: "large is awesome",
+            in: availableSize,
+            screenHeight: 1_121,
+            fontFamily: nil
+        )
+        let wordSize = NSAttributedString(
+            string: "awesome",
+            attributes: [.font: LargeTypeLayoutEngine.font(family: nil, size: layout.fontSize)]
+        ).size()
+
+        #expect(wordSize.width <= availableSize.width + 0.5)
+    }
+
     @Test("A bare Option press toggles Large Type QR mode")
     func largeTypeBareOptionGesture() {
         var gesture = LargeTypeOptionKeyGesture()

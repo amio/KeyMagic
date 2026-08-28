@@ -312,6 +312,10 @@ enum LargeTypeLayoutEngine {
             return LargeTypeLayout(fontSize: max(screenHeight * 0.22, 48), lineLimit: 1)
         }
 
+        // TextKit falls back to character wrapping when a word is wider than the
+        // container. Treat that fallback as overflow so a larger font cannot
+        // strand a short word fragment on its own line.
+        let wordRanges = naturalWordRanges(in: text)
         var lastFittingLayout = LargeTypeLayout(fontSize: 1, lineLimit: 1)
         let maximumLineCount = max(1, min(48, Int(screenHeight / 12)))
 
@@ -321,7 +325,8 @@ enum LargeTypeLayoutEngine {
                 in: availableSize,
                 maximumLineCount: lineLimit,
                 fontFamily: fontFamily,
-                textDirection: textDirection
+                textDirection: textDirection,
+                wordRanges: wordRanges
             )
 
             guard fit.fits else { continue }
@@ -360,7 +365,8 @@ enum LargeTypeLayoutEngine {
         in availableSize: CGSize,
         maximumLineCount: Int,
         fontFamily: String?,
-        textDirection: LargeTypeTextDirection
+        textDirection: LargeTypeTextDirection,
+        wordRanges: [NSRange]
     ) -> FontFit {
         var lowerBound: CGFloat = 1
         var upperBound = max(availableSize.width, availableSize.height) * 2
@@ -372,12 +378,14 @@ enum LargeTypeLayoutEngine {
                 text: text,
                 width: availableSize.width,
                 font: font(family: fontFamily, size: candidateSize),
-                textDirection: textDirection
+                textDirection: textDirection,
+                wordRanges: wordRanges
             )
             let fits =
                 measurement.lineCount <= maximumLineCount
                 && measurement.usedSize.height <= availableSize.height + 0.5
                 && measurement.usedSize.width <= availableSize.width + 0.5
+                && !measurement.splitsWord
 
             if fits {
                 let fit = FontFit(
@@ -401,13 +409,15 @@ enum LargeTypeLayoutEngine {
             text: text,
             width: availableSize.width,
             font: fallbackFont,
-            textDirection: textDirection
+            textDirection: textDirection,
+            wordRanges: wordRanges
         )
         return FontFit(
             fontSize: 1,
             lineHeight: fallbackMeasurement.lineHeight,
             fits: fallbackMeasurement.lineCount <= maximumLineCount
                 && fallbackMeasurement.usedSize.height <= availableSize.height + 0.5
+                && !fallbackMeasurement.splitsWord
         )
     }
 
@@ -415,7 +425,8 @@ enum LargeTypeLayoutEngine {
         text: String,
         width: CGFloat,
         font: NSFont,
-        textDirection: LargeTypeTextDirection
+        textDirection: LargeTypeTextDirection,
+        wordRanges: [NSRange]
     ) -> TextMeasurement {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineBreakMode = .byWordWrapping
@@ -441,12 +452,32 @@ enum LargeTypeLayoutEngine {
         let glyphRange = layoutManager.glyphRange(for: container)
         var lineCount = 0
         var glyphIndex = glyphRange.location
+        var wordIndex = 0
+        var splitsWord = false
         while glyphIndex < NSMaxRange(glyphRange) {
             var lineRange = NSRange()
             layoutManager.lineFragmentRect(
                 forGlyphAt: glyphIndex,
                 effectiveRange: &lineRange
             )
+
+            let characterRange = layoutManager.characterRange(
+                forGlyphRange: lineRange,
+                actualGlyphRange: nil
+            )
+            let lineBreak = NSMaxRange(characterRange)
+            while wordIndex < wordRanges.count,
+                NSMaxRange(wordRanges[wordIndex]) <= lineBreak
+            {
+                wordIndex += 1
+            }
+            if wordIndex < wordRanges.count,
+                lineBreak > wordRanges[wordIndex].location,
+                lineBreak < NSMaxRange(wordRanges[wordIndex])
+            {
+                splitsWord = true
+            }
+
             lineCount += 1
             glyphIndex = NSMaxRange(lineRange)
         }
@@ -461,8 +492,20 @@ enum LargeTypeLayoutEngine {
         return TextMeasurement(
             usedSize: layoutManager.usedRect(for: container).size,
             lineCount: max(lineCount, explicitLineCount),
-            lineHeight: lineHeight
+            lineHeight: lineHeight,
+            splitsWord: splitsWord
         )
+    }
+
+    private static func naturalWordRanges(in text: String) -> [NSRange] {
+        var ranges: [NSRange] = []
+        text.enumerateSubstrings(
+            in: text.startIndex..<text.endIndex,
+            options: [.byWords, .substringNotRequired]
+        ) { _, range, _, _ in
+            ranges.append(NSRange(range, in: text))
+        }
+        return ranges
     }
 
     private struct FontFit {
@@ -475,6 +518,7 @@ enum LargeTypeLayoutEngine {
         let usedSize: CGSize
         let lineCount: Int
         let lineHeight: CGFloat
+        let splitsWord: Bool
     }
 }
 
