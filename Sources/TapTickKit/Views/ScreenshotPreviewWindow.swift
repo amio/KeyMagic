@@ -49,6 +49,11 @@ struct Annotation {
     let lineWidth: CGFloat
 }
 
+enum AnnotationColorCycleDirection {
+    case forward
+    case backward
+}
+
 // MARK: - Shared Toolbar Model
 
 @Observable
@@ -93,8 +98,14 @@ final class AnnotationToolbarModel {
         onSettingsChanged?(selectedMode, colorIndex)
     }
 
-    func cycleColor() {
-        colorIndex = (colorIndex + 1) % AnnotationPalette.colors.count
+    func cycleColor(_ direction: AnnotationColorCycleDirection = .forward) {
+        let colorCount = AnnotationPalette.colors.count
+        switch direction {
+        case .forward:
+            colorIndex = (colorIndex + 1) % colorCount
+        case .backward:
+            colorIndex = (colorIndex - 1 + colorCount) % colorCount
+        }
         onSettingsChanged?(selectedMode, colorIndex)
     }
 
@@ -228,7 +239,7 @@ final class ScreenshotPreviewWindow: NSPanel {
 
         switch keyCode {
         case kVK_Tab:
-            toolbarModel.cycleColor()
+            toolbarModel.cycleColor(flags.contains(.shift) ? .backward : .forward)
             canvasView.needsDisplay = true
 
         case kVK_Return, kVK_ANSI_KeypadEnter:
@@ -882,11 +893,11 @@ private struct AnnotationToolbar: View {
             .buttonStyle(AnnotationToolbarIconButtonStyle())
             .accessibilityLabel("Annotation Color")
             .accessibilityValue(model.currentColorName)
-            .accessibilityHint("Press Tab to select the next annotation color.")
+            .accessibilityHint("Tab next, Shift-Tab previous.")
 
             keycap("TAB")
         }
-        .help("Cycle annotation color · Press Tab to select the next color")
+        .help("Tab next · Shift-Tab previous")
     }
 
     private var copyControl: some View {

@@ -10,7 +10,7 @@
 
 - Tapping `Option` toggles the persisted drawing mode between freehand and rectangle.
 - Holding `Option` temporarily swaps to the opposite mode, and releasing it restores the persisted selection.
-- Pressing `Tab` cycles annotation color regardless of the currently selected drawing mode.
+- Pressing `Tab` cycles annotation color forward, while `Shift`+`Tab` cycles backward, regardless of the currently selected drawing mode.
 
 ## Technical Spec
 

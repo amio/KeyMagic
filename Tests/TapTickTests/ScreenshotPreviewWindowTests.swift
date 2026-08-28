@@ -1,10 +1,30 @@
 import AppKit
+import Carbon.HIToolbox
 @testable import TapTickKit
 import Testing
 
 @MainActor
 @Suite("Screenshot Preview Window", .serialized)
 struct ScreenshotPreviewWindowTests {
+    @Test("Tab cycles colors forward and Shift-Tab cycles backward")
+    func tabCyclesAnnotationColorsInBothDirections() throws {
+        let window = ScreenshotPreviewWindow(
+            image: NSImage(size: NSSize(width: 640, height: 480))
+        )
+        defer { window.close() }
+
+        var selectedColorIndices: [Int] = []
+        window.onAnnotationSettingsChanged = { _, colorIndex in
+            selectedColorIndices.append(colorIndex)
+        }
+
+        window.keyDown(with: try keyEvent(keyCode: kVK_Tab))
+        window.keyDown(with: try keyEvent(keyCode: kVK_Tab, modifiers: .shift))
+        window.keyDown(with: try keyEvent(keyCode: kVK_Tab, modifiers: .shift))
+
+        #expect(selectedColorIndices == [1, 0, AnnotationPalette.colors.count - 1])
+    }
+
     @Test("Canvas meets the titlebar and keeps equal margins on the remaining edges")
     func canvasLayoutMatchesToolbarChrome() async throws {
         let window = ScreenshotPreviewWindow(
@@ -64,5 +84,24 @@ struct ScreenshotPreviewWindowTests {
 
         #expect(leadingFrame.maxX <= trailingFrame.minX)
         #expect(leadingFrame.minX - closeFrame.maxX <= 16)
+    }
+
+    private func keyEvent(
+        keyCode: Int,
+        modifiers: NSEvent.ModifierFlags = []
+    ) throws -> NSEvent {
+        try #require(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: modifiers,
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "\t",
+                charactersIgnoringModifiers: "\t",
+                isARepeat: false,
+                keyCode: UInt16(keyCode)
+            ))
     }
 }
