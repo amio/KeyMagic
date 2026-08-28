@@ -45,6 +45,13 @@ struct ScreenshotPreviewWindowTests {
         #expect(window.frame.width >= window.minSize.width)
         #expect(window.frame.height >= window.minSize.height)
 
+        let closeButton = try #require(window.standardWindowButton(.closeButton))
+        let miniaturizeButton = try #require(window.standardWindowButton(.miniaturizeButton))
+        let zoomButton = try #require(window.standardWindowButton(.zoomButton))
+        #expect(!closeButton.isHidden)
+        #expect(miniaturizeButton.isHidden)
+        #expect(zoomButton.isHidden)
+
         let leadingAccessory = try #require(
             window.titlebarAccessoryViewControllers.first { $0.layoutAttribute == .left }
         )
@@ -53,7 +60,9 @@ struct ScreenshotPreviewWindowTests {
         )
         let leadingFrame = leadingAccessory.view.convert(leadingAccessory.view.bounds, to: nil)
         let trailingFrame = trailingAccessory.view.convert(trailingAccessory.view.bounds, to: nil)
+        let closeFrame = closeButton.convert(closeButton.bounds, to: nil)
 
         #expect(leadingFrame.maxX <= trailingFrame.minX)
+        #expect(leadingFrame.minX - closeFrame.maxX <= 16)
     }
 }

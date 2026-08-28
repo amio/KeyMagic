@@ -190,6 +190,7 @@ final class ScreenshotPreviewWindow: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         configureHeader()
+        hideUnsupportedWindowButtons()
 
         toolbarModel.onDone = { [weak self] in
             self?.commitAndClose()
@@ -329,6 +330,11 @@ final class ScreenshotPreviewWindow: NSPanel {
         titlebarSeparatorStyle = .none
     }
 
+    private func hideUnsupportedWindowButtons() {
+        standardWindowButton(.miniaturizeButton)?.isHidden = true
+        standardWindowButton(.zoomButton)?.isHidden = true
+    }
+
     private func installTitlebarAccessories() {
         let toolsWidth = addTitlebarAccessory(
             AnnotationToolbar(model: toolbarModel, section: .tools),
@@ -374,6 +380,7 @@ final class ScreenshotPreviewWindow: NSPanel {
                 .zoomButton,
             ]
             .compactMap { standardWindowButton($0) }
+            .filter { !$0.isHidden }
             .map { $0.convert($0.bounds, to: nil).maxX }
             .max() ?? 0
 
