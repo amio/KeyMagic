@@ -13,6 +13,7 @@ final class MenuBarStatusContentView: NSView {
     private static let twoLineSpacingReduction: CGFloat = 1
     private static let widthAnimationDuration: TimeInterval = 0.24
     private static let widthAnimationFrameInterval: TimeInterval = 1 / 60
+    private static let textWeight: NSFont.Weight = .medium
     private static let singleLineFont = tabularDigitFont(size: 0)
     private static let twoLineFont = tabularDigitFont(size: 9)
 
@@ -264,7 +265,11 @@ final class MenuBarStatusContentView: NSView {
     }
 
     private static func tabularDigitFont(size: CGFloat) -> NSFont {
-        let baseFont = NSFont.menuBarFont(ofSize: size)
+        let menuBarFont = NSFont.menuBarFont(ofSize: size)
+        let baseFont = NSFont.systemFont(
+            ofSize: menuBarFont.pointSize,
+            weight: Self.textWeight
+        )
         let descriptor = baseFont.fontDescriptor.addingAttributes([
             .featureSettings: [
                 [
