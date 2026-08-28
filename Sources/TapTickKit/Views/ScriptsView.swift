@@ -215,11 +215,13 @@ struct ScriptDetailView: View {
     @Environment(HotkeyService.self) private var hotkeyService
     @Environment(ScriptLogStore.self) private var logStore
     @Environment(ShortcutExecutor.self) private var shortcutExecutor
+    @Environment(MenuBarTextController.self) private var menuBarTextController
 
     @Binding var selection: UUID?
     @Binding var nameSelectionRequestID: UUID?
 
     @State private var showingDeleteConfirmation = false
+    @State private var showingMenuBarUsageAlert = false
     @State private var deletingShortcutID: UUID?
     @State private var logsPresentation: ScriptLogsPresentation?
     @State private var editorRunIDs: [UUID: UUID] = [:]
@@ -264,6 +266,13 @@ struct ScriptDetailView: View {
             } message: {
                 Text("This action cannot be undone.")
             }
+            .alert("Script Is Used in Menu Bar", isPresented: $showingMenuBarUsageAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(
+                    "Remove this script from Menu Bar settings before deleting it."
+                )
+            }
     }
 
     @ViewBuilder
@@ -284,8 +293,7 @@ struct ScriptDetailView: View {
                     showLogs(for: shortcut.id)
                 },
                 onDelete: {
-                    deletingShortcutID = shortcut.id
-                    showingDeleteConfirmation = true
+                    requestDeletion(of: shortcut.id)
                 },
                 onNameSelectionRequestHandled: {
                     guard nameSelectionRequestID == shortcut.id else { return }
@@ -316,12 +324,27 @@ struct ScriptDetailView: View {
     }
 
     private func deleteShortcut(id: UUID) {
+        guard !menuBarTextController.usesScript(id: id) else {
+            showingMenuBarUsageAlert = true
+            return
+        }
+
         if selection == id {
             selection = selectionAfterRemoving(id)
         }
         store.remove(id: id)
         hotkeyService.restart(store: store)
         editorRunIDs[id] = nil
+    }
+
+    private func requestDeletion(of id: UUID) {
+        guard !menuBarTextController.usesScript(id: id) else {
+            showingMenuBarUsageAlert = true
+            return
+        }
+
+        deletingShortcutID = id
+        showingDeleteConfirmation = true
     }
 
     /// Prefer the following script after deletion, falling back to the previous one.

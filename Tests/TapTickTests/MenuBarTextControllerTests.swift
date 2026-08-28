@@ -90,6 +90,33 @@ struct MenuBarTextControllerTests {
         #expect(controller.slots[0].bottomLine.refreshIntervalSeconds == 3600)
     }
 
+    @Test("Reports scripts referenced by persisted menu bar lines")
+    @MainActor
+    func reportsReferencedScripts() {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ShortcutStore(directory: directory)
+        let controller = MenuBarTextController(store: store, directory: directory)
+        let topScriptID = UUID()
+        let bottomScriptID = UUID()
+        let slotID = controller.addSlot()
+
+        controller.updateSlot(id: slotID) { slot in
+            slot.topLine.scriptID = topScriptID
+            slot.bottomLine.scriptID = bottomScriptID
+        }
+
+        #expect(controller.usesScript(id: topScriptID))
+        #expect(controller.usesScript(id: bottomScriptID))
+        #expect(!controller.usesScript(id: UUID()))
+
+        controller.removeSlot(id: slotID)
+
+        #expect(!controller.usesScript(id: topScriptID))
+        #expect(!controller.usesScript(id: bottomScriptID))
+    }
+
     @Test("Migrates the previous single-script slot schema into the top line")
     @MainActor
     func migratesLegacySlot() throws {

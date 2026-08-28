@@ -114,6 +114,13 @@ public final class MenuBarTextController {
         configurationDidChange()
     }
 
+    /** Whether a persisted menu bar line still depends on the script. */
+    func usesScript(id: UUID) -> Bool {
+        slots.contains { slot in
+            slot.topLine.scriptID == id || slot.bottomLine.scriptID == id
+        }
+    }
+
     private func renderedSlot(
         _ slot: MenuBarTextSlot,
         showsPlaceholders: Bool
