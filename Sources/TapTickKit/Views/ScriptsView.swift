@@ -976,9 +976,10 @@ struct ScriptEditView: View {
                 .frame(minHeight: 16)
             }
             .disabled(!isValid || saveError != nil || isRunning)
+            .keyboardShortcut(.return, modifiers: .command)
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .help("Run this script")
+            .help("Run this script (⌘↩)")
         } else {
             let presets = ScriptShebangPreset.available
 
