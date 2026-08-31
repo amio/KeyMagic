@@ -25,10 +25,13 @@ struct ShortcutStoreTests {
         )
     }
 
-    private func makeScriptShortcut(name: String = "Script", script: String = "echo initial") -> Shortcut {
+    private func makeScriptShortcut(
+        name: String = "Script",
+        script: String = "#!/bin/zsh\necho initial"
+    ) -> Shortcut {
         Shortcut(
             name: name,
-            action: .runScript(script: script, shell: .zsh)
+            action: .runScript(script: script)
         )
     }
 
@@ -58,7 +61,7 @@ struct ShortcutStoreTests {
     }
 
     @Test("Script updates preserve unrelated current fields")
-    func scriptUpdatePreservesUnrelatedFields() {
+    func scriptUpdatePreservesUnrelatedFields() throws {
         let store = makeStore()
         var shortcut = makeScriptShortcut()
         store.add(shortcut)
@@ -69,11 +72,11 @@ struct ShortcutStoreTests {
         store.update(rebound)
 
         shortcut.name = "Updated Script"
-        shortcut.action = .runScript(script: "echo updated", shell: .bash)
-        store.updateScript(shortcut)
+        shortcut.action = .runScript(script: "#!/bin/bash\necho updated")
+        try store.updateScript(shortcut)
 
         #expect(store.shortcuts.first?.name == "Updated Script")
-        #expect(store.shortcuts.first?.action == .runScript(script: "echo updated", shell: .bash))
+        #expect(store.shortcuts.first?.action == .runScript(script: "#!/bin/bash\necho updated"))
         #expect(store.shortcuts.first?.keyCombo == hotkey)
     }
 
@@ -231,6 +234,44 @@ struct ShortcutStoreTests {
         #expect(savedState.deletions.isEmpty)
     }
 
+    @Test("Legacy inline scripts migrate to managed files with their selected shell")
+    func legacyInlineScriptMigration() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let id = UUID()
+        let data = Data(
+            """
+            [{
+              "id": "\(id.uuidString)",
+              "name": "Legacy Script",
+              "action": {"runScript": {"script": "echo legacy", "shell": "/bin/bash"}},
+              "isEnabled": true,
+              "createdAt": 0,
+              "modifiedAt": 0
+            }]
+            """.utf8
+        )
+        try data.write(to: directory.appendingPathComponent("shortcuts.json"))
+
+        let store = ShortcutStore(directory: directory)
+        let expectedSource = "#!/bin/bash\n\necho legacy"
+
+        #expect(store.shortcuts.first?.action == .runScript(script: expectedSource))
+        #expect(
+            try String(
+                contentsOf: store.scriptsDirectoryURL.appendingPathComponent("Legacy Script"),
+                encoding: .utf8
+            ) == expectedSource
+        )
+        let saved = try JSONDecoder().decode(
+            ShortcutSyncState.self,
+            from: Data(contentsOf: directory.appendingPathComponent("shortcuts.json"))
+        )
+        #expect(saved.schemaVersion == ShortcutSyncState.currentSchemaVersion)
+    }
+
     @Test("Export and import")
     func exportImport() throws {
         let store1 = makeStore()
@@ -267,5 +308,117 @@ struct ShortcutStoreTests {
         let store = makeStore()
         store.remove(id: UUID())  // should not crash
         #expect(store.shortcuts.isEmpty)
+    }
+
+    @Test("Managed scripts are persisted as readable executable files")
+    func persistsManagedScriptFile() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ShortcutStore(directory: directory)
+        let shortcut = makeScriptShortcut(name: "Readable Script")
+
+        store.add(shortcut)
+
+        let url = store.scriptsDirectoryURL.appendingPathComponent("Readable Script")
+        #expect(try String(contentsOf: url, encoding: .utf8) == "#!/bin/zsh\necho initial")
+        #expect(FileManager.default.isExecutableFile(atPath: url.path))
+    }
+
+    @Test("Renaming to an occupied script name reports a conflict")
+    func renameCollision() throws {
+        let store = makeStore()
+        store.add(makeScriptShortcut(name: "First"))
+        store.add(makeScriptShortcut(name: "Second"))
+        var second = try #require(store.shortcuts.first { $0.name == "Second" })
+        second.name = "First"
+
+        #expect(throws: ScriptStoreError.nameExists("First")) {
+            try store.updateScript(second)
+        }
+        #expect(store.shortcuts.map(\.name).contains("Second"))
+    }
+
+    @Test("Reconciliation adopts external adds, edits, and deletes")
+    func reconcilesExternalChanges() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ShortcutStore(directory: directory)
+        store.add(makeScriptShortcut(name: "Existing"))
+
+        let existingURL = store.scriptsDirectoryURL.appendingPathComponent("Existing")
+        let addedURL = store.scriptsDirectoryURL.appendingPathComponent("Added.py")
+        try Data("#!/bin/sh\necho edited".utf8).write(to: existingURL, options: .atomic)
+        try Data("#!/usr/bin/env python3\nprint('added')".utf8).write(to: addedURL)
+
+        store.reconcileScriptDirectory()
+
+        #expect(
+            store.shortcuts.first { $0.name == "Existing" }?.action
+                == .runScript(script: "#!/bin/sh\necho edited")
+        )
+        #expect(store.shortcuts.contains { $0.name == "Added.py" })
+
+        try FileManager.default.removeItem(at: existingURL)
+        store.reconcileScriptDirectory()
+
+        #expect(!store.shortcuts.contains { $0.name == "Existing" })
+        #expect(store.deletions.count == 1)
+    }
+
+    @Test("Reconciliation ignores scripts in subdirectories")
+    func ignoresSubdirectories() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ShortcutStore(directory: directory)
+        let nestedDirectory = store.scriptsDirectoryURL.appendingPathComponent("Nested")
+        try FileManager.default.createDirectory(at: nestedDirectory, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho nested".utf8).write(
+            to: nestedDirectory.appendingPathComponent("Nested Script")
+        )
+
+        store.reconcileScriptDirectory()
+
+        #expect(store.shortcuts.isEmpty)
+    }
+
+    @Test("Directory monitor adopts top-level external changes automatically")
+    func watchesExternalChanges() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TapTickTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ShortcutStore(directory: directory)
+        store.add(makeScriptShortcut(name: "Watched"))
+        let url = store.scriptsDirectoryURL.appendingPathComponent("Watched")
+        let expectedSource = "#!/bin/sh\necho watched"
+
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: 0)
+        try handle.write(contentsOf: Data(expectedSource.utf8))
+        try handle.close()
+
+        for _ in 0..<150 {
+            if store.shortcuts.first?.action == .runScript(script: expectedSource) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(store.shortcuts.first?.action == .runScript(script: expectedSource))
+
+        let addedURL = store.scriptsDirectoryURL.appendingPathComponent("Externally Added")
+        try Data("#!/bin/sh\necho added".utf8).write(to: addedURL)
+        for _ in 0..<150 {
+            if store.shortcuts.contains(where: { $0.name == "Externally Added" }) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(store.shortcuts.contains { $0.name == "Externally Added" })
+
+        try FileManager.default.removeItem(at: url)
+        for _ in 0..<150 {
+            if !store.shortcuts.contains(where: { $0.name == "Watched" }) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(!store.shortcuts.contains { $0.name == "Watched" })
     }
 }

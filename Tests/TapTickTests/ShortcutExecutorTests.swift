@@ -119,7 +119,7 @@ struct ShortcutExecutorTests {
         )
         let presenter = TestScriptPresentationRecorder()
         let context = makeContext(
-            action: .runScript(script: "printf trigger", shell: .sh),
+            action: .runScript(script: "#!/bin/sh\nprintf trigger"),
             scriptRunner: ScriptRunner { _ in result },
             presentOutput: { log in presenter.logs.append(log) }
         )

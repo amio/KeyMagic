@@ -115,6 +115,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let hotkeyService, let store else { return }
             hotkeyService.restart(store: store)
         }
+        appState.store.onExternalScriptsChanged = {
+            [weak hotkeyService = appState.hotkeyService, weak store = appState.store] in
+            guard let hotkeyService, let store else { return }
+            hotkeyService.restart(store: store)
+        }
         appState.utilities.bootstrap()
 
         appState.hotkeyService.onShortcutTriggered = {

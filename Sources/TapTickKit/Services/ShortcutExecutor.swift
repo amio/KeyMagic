@@ -60,7 +60,7 @@ public final class ShortcutExecutor {
             toggleOrLaunchApp(bundleIdentifier: bundleIdentifier)
             return nil
         case .runScript, .runScriptFile:
-            guard let command = shortcut.action.scriptCommand else { return nil }
+            guard let command = store.scriptCommand(for: shortcutID) else { return nil }
             return runScript(command: command, shortcutID: shortcutID)
         }
     }

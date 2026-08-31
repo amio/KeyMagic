@@ -30,7 +30,7 @@ struct ScriptTextEditorTests {
     func loadingDraftIsSaved() {
         let shortcut = Shortcut(
             name: "Example",
-            action: .runScript(script: "echo initial", shell: .zsh)
+            action: .runScript(script: "#!/bin/zsh\necho initial")
         )
         var state = ScriptEditorDraftState()
 
@@ -53,11 +53,11 @@ struct ScriptTextEditorTests {
     func switchingDraftRetargetsEditorState() throws {
         let first = Shortcut(
             name: "First",
-            action: .runScript(script: "echo first", shell: .zsh)
+            action: .runScript(script: "#!/bin/zsh\necho first")
         )
         let second = Shortcut(
             name: "Second",
-            action: .runScript(script: "echo second", shell: .bash)
+            action: .runScript(script: "#!/bin/bash\necho second")
         )
         var state = ScriptEditorDraftState(shortcut: first)
 
@@ -70,8 +70,7 @@ struct ScriptTextEditorTests {
 
         #expect(state.loadedShortcutID == second.id)
         #expect(state.draft.name == "Second")
-        #expect(state.draft.scriptContent == "echo second")
-        #expect(state.draft.shellType == .bash)
+        #expect(state.draft.scriptContent == "#!/bin/bash\necho second")
         #expect(!state.hasUnsavedChanges)
     }
 
@@ -84,7 +83,7 @@ struct ScriptTextEditorTests {
                 get: { text.value },
                 set: { text.value = $0 }
             ),
-            shell: .zsh,
+            shellDialect: .zsh,
             controller: controller
         )
         let coordinator = editor.makeCoordinator()
@@ -110,6 +109,30 @@ struct ScriptTextEditorTests {
         #expect(text.value == "ab")
     }
 
+    @Test("Unrelated store updates preserve a dirty editor draft")
+    func unrelatedStoreUpdatePreservesDraft() throws {
+        let shortcut = Shortcut(
+            name: "Example",
+            action: .runScript(script: "#!/bin/zsh\necho saved")
+        )
+        var state = ScriptEditorDraftState(shortcut: shortcut)
+        state.draft.scriptContent = "#!/bin/zsh\necho draft"
+        var triggered = shortcut
+        triggered.keyCombo = KeyCombo(keyCode: 12, modifiers: .command)
+        triggered.lastTriggeredAt = Date()
+
+        #expect(!state.hasPersistedEditorChange(in: triggered))
+        state.updateLoadedMetadata(triggered)
+
+        let update = try #require(state.shortcutWithCurrentDraft())
+        #expect(update.keyCombo == triggered.keyCombo)
+        #expect(update.action == .runScript(script: "#!/bin/zsh\necho draft"))
+
+        var externallyEdited = triggered
+        externallyEdited.action = .runScript(script: "#!/bin/sh\necho external")
+        #expect(state.hasPersistedEditorChange(in: externallyEdited))
+    }
+
     @Test("Editor command replacement is a single native undoable change")
     func editorCommandReplacement() {
         let text = TextBox("old")
@@ -119,7 +142,7 @@ struct ScriptTextEditorTests {
                 get: { text.value },
                 set: { text.value = $0 }
             ),
-            shell: .zsh,
+            shellDialect: .zsh,
             controller: controller
         )
         let coordinator = editor.makeCoordinator()

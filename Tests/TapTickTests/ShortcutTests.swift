@@ -22,7 +22,7 @@ struct ShortcutTests {
         let id = UUID()
         let date = Date(timeIntervalSince1970: 1000)
         let combo = KeyCombo(keyCode: 0, modifiers: .command)
-        let action = ShortcutAction.runScript(script: "echo hi", shell: .zsh)
+        let action = ShortcutAction.runScript(script: "#!/bin/zsh\necho hi")
 
         let shortcut = Shortcut(
             id: id,

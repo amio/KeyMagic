@@ -17,9 +17,9 @@ struct ShortcutActionTests {
     @Test("Run script display description truncates")
     func runScriptDescriptionTruncates() {
         let longScript = String(repeating: "echo hello; ", count: 10)
-        let action = ShortcutAction.runScript(script: longScript, shell: .bash)
+        let action = ShortcutAction.runScript(script: "#!/bin/bash\n\n\(longScript)")
         #expect(action.displayDescription.contains("..."))
-        #expect(action.displayDescription.hasPrefix("bash:"))
+        #expect(action.displayDescription.hasPrefix("Script:"))
     }
 
     @Test("Run script file display description shows filename")
@@ -28,13 +28,13 @@ struct ShortcutActionTests {
             path: "/Users/test/scripts/hello.sh",
             shell: .zsh
         )
-        #expect(action.displayDescription == "zsh: hello.sh")
+        #expect(action.displayDescription == "Legacy script: hello.sh")
     }
 
     @Test("System images are non-empty")
     func systemImages() {
         let app = ShortcutAction.launchApp(bundleIdentifier: "com.test", appName: "Test")
-        let script = ShortcutAction.runScript(script: "echo hi", shell: .bash)
+        let script = ShortcutAction.runScript(script: "#!/bin/bash\necho hi")
         let file = ShortcutAction.runScriptFile(path: "/test.sh", shell: .sh)
 
         #expect(!app.systemImage.isEmpty)
@@ -46,7 +46,7 @@ struct ShortcutActionTests {
     func codableRoundTrip() throws {
         let actions: [ShortcutAction] = [
             .launchApp(bundleIdentifier: "com.apple.safari", appName: "Safari"),
-            .runScript(script: "echo hello", shell: .zsh),
+            .runScript(script: "#!/bin/zsh\necho hello"),
             .runScriptFile(path: "/test.sh", shell: .bash),
         ]
 
@@ -57,18 +57,10 @@ struct ShortcutActionTests {
         }
     }
 
-    @Test("ShellType display names")
-    func shellTypeDisplayNames() {
-        #expect(ShortcutAction.ShellType.bash.displayName == "bash")
-        #expect(ShortcutAction.ShellType.zsh.displayName == "zsh")
-        #expect(ShortcutAction.ShellType.sh.displayName == "sh")
-        #expect(ShortcutAction.ShellType.fish.displayName == "fish")
-    }
-
-    @Test("ShellType raw values are valid paths")
-    func shellTypeRawValues() {
-        for shell in ShortcutAction.ShellType.allCases {
-            #expect(shell.rawValue.hasPrefix("/"))
-        }
+    @Test("Legacy inline action gains its selected shell as a shebang")
+    func legacyInlineMigration() throws {
+        let data = Data(#"{"runScript":{"script":"echo hi","shell":"/bin/bash"}}"#.utf8)
+        let action = try JSONDecoder().decode(ShortcutAction.self, from: data)
+        #expect(action == .runScript(script: "#!/bin/bash\n\necho hi"))
     }
 }

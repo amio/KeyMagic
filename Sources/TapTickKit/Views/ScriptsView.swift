@@ -8,6 +8,28 @@ private struct ScriptLogsPresentation: Identifiable {
     var id: UUID { shortcutID }
 }
 
+private struct OpenScriptsDirectoryButton: View {
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "folder")
+                .frame(width: 26, height: 26)
+                .background {
+                    Circle()
+                        .fill(Color.primary.opacity(isHovered ? 0.09 : 0))
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help("Open Scripts Folder")
+        .accessibilityLabel("Open Scripts Folder")
+    }
+}
+
 /// Owns the Scripts directory column and its list-specific interactions.
 struct ScriptsDirectoryView: View {
     @Environment(ShortcutStore.self) private var store
@@ -17,6 +39,7 @@ struct ScriptsDirectoryView: View {
     @Binding var nameSelectionRequestID: UUID?
 
     @State private var recordingShortcutID: UUID?
+    @State private var directoryError: String?
     @FocusState private var isScriptListFocused: Bool
 
     /// Only script-type shortcuts (runScript / runScriptFile).
@@ -42,8 +65,22 @@ struct ScriptsDirectoryView: View {
 
     var body: some View {
         scriptListPanel
+            .alert(
+                "Scripts Error",
+                isPresented: Binding(
+                    get: { directoryError != nil },
+                    set: { if !$0 { directoryError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(directoryError ?? "")
+            }
             .onChange(of: scriptShortcutIDs, initial: true) { _, shortcutIDs in
                 ensureValidSelection(in: shortcutIDs)
+            }
+            .onChange(of: store.scriptDirectoryIssue, initial: true) { _, issue in
+                if let issue { directoryError = issue }
             }
             .onChange(of: selection) { _, shortcutID in
                 if let requestID = nameSelectionRequestID {
@@ -54,7 +91,12 @@ struct ScriptsDirectoryView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    SettingsToolbarTitle(title: "Scripts")
+                    HStack(spacing: 4) {
+                        SettingsToolbarTitle(title: "Scripts")
+                        OpenScriptsDirectoryButton {
+                            openScriptsDirectory()
+                        }
+                    }
                 }
                 .sharedBackgroundVisibility(.hidden)
 
@@ -164,12 +206,26 @@ struct ScriptsDirectoryView: View {
     }
 
     private func addNewScript() {
-        let shortcutID = createNewScript(
-            in: store,
-            hotkeyService: hotkeyService
-        )
-        nameSelectionRequestID = shortcutID
-        selection = shortcutID
+        do {
+            let shortcutID = try store.createScript()
+            hotkeyService.restart(store: store)
+            nameSelectionRequestID = shortcutID
+            selection = shortcutID
+        } catch {
+            directoryError = error.localizedDescription
+        }
+    }
+
+    private func openScriptsDirectory() {
+        do {
+            let directoryURL = try store.prepareScriptsDirectory()
+            guard NSWorkspace.shared.open(directoryURL) else {
+                directoryError = "Finder could not open the Scripts folder."
+                return
+            }
+        } catch {
+            directoryError = error.localizedDescription
+        }
     }
 
     private func bindHotkey(_ combo: KeyCombo, to shortcut: Shortcut) {
@@ -187,26 +243,11 @@ struct ScriptsDirectoryView: View {
     }
 }
 
-@MainActor
-private func createNewScript(
-    in store: ShortcutStore,
-    hotkeyService: HotkeyService
-) -> UUID {
-    let newShortcut = Shortcut(
-        name: "Untitled Script",
-        keyCombo: nil,
-        action: .runScript(script: "", shell: .zsh),
-        isEnabled: true
-    )
-    store.add(newShortcut)
-    hotkeyService.restart(store: store)
-    return newShortcut.id
-}
-
 private enum ScriptEditorSaveStatus: Equatable {
     case saved
     case unsaved
     case nameRequired
+    case error(String)
 }
 
 /// Owns the selected script's editor lifecycle and detail-only presentations.
@@ -284,7 +325,7 @@ struct ScriptDetailView: View {
                 hasLogs: !logStore.recentLogs(for: shortcut.id).isEmpty,
                 nameSelectionRequestID: nameSelectionRequestID,
                 onSave: { updated in
-                    store.updateScript(updated)
+                    try store.updateScript(updated)
                 },
                 onRun: {
                     run(shortcutID: shortcut.id)
@@ -427,7 +468,6 @@ private struct ScriptRow: View {
 struct ScriptEditorDraft: Equatable {
     var name = ""
     var scriptContent = ""
-    var shellType: ShortcutAction.ShellType = .zsh
 
     init() {}
 
@@ -435,12 +475,10 @@ struct ScriptEditorDraft: Equatable {
         name = shortcut.name
 
         switch shortcut.action {
-        case .runScript(let script, let shell):
+        case .runScript(let script):
             scriptContent = script
-            shellType = shell
-        case .runScriptFile(let path, let shell):
-            scriptContent = "# Script file: \(path)\n"
-            shellType = shell
+        case .runScriptFile(let path, _):
+            scriptContent = "# Legacy script file unavailable: \(path)\n"
         case .launchApp:
             break
         }
@@ -472,6 +510,11 @@ struct ScriptEditorDraftState {
         loadedShortcut?.id
     }
 
+    func hasPersistedEditorChange(in shortcut: Shortcut) -> Bool {
+        guard let savedDraft else { return true }
+        return ScriptEditorDraft(shortcut: shortcut) != savedDraft
+    }
+
     mutating func load(_ shortcut: Shortcut) {
         let loadedDraft = ScriptEditorDraft(shortcut: shortcut)
         loadedShortcut = shortcut
@@ -479,10 +522,15 @@ struct ScriptEditorDraftState {
         savedDraft = loadedDraft
     }
 
+    mutating func updateLoadedMetadata(_ shortcut: Shortcut) {
+        guard shortcut.id == loadedShortcut?.id else { return }
+        loadedShortcut = shortcut
+    }
+
     func shortcutWithCurrentDraft() -> Shortcut? {
         guard var updated = loadedShortcut else { return nil }
         updated.name = draft.name
-        updated.action = .runScript(script: draft.scriptContent, shell: draft.shellType)
+        updated.action = .runScript(script: draft.scriptContent)
         return updated
     }
 
@@ -532,31 +580,23 @@ private struct ScriptDetailHeader: View {
     }
 
     private var nameField: some View {
-        Text(name.isEmpty ? " " : name)
+        TextField("Script Name", text: $name)
+            .textFieldStyle(.plain)
             .font(.headline)
-            .lineLimit(1)
+            .foregroundStyle(.primary)
+            .focused($isNameFocused)
             .fixedSize(horizontal: true, vertical: false)
-            .hidden()
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .frame(minWidth: 50, alignment: .leading)
-            .overlay(alignment: .leading) {
-                TextField("Script Name", text: $name)
-                    .textFieldStyle(.plain)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .focused($isNameFocused)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .onSubmit { onSubmit() }
-                    .accessibilityLabel("Script Name")
-            }
             .overlay {
                 RoundedRectangle(cornerRadius: 5)
                     .strokeBorder(nameBorderColor, lineWidth: 1)
                     .opacity(isNameHovered || isNameFocused ? 1 : 0)
             }
             .onHover { isNameHovered = $0 }
+            .onSubmit { onSubmit() }
+            .accessibilityLabel("Script Name")
             .task(
                 id: NameSelectionTaskID(
                     shortcutID: shortcutID,
@@ -583,10 +623,14 @@ private struct ScriptDetailHeader: View {
             case .nameRequired:
                 Label("Name required", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
+            case .error(let message):
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
             }
         }
         .font(.caption)
         .labelStyle(CompactStatusLabelStyle())
+        .lineLimit(1)
     }
 
     @MainActor
@@ -607,7 +651,7 @@ struct ScriptEditView: View {
     let isRunning: Bool
     let hasLogs: Bool
     let nameSelectionRequestID: UUID?
-    let onSave: (Shortcut) -> Void
+    let onSave: (Shortcut) throws -> Shortcut
     let onRun: () -> Void
     let onShowLog: () -> Void
     let onDelete: () -> Void
@@ -616,6 +660,7 @@ struct ScriptEditView: View {
     @State private var draftState: ScriptEditorDraftState
     @State private var autosaveTask: Task<Void, Never>?
     @State private var editorController = ScriptTextEditorController()
+    @State private var saveError: String?
 
     // AI generation state
     @State private var isGenerating = false
@@ -628,7 +673,7 @@ struct ScriptEditView: View {
         isRunning: Bool,
         hasLogs: Bool,
         nameSelectionRequestID: UUID?,
-        onSave: @escaping (Shortcut) -> Void,
+        onSave: @escaping (Shortcut) throws -> Shortcut,
         onRun: @escaping () -> Void,
         onShowLog: @escaping () -> Void,
         onDelete: @escaping () -> Void,
@@ -651,8 +696,29 @@ struct ScriptEditView: View {
     }
 
     private var currentSaveStatus: ScriptEditorSaveStatus {
+        if let saveError { return .error(saveError) }
         guard draftState.hasUnsavedChanges else { return .saved }
         return isValid ? .unsaved : .nameRequired
+    }
+
+    private var shebangValidation: ScriptShebang.Validation {
+        ScriptShebang.inspect(draftState.draft.scriptContent)
+    }
+
+    private var isAddingShebang: Bool {
+        draftState.draft.scriptContent.first != "#"
+    }
+
+    private var shebangRepairLabel: Text {
+        isAddingShebang ? Text("Add Shebang") : Text("Fix Shebang")
+    }
+
+    private var shebangRepairHelp: Text {
+        if isAddingShebang {
+            Text("Add shebang: \(shebangValidation.message)")
+        } else {
+            Text("Fix shebang: \(shebangValidation.message)")
+        }
     }
 
     /// Whether the on-device Foundation Models framework is usable on this system.
@@ -683,9 +749,6 @@ struct ScriptEditView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            shellPicker
-                .frame(width: 240, alignment: .leading)
-
             scriptEditor
 
             // Inline error banner for AI generation failures
@@ -726,10 +789,16 @@ struct ScriptEditView: View {
             flushAutosave()
             cancelGeneration()
         }
-        .onChange(of: shortcut.id) {
-            switchTo(shortcut)
+        .onChange(of: shortcut) { _, updatedShortcut in
+            receiveStoreUpdate(updatedShortcut)
         }
-        .onChange(of: draftState.draft) { scheduleAutosave() }
+        .onChange(of: draftState.draft) {
+            saveError = nil
+            scheduleAutosave()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+            flushAutosave()
+        }
     }
 
     // MARK: - Header
@@ -756,35 +825,12 @@ struct ScriptEditView: View {
 
     // MARK: - Form Fields
 
-    private var shellPicker: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Shell")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Picker("", selection: $draftState.draft.shellType) {
-                ForEach(ShortcutAction.ShellType.allCases, id: \.self) { shell in
-                    Text(shell.displayName).tag(shell)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-        }
-    }
-
     private var scriptEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Keep editing controls on the left and execution actions on the right.
-            HStack(alignment: .center) {
-                Text("Script")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                undoRedoButtons
-                Spacer()
-                editorActionButtons
-            }
+            editorToolbar
             ScriptTextEditor(
                 text: $draftState.draft.scriptContent,
-                shell: draftState.draft.shellType,
+                shellDialect: shebangValidation.shebang?.dialect,
                 controller: editorController
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -795,6 +841,16 @@ struct ScriptEditView: View {
             )
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private var editorToolbar: some View {
+        HStack(spacing: 6) {
+            generateButton
+            undoRedoButtons
+            Spacer()
+            logsButton
+            editorExecutionControl
+        }
     }
 
     private var undoRedoButtons: some View {
@@ -819,51 +875,88 @@ struct ScriptEditView: View {
         .controlSize(.small)
     }
 
-    /// Generate and Run buttons sitting above the editor's top-right corner.
-    private var editorActionButtons: some View {
-        HStack(spacing: 6) {
-            // AI Generate button
-            Button {
-                handleGenerate()
-            } label: {
-                ZStack {
-                    Label("Generate", systemImage: "sparkles")
-                        .opacity(isGenerating ? 0 : 1)
-                    ProgressView()
-                        .controlSize(.small)
-                        .opacity(isGenerating ? 1 : 0)
-                }
+    private var generateButton: some View {
+        Button {
+            handleGenerate()
+        } label: {
+            ZStack {
+                Label("Generate", systemImage: "sparkles")
+                    .opacity(isGenerating ? 0 : 1)
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(isGenerating ? 1 : 0)
             }
-            .disabled(!isAIAvailable || isGenerating || isRunning)
-            .controlSize(.small)
-            .help(aiUnavailableReason ?? "Generate script from comments using Apple Intelligence")
+        }
+        .disabled(!isAIAvailable || !shebangValidation.isValid || isGenerating || isRunning)
+        .controlSize(.small)
+        .help(aiUnavailableReason ?? "Generate script from comments using Apple Intelligence")
+    }
 
-            // Run button — dispatches the stored shortcut through the normal trigger path
+    private var logsButton: some View {
+        Button {
+            onShowLog()
+        } label: {
+            Label("Logs", systemImage: "doc.text.magnifyingglass")
+        }
+        .disabled(!hasLogs)
+        .controlSize(.small)
+        .help("Review the \(ScriptLogStore.recentLogLimit) most recent script executions")
+    }
+
+    /// Invalid shebangs replace Run in the same stable control slot.
+    @ViewBuilder
+    private var editorExecutionControl: some View {
+        if shebangValidation.isValid {
+            // Dispatches the stored shortcut through the normal trigger path.
             Button {
                 run()
             } label: {
                 ZStack {
-                    Label("Run", systemImage: "play.fill")
+                    Label("Run Script", systemImage: "play.fill")
                         .opacity(isRunning ? 0 : 1)
                     ProgressView()
                         .controlSize(.small)
                         .opacity(isRunning ? 1 : 0)
                 }
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minHeight: 16)
             }
-            .disabled(draftState.draft.scriptContent.isEmpty || isRunning)
+            .disabled(!isValid || saveError != nil || isRunning)
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .help("Test run this script")
+            .help("Run this script")
+        } else {
+            let presets = ScriptShebangPreset.available
 
-            // Logs — reviews the most recent script executions
-            Button {
-                onShowLog()
+            Menu {
+                Section {
+                    ForEach(presets) { preset in
+                        Button {
+                            applyShebang(preset)
+                        } label: {
+                            Text(preset.line)
+                        }
+                        .badge(preset.label)
+                        .accessibilityLabel("\(preset.line), \(preset.label)")
+                    }
+                } header: {
+                    Text("Choose a shebang for this script.")
+                }
             } label: {
-                Label("Logs", systemImage: "doc.text.magnifyingglass")
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    shebangRepairLabel
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minHeight: 16)
             }
-            .disabled(!hasLogs)
+            .menuStyle(.button)
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
             .controlSize(.small)
-            .help("Review the \(ScriptLogStore.recentLogLimit) most recent script executions")
+            .help(shebangRepairHelp)
+            .accessibilityLabel(shebangRepairLabel)
+            .accessibilityHint(shebangValidation.message)
         }
     }
 
@@ -889,42 +982,49 @@ struct ScriptEditView: View {
     private func save() {
         autosaveTask?.cancel()
         guard let updated = draftState.shortcutWithCurrentDraft() else { return }
-        draftState.markSaved()
-        onSave(updated)
+        do {
+            let persisted = try onSave(updated)
+            draftState.load(persisted)
+            saveError = nil
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 
     private func run() {
         flushAutosave()
+        guard !draftState.hasUnsavedChanges, saveError == nil else { return }
         onRun()
     }
 
-    private func switchTo(_ shortcut: Shortcut) {
-        guard draftState.loadedShortcutID != shortcut.id else { return }
-        flushAutosave()
+    private func receiveStoreUpdate(_ shortcut: Shortcut) {
+        if draftState.loadedShortcutID != shortcut.id {
+            flushAutosave()
+        } else if !draftState.hasPersistedEditorChange(in: shortcut) {
+            draftState.updateLoadedMetadata(shortcut)
+            return
+        }
+
         cancelGeneration()
         generationError = nil
+        saveError = nil
         autosaveTask?.cancel()
         draftState.load(shortcut)
         editorController.reset()
     }
 
+    private func applyShebang(_ preset: ScriptShebangPreset) {
+        let replacement = ScriptShebang.replacingShebang(
+            in: draftState.draft.scriptContent,
+            with: preset.line
+        )
+        editorController.replaceAll(with: replacement, actionName: "Set Shebang")
+    }
+
     // MARK: - AI Generation
 
-    /// Inserts a starter comment template when the editor is empty,
-    /// otherwise sends the current content to the on-device model for code generation.
     private func handleGenerate() {
         generationError = nil
-
-        // Empty editor: insert a starter template so the user knows how to use the feature.
-        let trimmed = draftState.draft.scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            editorController.replaceAll(
-                with: scriptTemplateForShell(draftState.draft.shellType),
-                actionName: "Insert Template"
-            )
-            return
-        }
-
         generateWithModel()
     }
 
@@ -932,7 +1032,7 @@ struct ScriptEditView: View {
     private func generateWithModel() {
         generationTask?.cancel()
 
-        let shell = draftState.draft.shellType
+        guard let shebang = shebangValidation.shebang else { return }
         let input = draftState.draft.scriptContent
         let requestID = UUID()
         generationRequestID = requestID
@@ -955,14 +1055,14 @@ struct ScriptEditView: View {
                         describing what they want the script to do. Generate ONLY the \
                         script code. Do NOT wrap output in markdown code fences. Preserve \
                         the user's original comments in-place and add implementation code \
-                        right after each relevant comment block. Use \(shell.displayName) \
+                        right after each relevant comment block. Use \(shebang.interpreterName) \
                         syntax. Output must be valid, runnable shell code.
                         """
                 )
 
                 let prompt = """
                     Based on the following commented instructions, generate a complete \
-                    \(shell.displayName) script:
+                    \(shebang.interpreterName) script:
 
                     \(input)
                     """
@@ -989,22 +1089,6 @@ struct ScriptEditView: View {
         isGenerating = false
     }
 
-    /// Returns a starter comment template that teaches the user how to use AI generation.
-    private func scriptTemplateForShell(_ shell: ShortcutAction.ShellType) -> String {
-        let shebang = "#!\(shell.rawValue)"
-        return """
-            \(shebang)
-
-            # Describe what you want this script to do.
-            # Write your instructions as comments, then click "Generate" again
-            # to let Apple Intelligence generate the code for you.
-            #
-            # Example:
-            #   List all .log files in /var/log that are older than 7 days,
-            #   then print their total size in human-readable format.
-
-            """
-    }
 }
 
 // MARK: - Script Logs View

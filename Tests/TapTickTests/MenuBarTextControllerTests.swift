@@ -207,8 +207,8 @@ struct MenuBarTextControllerTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let store = ShortcutStore(directory: directory)
-        let top = Shortcut(name: "Top", action: .runScript(script: "top", shell: .zsh))
-        let bottom = Shortcut(name: "Bottom", action: .runScript(script: "bottom", shell: .zsh))
+        let top = Shortcut(name: "Top", action: .runScript(script: "top"))
+        let bottom = Shortcut(name: "Bottom", action: .runScript(script: "bottom"))
         store.add(top)
         store.add(bottom)
 
@@ -236,7 +236,10 @@ struct MenuBarTextControllerTests {
         try await waitUntil { await runner.runCount == 2 }
 
         let actions = await runner.actions
-        #expect(Set(actions) == Set([top.action.scriptCommand, bottom.action.scriptCommand].compactMap { $0 }))
+        #expect(
+            Set(actions)
+                == Set([store.scriptCommand(for: top.id), store.scriptCommand(for: bottom.id)].compactMap { $0 })
+        )
     }
 
     @Test("Publishes completed line results together on the shared cadence")
@@ -246,8 +249,8 @@ struct MenuBarTextControllerTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let store = ShortcutStore(directory: directory)
-        let top = Shortcut(name: "Top", action: .runScript(script: "top", shell: .zsh))
-        let bottom = Shortcut(name: "Bottom", action: .runScript(script: "bottom", shell: .zsh))
+        let top = Shortcut(name: "Top", action: .runScript(script: "top"))
+        let bottom = Shortcut(name: "Bottom", action: .runScript(script: "bottom"))
         store.add(top)
         store.add(bottom)
 
@@ -282,8 +285,8 @@ struct MenuBarTextControllerTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let store = ShortcutStore(directory: directory)
-        let first = Shortcut(name: "First", action: .runScript(script: "first", shell: .zsh))
-        let second = Shortcut(name: "Second", action: .runScript(script: "second", shell: .zsh))
+        let first = Shortcut(name: "First", action: .runScript(script: "first"))
+        let second = Shortcut(name: "Second", action: .runScript(script: "second"))
         store.add(first)
         store.add(second)
 
@@ -315,7 +318,10 @@ struct MenuBarTextControllerTests {
         try await waitUntil { await runner.runCount == 2 }
 
         let snapshot = await runner.snapshot()
-        #expect(snapshot.actions == [first.action.scriptCommand, second.action.scriptCommand].compactMap { $0 })
+        #expect(
+            snapshot.actions
+                == [store.scriptCommand(for: first.id), store.scriptCommand(for: second.id)].compactMap { $0 }
+        )
         #expect(snapshot.maximumConcurrentRuns == 1)
         try await waitUntil { controller.renderedSlots.first?.contents.last?.text == "second" }
     }
@@ -371,12 +377,7 @@ private actor ControlledScriptRunner {
     }
 
     private func output(for command: ScriptCommand) -> String {
-        switch command {
-        case .inline(let script, _):
-            script
-        case .file(let path, _):
-            path
-        }
+        (try? String(contentsOf: command.fileURL, encoding: .utf8)) ?? ""
     }
 }
 

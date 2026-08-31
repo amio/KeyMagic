@@ -17,13 +17,14 @@ struct ShellSyntaxToken: Equatable {
 /// Produces display-only shell highlighting without changing the editor's plain-text storage.
 struct ShellSyntaxHighlighter {
     @MainActor
-    static func apply(to textView: NSTextView, shell: ShortcutAction.ShellType) {
+    static func apply(to textView: NSTextView, dialect: ShellDialect?) {
         guard let layoutManager = textView.layoutManager else { return }
 
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: fullRange)
 
-        for token in tokens(in: textView.string, shell: shell) {
+        guard let dialect else { return }
+        for token in tokens(in: textView.string, dialect: dialect) {
             layoutManager.addTemporaryAttribute(
                 .foregroundColor,
                 value: color(for: token.kind),
@@ -32,9 +33,9 @@ struct ShellSyntaxHighlighter {
         }
     }
 
-    static func tokens(in text: String, shell: ShortcutAction.ShellType) -> [ShellSyntaxToken] {
+    static func tokens(in text: String, dialect: ShellDialect) -> [ShellSyntaxToken] {
         let source = text as NSString
-        let reservedWords = keywords(for: shell)
+        let reservedWords = keywords(for: dialect)
         var tokens: [ShellSyntaxToken] = []
         var index = 0
 
@@ -128,8 +129,8 @@ struct ShellSyntaxHighlighter {
         }
     }
 
-    private static func keywords(for shell: ShortcutAction.ShellType) -> Set<String> {
-        switch shell {
+    private static func keywords(for dialect: ShellDialect) -> Set<String> {
+        switch dialect {
         case .sh:
             return posixKeywords
         case .bash:

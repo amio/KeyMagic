@@ -16,7 +16,7 @@ struct ShellSyntaxHighlighterTests {
                 effectiveRange: nil
             ) as? NSColor
 
-        ShellSyntaxHighlighter.apply(to: textView, shell: .zsh)
+        ShellSyntaxHighlighter.apply(to: textView, dialect: .zsh)
 
         let temporaryColor = textView.layoutManager?.temporaryAttribute(
             .foregroundColor,
@@ -42,7 +42,7 @@ struct ShellSyntaxHighlighterTests {
               exit 42
             fi
             """
-        let tokens = ShellSyntaxHighlighter.tokens(in: source, shell: .zsh)
+        let tokens = ShellSyntaxHighlighter.tokens(in: source, dialect: .zsh)
 
         #expect(fragments(of: .keyword, in: source, tokens: tokens) == ["if", "then", "fi"])
         #expect(fragments(of: .string, in: source, tokens: tokens) == ["\"$USER\"", "\"root\""])
@@ -55,19 +55,19 @@ struct ShellSyntaxHighlighterTests {
     func shellSpecificKeywords() {
         let source = "function greet; set name $argv; end; foo-if if-foo"
 
-        let fishTokens = ShellSyntaxHighlighter.tokens(in: source, shell: .fish)
+        let fishTokens = ShellSyntaxHighlighter.tokens(in: source, dialect: .fish)
         #expect(
             fragments(of: .keyword, in: source, tokens: fishTokens) == ["function", "set", "end"]
         )
 
-        let bashTokens = ShellSyntaxHighlighter.tokens(in: source, shell: .bash)
+        let bashTokens = ShellSyntaxHighlighter.tokens(in: source, dialect: .bash)
         #expect(fragments(of: .keyword, in: source, tokens: bashTokens) == ["function"])
     }
 
     @Test("Keeps quoted and nested substitutions together")
     func quotedAndNestedTokens() {
         let source = "echo 'literal # text' $(printf \"%s\" ${value:-42})"
-        let tokens = ShellSyntaxHighlighter.tokens(in: source, shell: .bash)
+        let tokens = ShellSyntaxHighlighter.tokens(in: source, dialect: .bash)
 
         #expect(fragments(of: .string, in: source, tokens: tokens) == ["'literal # text'"])
         #expect(

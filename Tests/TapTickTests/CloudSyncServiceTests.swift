@@ -84,8 +84,8 @@ struct CloudSyncServiceTests {
     func mergeSortedByCreation() {
         let older = Date(timeIntervalSinceNow: -120)
         let newer = Date(timeIntervalSinceNow: -10)
-        let s1 = Shortcut(name: "First", action: .runScript(script: "echo 1", shell: .zsh), createdAt: older)
-        let s2 = Shortcut(name: "Second", action: .runScript(script: "echo 2", shell: .zsh), createdAt: newer)
+        let s1 = Shortcut(name: "First", action: .runScript(script: "#!/bin/zsh\necho 1"), createdAt: older)
+        let s2 = Shortcut(name: "Second", action: .runScript(script: "#!/bin/zsh\necho 2"), createdAt: newer)
         // Provide them in reverse order to prove sorting works.
         let merged = CloudSyncService.merge(
             local: makeState(shortcuts: [s2]),

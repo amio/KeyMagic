@@ -239,6 +239,11 @@ public final class CloudSyncService {
         }
 
         return ShortcutSyncState(
+            schemaVersion: max(
+                ShortcutSyncState.currentSchemaVersion,
+                local.schemaVersion,
+                remote.schemaVersion
+            ),
             shortcuts: shortcutsByID.values.sorted { $0.createdAt < $1.createdAt },
             deletions: deletionsByID.values.sorted {
                 if $0.deletedAt == $1.deletedAt {

@@ -73,7 +73,7 @@ final class ScriptTextEditorController {
 /// A plain-text AppKit editor so buttons and standard keyboard commands share one UndoManager.
 struct ScriptTextEditor: NSViewRepresentable {
     @Binding var text: String
-    let shell: ShortcutAction.ShellType
+    let shellDialect: ShellDialect?
     let controller: ScriptTextEditorController
 
     func makeCoordinator() -> Coordinator {
@@ -166,7 +166,8 @@ struct ScriptTextEditor: NSViewRepresentable {
         private weak var observedScrollView: NSScrollView?
         private var observedUndoManager: UndoManager?
         private var highlightedText: String?
-        private var highlightedShell: ShortcutAction.ShellType?
+        private var highlightedDialect: ShellDialect?
+        private var wasHighlighted = false
 
         init(parent: ScriptTextEditor) {
             self.parent = parent
@@ -246,10 +247,14 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         func highlightIfNeeded(_ textView: NSTextView) {
-            guard highlightedText != textView.string || highlightedShell != parent.shell else { return }
-            ShellSyntaxHighlighter.apply(to: textView, shell: parent.shell)
+            guard
+                highlightedText != textView.string || highlightedDialect != parent.shellDialect
+                    || !wasHighlighted
+            else { return }
+            ShellSyntaxHighlighter.apply(to: textView, dialect: parent.shellDialect)
             highlightedText = textView.string
-            highlightedShell = parent.shell
+            highlightedDialect = parent.shellDialect
+            wasHighlighted = true
         }
 
         func resizeDocumentView(_ textView: NSTextView) {
@@ -280,7 +285,8 @@ struct ScriptTextEditor: NSViewRepresentable {
             observedTextView = nil
             observedScrollView = nil
             highlightedText = nil
-            highlightedShell = nil
+            highlightedDialect = nil
+            wasHighlighted = false
         }
 
         func undoManager(for view: NSTextView) -> UndoManager? {

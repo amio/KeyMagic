@@ -1,22 +1,8 @@
 import Foundation
 
-/** A shell command accepted by the low-level script process boundary. */
-enum ScriptCommand: Equatable, Hashable, Sendable {
-    case inline(script: String, shell: ShortcutAction.ShellType)
-    case file(path: String, shell: ShortcutAction.ShellType)
-}
-
-extension ShortcutAction {
-    var scriptCommand: ScriptCommand? {
-        switch self {
-        case .runScript(let script, let shell):
-            .inline(script: script, shell: shell)
-        case .runScriptFile(let path, let shell):
-            .file(path: path, shell: shell)
-        case .launchApp:
-            nil
-        }
-    }
+/** A managed executable accepted by the low-level script process boundary. */
+struct ScriptCommand: Equatable, Hashable, Sendable {
+    let fileURL: URL
 }
 
 /** How a script invocation reached its terminal state. */
@@ -109,7 +95,7 @@ struct ScriptExecutionResult: Sendable {
     }
 }
 
-/** Stateless, injectable owner of shell process setup, output capture, and termination. */
+/** Stateless, injectable owner of script process setup, output capture, and termination. */
 struct ScriptRunner: Sendable {
     private let operation: @Sendable (ScriptCommand) async -> ScriptExecutionResult
 
@@ -134,26 +120,34 @@ struct ScriptRunner: Sendable {
         let process = Process()
         let pipe = Pipe()
 
-        switch command {
-        case .inline(let script, let shell):
-            process.executableURL = URL(fileURLWithPath: shell.rawValue)
-            process.arguments = ["-c", script]
-        case .file(let path, let shell):
-            let expandedPath = NSString(string: path).expandingTildeInPath
-            guard FileManager.default.fileExists(atPath: expandedPath) else {
-                let message = "Script file not found: \(expandedPath)"
-                return ScriptExecutionResult(
-                    output: message,
-                    termination: .failed(message),
-                    startedAt: startedAt,
-                    duration: elapsed()
-                )
-            }
-
-            process.executableURL = URL(fileURLWithPath: shell.rawValue)
-            process.arguments = [expandedPath]
+        guard FileManager.default.fileExists(atPath: command.fileURL.path) else {
+            return failure(
+                "Script file not found: \(command.fileURL.path)",
+                startedAt: startedAt,
+                duration: elapsed()
+            )
         }
 
+        guard let source = try? String(contentsOf: command.fileURL, encoding: .utf8) else {
+            return failure(
+                "Script is not valid UTF-8: \(command.fileURL.lastPathComponent)",
+                startedAt: startedAt,
+                duration: elapsed()
+            )
+        }
+
+        let validation = ScriptShebang.inspect(source)
+        guard validation.isValid else {
+            return failure(
+                validation.message,
+                startedAt: startedAt,
+                duration: elapsed()
+            )
+        }
+
+        process.executableURL = command.fileURL
+        process.currentDirectoryURL = command.fileURL.deletingLastPathComponent()
+        process.environment = ScriptExecutionEnvironment.environment
         process.standardOutput = pipe
         process.standardError = pipe
 
@@ -189,5 +183,18 @@ struct ScriptRunner: Sendable {
                 duration: elapsed()
             )
         }
+    }
+
+    private static func failure(
+        _ message: String,
+        startedAt: Date,
+        duration: TimeInterval
+    ) -> ScriptExecutionResult {
+        ScriptExecutionResult(
+            output: message,
+            termination: .failed(message),
+            startedAt: startedAt,
+            duration: duration
+        )
     }
 }

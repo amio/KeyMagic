@@ -244,7 +244,7 @@ public final class MenuBarTextController {
     }
 
     private func scriptCommand(for scriptID: UUID) -> ScriptCommand? {
-        store.shortcuts.first(where: { $0.id == scriptID })?.action.scriptCommand
+        store.scriptCommand(for: scriptID)
     }
 
     private func stage(
