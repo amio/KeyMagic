@@ -244,8 +244,7 @@ struct ScriptsDirectoryView: View {
 }
 
 private enum ScriptEditorSaveStatus: Equatable {
-    case saved
-    case unsaved
+    case saved(opacity: Double)
     case nameRequired
     case error(String)
 }
@@ -660,12 +659,16 @@ private struct ScriptDetailHeader: View {
     private var saveStatusLabel: some View {
         Group {
             switch saveStatus {
-            case .saved:
-                Label("Saved", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.secondary)
-            case .unsaved:
-                Label("Unsaved changes", systemImage: "clock")
-                    .foregroundStyle(.secondary)
+            case .saved(let opacity):
+                Label {
+                    Text("Saved")
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                .opacity(opacity)
+                .accessibilityHidden(opacity == 0)
             case .nameRequired:
                 Label("Name required", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
@@ -705,8 +708,10 @@ struct ScriptEditView: View {
 
     @State private var draftState: ScriptEditorDraftState
     @State private var autosaveTask: Task<Void, Never>?
+    @State private var savedStatusTask: Task<Void, Never>?
     @State private var editorController = ScriptTextEditorController()
     @State private var saveError: String?
+    @State private var savedStatusOpacity = 0.0
 
     // AI generation state
     @State private var isGenerating = false
@@ -743,8 +748,10 @@ struct ScriptEditView: View {
 
     private var currentSaveStatus: ScriptEditorSaveStatus {
         if let saveError { return .error(saveError) }
-        guard draftState.hasUnsavedChanges else { return .saved }
-        return isValid ? .unsaved : .nameRequired
+        if draftState.hasUnsavedChanges {
+            return isValid ? .saved(opacity: 0) : .nameRequired
+        }
+        return .saved(opacity: savedStatusOpacity)
     }
 
     private var shebangValidation: ScriptShebang.Validation {
@@ -833,6 +840,7 @@ struct ScriptEditView: View {
         }
         .onDisappear {
             flushAutosave()
+            savedStatusTask?.cancel()
             cancelGeneration()
         }
         .onChange(of: shortcut) { _, updatedShortcut in
@@ -1032,6 +1040,7 @@ struct ScriptEditView: View {
             let persisted = try onSave(updated)
             draftState.load(persisted)
             saveError = nil
+            showSavedStatus()
         } catch {
             saveError = error.localizedDescription
         }
@@ -1055,8 +1064,22 @@ struct ScriptEditView: View {
         generationError = nil
         saveError = nil
         autosaveTask?.cancel()
+        savedStatusTask?.cancel()
+        savedStatusOpacity = 0
         draftState.load(shortcut)
         editorController.reset()
+    }
+
+    private func showSavedStatus() {
+        savedStatusTask?.cancel()
+        savedStatusOpacity = 1
+        savedStatusTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                savedStatusOpacity = 0
+            }
+        }
     }
 
     private func applyShebang(_ preset: ScriptShebangPreset) {
