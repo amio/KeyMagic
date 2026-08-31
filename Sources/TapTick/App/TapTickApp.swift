@@ -69,7 +69,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsNotificationObserver: Any?
     private var toggleSettingsNotificationObserver: Any?
     private var settingsWindowCloseObserver: Any?
-    private var settingsWindowKeyObserver: Any?
     private var workspaceActivationObserver: Any?
     private var defaultsObserver: Any?
     private weak var observedSettingsWindow: NSWindow?
@@ -204,6 +203,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func registerSettingsWindow(_ window: NSWindow) {
         window.identifier = settingsWindowIdentifier
+        // This settings window is toggled frequently by a global hotkey. AppKit's automatic
+        // ordering animation exposes intermediate SwiftUI sidebar rendering, so present the
+        // fully resolved key-window appearance immediately.
+        window.animationBehavior = .none
         // Inner pages own independent scrollers, but the window owns one stable toolbar boundary.
         window.titlebarSeparatorStyle = .line
         AppState.shared.settingsWindow = window
@@ -213,10 +216,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let settingsWindowCloseObserver {
                 NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
             }
-            if let settingsWindowKeyObserver {
-                NotificationCenter.default.removeObserver(settingsWindowKeyObserver)
-            }
-
             observedSettingsWindow = window
             settingsWindowCloseObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification,
@@ -226,18 +225,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { @MainActor [weak self, weak window] in
                     guard let window else { return }
                     self?.settingsWindowWillClose(window)
-                }
-            }
-            settingsWindowKeyObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.didBecomeKeyNotification,
-                object: window,
-                queue: .main
-            ) { [weak self, weak window] _ in
-                Task { @MainActor [weak self, weak window] in
-                    guard let self, let window, self.observedSettingsWindow === window else {
-                        return
-                    }
-                    self.isSettingsPresentationRequested = false
                 }
             }
         }
@@ -278,12 +265,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Settings presentation only follows an explicit user action or a manual launch. The
         // cooperative API can leave LSUIElement windows behind the active app on macOS 26 and 27
         // (FB23508310), so keep this compatibility call at the app-presentation boundary.
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-
-        if window.isKeyWindow {
-            isSettingsPresentationRequested = false
+        guard NSApp.isActive else {
+            NSApp.activate(ignoringOtherApps: true)
+            return
         }
+
+        // Ordering the window while the app is inactive starts its enter animation with an
+        // inactive appearance, then restarts SwiftUI rendering when activation makes it key.
+        // Consume the request only after activation so the window enters exactly once.
+        isSettingsPresentationRequested = false
+        window.makeKeyAndOrderFront(nil)
     }
 
     private func toggleSettingsWindow() {
@@ -304,10 +295,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let settingsWindowCloseObserver {
             NotificationCenter.default.removeObserver(settingsWindowCloseObserver)
             self.settingsWindowCloseObserver = nil
-        }
-        if let settingsWindowKeyObserver {
-            NotificationCenter.default.removeObserver(settingsWindowKeyObserver)
-            self.settingsWindowKeyObserver = nil
         }
         AppState.shared.settingsWindow = nil
         observedSettingsWindow = nil
@@ -399,7 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let center = NotificationCenter.default
         [
             settingsNotificationObserver, toggleSettingsNotificationObserver,
-            settingsWindowCloseObserver, settingsWindowKeyObserver, defaultsObserver,
+            settingsWindowCloseObserver, defaultsObserver,
         ]
         .compactMap { $0 }
         .forEach(center.removeObserver)
@@ -411,7 +398,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsNotificationObserver = nil
         toggleSettingsNotificationObserver = nil
         settingsWindowCloseObserver = nil
-        settingsWindowKeyObserver = nil
         workspaceActivationObserver = nil
         defaultsObserver = nil
     }
