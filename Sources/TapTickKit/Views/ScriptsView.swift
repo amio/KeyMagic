@@ -543,6 +543,13 @@ struct ScriptEditorDraftState {
 }
 
 private struct ScriptDetailHeader: View {
+    private enum NameFieldLayout {
+        static let visualHorizontalInset: CGFloat = 8
+        static let editorTrailingReserve: CGFloat = 4
+        static let verticalInset: CGFloat = 4
+        static let minimumWidth: CGFloat = 50
+    }
+
     private struct CompactStatusLabelStyle: LabelStyle {
         func makeBody(configuration: Configuration) -> some View {
             HStack(spacing: 3) {
@@ -580,15 +587,44 @@ private struct ScriptDetailHeader: View {
     }
 
     private var nameField: some View {
-        TextField("Script Name", text: $name)
-            .textFieldStyle(.plain)
+        // TextField's ideal width undermeasures CJK text in a macOS toolbar. Let Text own
+        // the content measurement while the overlaid field retains native editing behavior.
+        Text(name.isEmpty ? "Script Name" : name)
             .font(.headline)
-            .foregroundStyle(.primary)
-            .focused($isNameFocused)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .frame(minWidth: 50, alignment: .leading)
+            .onGeometryChange(for: CGSize.self) { proxy in
+                proxy.size
+            } action: { size in
+                logNameFieldGeometry("text", size: size)
+            }
+            .hidden()
+            .accessibilityHidden(true)
+            .padding(.horizontal, NameFieldLayout.visualHorizontalInset)
+            .padding(.vertical, NameFieldLayout.verticalInset)
+            .frame(minWidth: NameFieldLayout.minimumWidth, alignment: .leading)
+            .overlay(alignment: .leading) {
+                TextField("Script Name", text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .focused($isNameFocused)
+                    .onGeometryChange(for: CGSize.self) { proxy in
+                        proxy.size
+                    } action: { size in
+                        logNameFieldGeometry("field", size: size)
+                    }
+                    .padding(.leading, NameFieldLayout.visualHorizontalInset)
+                    .padding(
+                        .trailing,
+                        NameFieldLayout.visualHorizontalInset
+                            - NameFieldLayout.editorTrailingReserve
+                    )
+            }
+            .onGeometryChange(for: CGSize.self) { proxy in
+                proxy.size
+            } action: { size in
+                logNameFieldGeometry("border", size: size)
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: 5)
                     .strokeBorder(nameBorderColor, lineWidth: 1)
@@ -605,6 +641,16 @@ private struct ScriptDetailHeader: View {
             ) {
                 await selectNameForNewScriptIfNeeded()
             }
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func logNameFieldGeometry(_ role: String, size: CGSize) {
+        guard ProcessInfo.processInfo.environment["TAPTICK_TITLE_LAYOUT_DIAGNOSTICS"] == "1"
+        else { return }
+        print(
+            "TITLE_LAYOUT role=\(role) characters=\(name.count) "
+                + "width=\(size.width) height=\(size.height)"
+        )
     }
 
     private var nameBorderColor: Color {
