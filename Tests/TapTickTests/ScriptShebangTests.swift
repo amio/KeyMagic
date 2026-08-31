@@ -6,14 +6,23 @@ struct ScriptShebangTests {
     @Test("Recognizes direct and env shell interpreters")
     func recognizesShells() {
         #expect(
-            ScriptShebang.inspect("#!/bin/zsh\necho hi").shebang?.dialect == .zsh
+            ScriptShebang.inspect("#!/bin/zsh\necho hi").shebang?.language == .shell(.zsh)
         )
         #expect(
-            ScriptShebang.inspect("#!/usr/bin/env sh\necho hi").shebang?.dialect == .sh
+            ScriptShebang.inspect("#!/usr/bin/env sh\necho hi").shebang?.language == .shell(.sh)
         )
         #expect(
-            ScriptShebang.inspect("#!/usr/bin/env -S sh -e\necho hi").shebang?.dialect == .sh
+            ScriptShebang.inspect("#!/usr/bin/env -S sh -e\necho hi").shebang?.language == .shell(.sh)
         )
+    }
+
+    @Test("Recognizes Tree-sitter script interpreters")
+    func recognizesTreeSitterLanguages() {
+        #expect(ScriptShebang.language(for: "python") == .python)
+        #expect(ScriptShebang.language(for: "python3") == .python)
+        #expect(ScriptShebang.language(for: "node") == .javascript)
+        #expect(ScriptShebang.language(for: "nodejs") == .javascript)
+        #expect(ScriptShebang.language(for: "ruby") == .ruby)
     }
 
     @Test("Distinguishes missing, malformed, and unavailable shebangs")

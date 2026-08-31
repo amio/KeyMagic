@@ -1,42 +1,17 @@
 import AppKit
 
-enum ShellSyntaxTokenKind: Equatable {
-    case comment
-    case keyword
-    case number
-    case `operator`
-    case string
-    case variable
-}
-
-struct ShellSyntaxToken: Equatable {
-    let kind: ShellSyntaxTokenKind
-    let range: NSRange
-}
-
 /// Produces display-only shell highlighting without changing the editor's plain-text storage.
 struct ShellSyntaxHighlighter {
     @MainActor
     static func apply(to textView: NSTextView, dialect: ShellDialect?) {
-        guard let layoutManager = textView.layoutManager else { return }
-
-        let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
-        layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: fullRange)
-
-        guard let dialect else { return }
-        for token in tokens(in: textView.string, dialect: dialect) {
-            layoutManager.addTemporaryAttribute(
-                .foregroundColor,
-                value: color(for: token.kind),
-                forCharacterRange: token.range
-            )
-        }
+        let tokens = dialect.map { tokens(in: textView.string, dialect: $0) } ?? []
+        ScriptSyntaxHighlighter.apply(tokens, to: textView)
     }
 
-    static func tokens(in text: String, dialect: ShellDialect) -> [ShellSyntaxToken] {
+    static func tokens(in text: String, dialect: ShellDialect) -> [ScriptSyntaxToken] {
         let source = text as NSString
         let reservedWords = keywords(for: dialect)
-        var tokens: [ShellSyntaxToken] = []
+        var tokens: [ScriptSyntaxToken] = []
         var index = 0
 
         while index < source.length {
@@ -112,23 +87,6 @@ struct ShellSyntaxHighlighter {
         return tokens
     }
 
-    private static func color(for kind: ShellSyntaxTokenKind) -> NSColor {
-        switch kind {
-        case .comment:
-            return .secondaryLabelColor
-        case .keyword:
-            return .systemPink
-        case .number:
-            return .systemOrange
-        case .operator:
-            return .systemTeal
-        case .string:
-            return .systemRed
-        case .variable:
-            return .systemBlue
-        }
-    }
-
     private static func keywords(for dialect: ShellDialect) -> Set<String> {
         switch dialect {
         case .sh:
@@ -151,11 +109,11 @@ struct ShellSyntaxHighlighter {
     ]
 
     private static func token(
-        _ kind: ShellSyntaxTokenKind,
+        _ kind: ScriptSyntaxTokenKind,
         from start: Int,
         to end: Int
-    ) -> ShellSyntaxToken {
-        ShellSyntaxToken(kind: kind, range: NSRange(location: start, length: end - start))
+    ) -> ScriptSyntaxToken {
+        ScriptSyntaxToken(kind: kind, range: NSRange(location: start, length: end - start))
     }
 
     private static func lineEnd(in source: NSString, from start: Int) -> Int {

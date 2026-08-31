@@ -73,7 +73,7 @@ final class ScriptTextEditorController {
 /// A plain-text AppKit editor so buttons and standard keyboard commands share one UndoManager.
 struct ScriptTextEditor: NSViewRepresentable {
     @Binding var text: String
-    let shellDialect: ShellDialect?
+    let language: ScriptLanguage?
     let controller: ScriptTextEditorController
 
     func makeCoordinator() -> Coordinator {
@@ -166,8 +166,10 @@ struct ScriptTextEditor: NSViewRepresentable {
         private weak var observedScrollView: NSScrollView?
         private var observedUndoManager: UndoManager?
         private var highlightedText: String?
-        private var highlightedDialect: ShellDialect?
+        private var highlightedLanguage: ScriptLanguage?
         private var wasHighlighted = false
+        private var highlightRequestID = 0
+        private var highlightTask: Task<Void, Never>?
 
         init(parent: ScriptTextEditor) {
             self.parent = parent
@@ -248,13 +250,70 @@ struct ScriptTextEditor: NSViewRepresentable {
 
         func highlightIfNeeded(_ textView: NSTextView) {
             guard
-                highlightedText != textView.string || highlightedDialect != parent.shellDialect
+                highlightedText != textView.string || highlightedLanguage != parent.language
                     || !wasHighlighted
             else { return }
-            ShellSyntaxHighlighter.apply(to: textView, dialect: parent.shellDialect)
-            highlightedText = textView.string
-            highlightedDialect = parent.shellDialect
+
+            let source = textView.string
+            let language = parent.language
+            let languageChanged = highlightedLanguage != language || !wasHighlighted
+            highlightedText = source
+            highlightedLanguage = language
             wasHighlighted = true
+            highlightTask?.cancel()
+            highlightRequestID += 1
+
+            guard let language else {
+                ScriptSyntaxHighlighter.clear(textView)
+                return
+            }
+
+            switch language {
+            case .shell(let dialect):
+                ScriptSyntaxHighlighter.apply(
+                    ShellSyntaxHighlighter.tokens(in: source, dialect: dialect),
+                    to: textView
+                )
+            case .python, .javascript, .ruby:
+                if languageChanged {
+                    ScriptSyntaxHighlighter.clear(textView)
+                }
+                scheduleTreeSitterHighlighting(source, language: language, textView: textView)
+            }
+        }
+
+        private func scheduleTreeSitterHighlighting(
+            _ source: String,
+            language: ScriptLanguage,
+            textView: NSTextView
+        ) {
+            let requestID = highlightRequestID
+            highlightTask = Task { @MainActor [weak self, weak textView] in
+                do {
+                    try await Task.sleep(for: .milliseconds(60))
+                    let tokens = try await TreeSitterSyntaxHighlighter.shared.tokens(
+                        in: source,
+                        language: language
+                    )
+                    try Task.checkCancellation()
+
+                    guard
+                        let self,
+                        let textView,
+                        self.highlightRequestID == requestID,
+                        self.observedTextView === textView,
+                        textView.string == source,
+                        self.parent.language == language
+                    else {
+                        return
+                    }
+
+                    ScriptSyntaxHighlighter.apply(tokens, to: textView)
+                    self.highlightTask = nil
+                } catch {
+                    // Cancellation and unavailable grammar resources both leave plain text usable.
+                }
+            }
         }
 
         func resizeDocumentView(_ textView: NSTextView) {
@@ -263,17 +322,21 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         private func stopObservingUndoChanges() {
-            guard let observedUndoManager else { return }
-            NotificationCenter.default.removeObserver(
-                self,
-                name: Notification.Name.NSUndoManagerDidUndoChange,
-                object: observedUndoManager
-            )
-            NotificationCenter.default.removeObserver(
-                self,
-                name: Notification.Name.NSUndoManagerDidRedoChange,
-                object: observedUndoManager
-            )
+            highlightTask?.cancel()
+            highlightTask = nil
+            highlightRequestID += 1
+            if let observedUndoManager {
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: Notification.Name.NSUndoManagerDidUndoChange,
+                    object: observedUndoManager
+                )
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: Notification.Name.NSUndoManagerDidRedoChange,
+                    object: observedUndoManager
+                )
+            }
             if let observedScrollView {
                 NotificationCenter.default.removeObserver(
                     self,
@@ -285,7 +348,7 @@ struct ScriptTextEditor: NSViewRepresentable {
             observedTextView = nil
             observedScrollView = nil
             highlightedText = nil
-            highlightedDialect = nil
+            highlightedLanguage = nil
             wasHighlighted = false
         }
 

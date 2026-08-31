@@ -7,10 +7,17 @@ enum ShellDialect: Equatable, Sendable {
     case fish
 }
 
+enum ScriptLanguage: Equatable, Sendable {
+    case shell(ShellDialect)
+    case python
+    case javascript
+    case ruby
+}
+
 struct ScriptShebang: Equatable, Sendable {
     let line: String
     let interpreterName: String
-    let dialect: ShellDialect?
+    let language: ScriptLanguage?
 
     enum Validation: Equatable, Sendable {
         case valid(ScriptShebang)
@@ -85,7 +92,7 @@ struct ScriptShebang: Equatable, Sendable {
             ScriptShebang(
                 line: String(firstLine),
                 interpreterName: executableName,
-                dialect: dialect(for: executableName)
+                language: language(for: executableName)
             )
         )
     }
@@ -101,12 +108,15 @@ struct ScriptShebang: Equatable, Sendable {
         return source.isEmpty ? shebang + "\n\n" : shebang + "\n\n" + source
     }
 
-    private static func dialect(for executableName: String) -> ShellDialect? {
+    static func language(for executableName: String) -> ScriptLanguage? {
         switch executableName {
-        case "sh": .sh
-        case "bash": .bash
-        case "zsh": .zsh
-        case "fish": .fish
+        case "sh": .shell(.sh)
+        case "bash": .shell(.bash)
+        case "zsh": .shell(.zsh)
+        case "fish": .shell(.fish)
+        case "python", "python3": .python
+        case "node", "nodejs": .javascript
+        case "ruby": .ruby
         default: nil
         }
     }

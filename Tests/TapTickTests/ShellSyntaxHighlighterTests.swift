@@ -77,9 +77,9 @@ struct ShellSyntaxHighlighterTests {
     }
 
     private func fragments(
-        of kind: ShellSyntaxTokenKind,
+        of kind: ScriptSyntaxTokenKind,
         in source: String,
-        tokens: [ShellSyntaxToken]
+        tokens: [ScriptSyntaxToken]
     ) -> [String] {
         let source = source as NSString
         return

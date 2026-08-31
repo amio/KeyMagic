@@ -830,7 +830,7 @@ struct ScriptEditView: View {
             editorToolbar
             ScriptTextEditor(
                 text: $draftState.draft.scriptContent,
-                shellDialect: shebangValidation.shebang?.dialect,
+                language: shebangValidation.shebang?.language,
                 controller: editorController
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
