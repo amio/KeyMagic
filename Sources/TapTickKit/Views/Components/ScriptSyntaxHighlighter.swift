@@ -6,10 +6,15 @@ import TreeSitterRuby
 
 enum ScriptSyntaxTokenKind: Equatable, Sendable {
     case comment
+    case constant
+    case function
     case keyword
     case number
     case `operator`
+    case property
+    case punctuation
     case string
+    case type
     case variable
 }
 
@@ -45,16 +50,26 @@ struct ScriptSyntaxHighlighter {
         switch kind {
         case .comment:
             return .secondaryLabelColor
+        case .constant:
+            return .systemOrange
+        case .function:
+            return .systemBlue
         case .keyword:
             return .systemPink
         case .number:
             return .systemOrange
         case .operator:
             return .systemTeal
+        case .property:
+            return .systemPurple
+        case .punctuation:
+            return .secondaryLabelColor
         case .string:
             return .systemRed
+        case .type:
+            return .systemTeal
         case .variable:
-            return .systemBlue
+            return .textColor
         }
     }
 }
@@ -157,16 +172,25 @@ actor TreeSitterSyntaxHighlighter {
         switch category {
         case "comment":
             return .comment
-        case "boolean", "conditional", "exception", "include", "keyword", "none", "repeat":
+        case "boolean", "constant", "none":
+            return .constant
+        case "function", "method":
+            return .function
+        case "conditional", "exception", "include", "keyword", "repeat":
             return .keyword
         case "float", "number":
             return .number
-        case "operator", "punctuation":
+        case "operator":
             return .operator
+        case "attribute", "field", "label", "property":
+            return .property
+        case "punctuation":
+            return .punctuation
         case "character", "escape", "string":
             return .string
-        case "attribute", "constant", "constructor", "embedded", "field", "function", "label",
-            "method", "module", "namespace", "property", "tag", "type", "variable":
+        case "constructor", "module", "namespace", "tag", "type":
+            return .type
+        case "embedded", "variable":
             return .variable
         default:
             return nil

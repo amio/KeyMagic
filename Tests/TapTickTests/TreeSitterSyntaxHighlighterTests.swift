@@ -41,6 +41,31 @@ struct TreeSitterSyntaxHighlighterTests {
         #expect(fragments(of: .number, in: source, tokens: tokens).contains("42"))
     }
 
+    @Test("Preserves JavaScript identifier semantics for the display theme")
+    func javascriptIdentifierSemantics() async throws {
+        let source = """
+            const TIMEOUT_MS = 20_000;
+            const codex = spawn(process.env.CODEX_BIN ?? "codex");
+            const pending = new Map();
+            codex.stderr.setEncoding("utf8");
+            let exited = false;
+            """
+
+        let tokens = try await TreeSitterSyntaxHighlighter.shared.tokens(
+            in: source,
+            language: .javascript
+        )
+
+        #expect(fragments(of: .constant, in: source, tokens: tokens).contains("TIMEOUT_MS"))
+        #expect(fragments(of: .constant, in: source, tokens: tokens).contains("false"))
+        #expect(fragments(of: .function, in: source, tokens: tokens).contains("spawn"))
+        #expect(fragments(of: .function, in: source, tokens: tokens).contains("setEncoding"))
+        #expect(fragments(of: .property, in: source, tokens: tokens).contains("stderr"))
+        #expect(fragments(of: .type, in: source, tokens: tokens).contains("Map"))
+        #expect(fragments(of: .punctuation, in: source, tokens: tokens).contains(";"))
+        #expect(fragments(of: .variable, in: source, tokens: tokens).contains("codex"))
+    }
+
     @Test("Highlights representative Ruby syntax")
     func ruby() async throws {
         let source = """
