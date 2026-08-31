@@ -162,6 +162,50 @@ struct ScriptTextEditorTests {
         #expect(text.value == "old")
         #expect(controller.canRedo)
     }
+
+    @Test("IME composition survives SwiftUI updates and publishes only after commit")
+    func imeCompositionLifecycle() throws {
+        let text = TextBox("echo ")
+        let controller = ScriptTextEditorController()
+        let editor = ScriptTextEditor(
+            text: Binding(
+                get: { text.value },
+                set: { text.value = $0 }
+            ),
+            language: .shell(.zsh),
+            controller: controller
+        )
+        let coordinator = editor.makeCoordinator()
+        let scrollView = ScriptEditorTextView.scrollableTextView()
+        let textView = try #require(scrollView.documentView as? ScriptEditorTextView)
+        textView.delegate = coordinator
+        textView.string = text.value
+        coordinator.attach(to: textView, in: scrollView, controller: controller)
+        textView.setSelectedRange(NSRange(location: 5, length: 0))
+
+        textView.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 2, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+
+        #expect(textView.hasMarkedText())
+        #expect(textView.markedRange() == NSRange(location: 5, length: 2))
+        #expect(textView.string == "echo ni")
+        #expect(text.value == "echo ")
+
+        coordinator.updateTextViewFromModelIfNeeded(textView)
+        coordinator.highlightIfNeeded(textView)
+
+        #expect(textView.string == "echo ni")
+        #expect(text.value == "echo ")
+
+        textView.insertText("你", replacementRange: textView.markedRange())
+
+        #expect(!textView.hasMarkedText())
+        #expect(textView.string == "echo 你")
+        #expect(text.value == "echo 你")
+    }
 }
 
 @MainActor

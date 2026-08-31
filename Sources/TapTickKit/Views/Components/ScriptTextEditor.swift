@@ -2,6 +2,25 @@ import AppKit
 import Observation
 import SwiftUI
 
+/// Observes composition geometry without replacing AppKit's NSTextInputClient implementation.
+@MainActor
+final class ScriptEditorTextView: NSTextView {
+    var markedTextDidChange: (() -> Void)?
+
+    override func setMarkedText(
+        _ string: Any,
+        selectedRange: NSRange,
+        replacementRange: NSRange
+    ) {
+        super.setMarkedText(
+            string,
+            selectedRange: selectedRange,
+            replacementRange: replacementRange
+        )
+        markedTextDidChange?()
+    }
+}
+
 /// Owns the native text editor's per-script commands, undo stack, and button state.
 @MainActor
 @Observable
@@ -19,12 +38,14 @@ final class ScriptTextEditorController {
     }
 
     func undo() {
+        commitMarkedText()
         guard undoManager.canUndo else { return }
         undoManager.undo()
         refresh()
     }
 
     func redo() {
+        commitMarkedText()
         guard undoManager.canRedo else { return }
         undoManager.redo()
         refresh()
@@ -34,6 +55,7 @@ final class ScriptTextEditorController {
     @discardableResult
     func replaceAll(with replacement: String, actionName: String) -> Bool {
         guard let textView else { return false }
+        commitMarkedText()
         guard textView.string != replacement else { return true }
 
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
@@ -68,6 +90,11 @@ final class ScriptTextEditorController {
         guard self.textView === textView else { return }
         self.textView = nil
     }
+
+    private func commitMarkedText() {
+        guard let textView, textView.hasMarkedText() else { return }
+        textView.unmarkText()
+    }
 }
 
 /// A plain-text AppKit editor so buttons and standard keyboard commands share one UndoManager.
@@ -81,8 +108,10 @@ struct ScriptTextEditor: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        let scrollView = ScriptEditorTextView.scrollableTextView()
+        guard let textView = scrollView.documentView as? ScriptEditorTextView else {
+            return scrollView
+        }
 
         textView.delegate = context.coordinator
         textView.string = text
@@ -142,13 +171,7 @@ struct ScriptTextEditor: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.attach(to: textView, in: scrollView, controller: controller)
-        if textView.string != text {
-            let undoManager = controller.undoManager
-            undoManager.disableUndoRegistration()
-            textView.string = text
-            undoManager.enableUndoRegistration()
-            controller.refresh()
-        }
+        context.coordinator.updateTextViewFromModelIfNeeded(textView)
         context.coordinator.highlightIfNeeded(textView)
         context.coordinator.resizeDocumentView(textView)
     }
@@ -185,6 +208,12 @@ struct ScriptTextEditor: NSViewRepresentable {
             controller: ScriptTextEditorController
         ) {
             controller.attach(to: textView)
+            if let textView = textView as? ScriptEditorTextView {
+                textView.markedTextDidChange = { [weak self, weak textView] in
+                    guard let textView else { return }
+                    self?.markedTextDidChange(in: textView)
+                }
+            }
             guard
                 observedTextView !== textView || observedScrollView !== scrollView
                     || observedUndoManager !== controller.undoManager
@@ -242,13 +271,34 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         private func synchronizeText(from textView: NSTextView) {
-            parent.text = textView.string
             parent.controller.refresh()
-            highlightIfNeeded(textView)
             resizeDocumentView(textView)
+            guard !textView.hasMarkedText() else {
+                suspendHighlighting()
+                textView.inputContext?.invalidateCharacterCoordinates()
+                return
+            }
+
+            parent.text = textView.string
+            highlightIfNeeded(textView)
+        }
+
+        func updateTextViewFromModelIfNeeded(_ textView: NSTextView) {
+            guard !textView.hasMarkedText(), textView.string != parent.text else { return }
+
+            let undoManager = parent.controller.undoManager
+            undoManager.disableUndoRegistration()
+            textView.string = parent.text
+            undoManager.enableUndoRegistration()
+            parent.controller.refresh()
         }
 
         func highlightIfNeeded(_ textView: NSTextView) {
+            guard !textView.hasMarkedText() else {
+                suspendHighlighting()
+                return
+            }
+
             guard
                 highlightedText != textView.string || highlightedLanguage != parent.language
                     || !wasHighlighted
@@ -280,6 +330,19 @@ struct ScriptTextEditor: NSViewRepresentable {
                 }
                 scheduleTreeSitterHighlighting(source, language: language, textView: textView)
             }
+        }
+
+        private func markedTextDidChange(in textView: NSTextView) {
+            guard observedTextView === textView else { return }
+            suspendHighlighting()
+            resizeDocumentView(textView)
+            textView.inputContext?.invalidateCharacterCoordinates()
+        }
+
+        private func suspendHighlighting() {
+            highlightTask?.cancel()
+            highlightTask = nil
+            highlightRequestID += 1
         }
 
         private func scheduleTreeSitterHighlighting(
@@ -322,9 +385,8 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         private func stopObservingUndoChanges() {
-            highlightTask?.cancel()
-            highlightTask = nil
-            highlightRequestID += 1
+            suspendHighlighting()
+            (observedTextView as? ScriptEditorTextView)?.markedTextDidChange = nil
             if let observedUndoManager {
                 NotificationCenter.default.removeObserver(
                     self,
