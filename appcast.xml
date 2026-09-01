@@ -3,6 +3,15 @@
     <channel>
         <title>KeyMagic</title>
         <item>
+            <title>1.5.5</title>
+            <pubDate>Tue, 01 Sep 2026 07:50:16 +0000</pubDate>
+            <link>https://amio.github.io/TapTick/</link>
+            <sparkle:version>46</sparkle:version>
+            <sparkle:shortVersionString>1.5.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/amio/TapTick/releases/download/v1.5.5/TapTick-1.5.5.dmg" length="3834958" type="application/octet-stream" sparkle:edSignature="uFxrmIGHv48f5Wu+4cuQLImg6mu8UvMgKhzPdt1rlXkJZYzH9yrKHzmWwdiLV+FymfUOg+6L7aMq6t0JjrVSDQ=="/>
+        </item>
+        <item>
             <title>1.4.3</title>
             <pubDate>Tue, 25 Aug 2026 02:56:01 +0000</pubDate>
             <link>https://amio.github.io/TapTick/</link>
