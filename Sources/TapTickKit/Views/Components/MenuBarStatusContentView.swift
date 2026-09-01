@@ -13,9 +13,8 @@ final class MenuBarStatusContentView: NSView {
     private static let twoLineSpacingReduction: CGFloat = 1
     private static let widthAnimationDuration: TimeInterval = 0.24
     private static let widthAnimationFrameInterval: TimeInterval = 1 / 60
-    private static let textWeight: NSFont.Weight = .semibold
-    private static let singleLineFont = tabularDigitFont(size: 0)
-    private static let twoLineFont = tabularDigitFont(size: 9)
+    private static let singleLineFont = tabularDigitFont(size: 0, weight: .medium)
+    private static let twoLineFont = tabularDigitFont(size: 9, weight: .bold)
 
     private let icon = MenuBarStatusContentView.menuBarImage()
     private var slots: [MenuBarTextRenderedSlot] = []
@@ -264,11 +263,11 @@ final class MenuBarStatusContentView: NSView {
         return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
-    private static func tabularDigitFont(size: CGFloat) -> NSFont {
+    private static func tabularDigitFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
         let menuBarFont = NSFont.menuBarFont(ofSize: size)
         let baseFont = NSFont.systemFont(
             ofSize: menuBarFont.pointSize,
-            weight: Self.textWeight
+            weight: weight
         )
         let descriptor = baseFont.fontDescriptor.addingAttributes([
             .featureSettings: [
