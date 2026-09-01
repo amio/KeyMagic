@@ -39,18 +39,6 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
 
     static let catalog: [UtilityDescriptor] = [
         UtilityDescriptor(
-            id: .keystrokeOverlay,
-            title: "Keystroke Overlay",
-            summary: "Show the current key chord in a subtitle-style HUD near the bottom of the screen.",
-            systemImage: "keyboard.badge.eye",
-            availability: .available,
-            highlights: [
-                "Global toggle hotkey",
-                "Subtitle-style floating overlay",
-                "Font, color, hold time, and fade controls",
-            ]
-        ),
-        UtilityDescriptor(
             id: .screenshotTools,
             title: "Capture & Mark",
             summary: "Capture a region, mark it up in a polished preview, and copy the result immediately.",
@@ -60,6 +48,18 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
                 "Instant clipboard capture",
                 "Refined mark-up preview",
                 "Clipboard-first output",
+            ]
+        ),
+        UtilityDescriptor(
+            id: .largeType,
+            title: "Large Type",
+            summary: "Project large temporary text on screen for quick glanceable display, similar to Alfred.",
+            systemImage: "character.textbox",
+            availability: .available,
+            highlights: [
+                "Huge readable text",
+                "Native full-screen text input",
+                "Animated QR-code presentation",
             ]
         ),
         UtilityDescriptor(
@@ -75,15 +75,15 @@ struct UtilityDescriptor: Identifiable, Hashable, Sendable {
             ]
         ),
         UtilityDescriptor(
-            id: .largeType,
-            title: "Large Type",
-            summary: "Project large temporary text on screen for quick glanceable display, similar to Alfred.",
-            systemImage: "character.textbox",
+            id: .keystrokeOverlay,
+            title: "Keystroke Overlay",
+            summary: "Show the current key chord in a subtitle-style HUD near the bottom of the screen.",
+            systemImage: "keyboard.badge.eye",
             availability: .available,
             highlights: [
-                "Huge readable text",
-                "Native full-screen text input",
-                "Animated QR-code presentation",
+                "Global toggle hotkey",
+                "Subtitle-style floating overlay",
+                "Font, color, hold time, and fade controls",
             ]
         ),
     ]
