@@ -8,8 +8,11 @@ struct UtilitiesDirectoryView: View {
 
     var body: some View {
         List(utilities.catalog, selection: $selection) { feature in
-            UtilityRow(feature: feature)
-                .tag(feature.id)
+            UtilityRow(
+                feature: feature,
+                isSelected: selection == feature.id
+            )
+            .tag(feature.id)
         }
         .listStyle(.inset)
         .focused($isUtilityListFocused)
@@ -150,6 +153,7 @@ private struct UtilityRow: View {
     @Environment(UtilitiesController.self) private var utilities
 
     let feature: UtilityDescriptor
+    let isSelected: Bool
 
     private let iconColumnWidth: CGFloat = 22
 
@@ -172,8 +176,16 @@ private struct UtilityRow: View {
     private var utilityIcon: some View {
         Image(systemName: feature.systemImage)
             .font(.system(size: feature.directoryIconPointSize, weight: .regular))
-            .foregroundStyle(feature.availability == .available ? Color.accentColor : Color.secondary)
+            .foregroundStyle(iconColor)
             .frame(width: iconColumnWidth)
+    }
+
+    private var iconColor: Color {
+        if isSelected {
+            return .primary
+        }
+
+        return feature.availability == .available ? .accentColor : .secondary
     }
 
     private var titleRow: some View {
