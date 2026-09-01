@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TapTick — Global Hotkeys for macOS</title>
+    <title>TapTick: Global Hotkeys for macOS</title>
     <style>
       *,
       *::before,
@@ -422,13 +422,6 @@
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.1);
       }
 
-      /* Apple Intelligence card gets a subtle gradient border */
-      .feature-card.ai-card {
-        background: linear-gradient(var(--surface), var(--surface)) padding-box,
-          linear-gradient(135deg, #bf5af2, #ff6961, #ffd60a) border-box;
-        border: 1.5px solid transparent;
-      }
-
       .feature-card-icon {
         width: 52px;
         height: 52px;
@@ -450,20 +443,9 @@
         color: #5856d6;
       }
 
-      /* Apple Intelligence rainbow shimmer icon */
-      .feature-card-icon.ai {
-        background: linear-gradient(135deg, rgba(191,90,242,0.15), rgba(255,105,97,0.12), rgba(255,214,10,0.12));
-        position: relative;
-        overflow: hidden;
-      }
-
-      .ai-icon-svg {
-        position: relative;
-        z-index: 1;
-      }
-
-      .ai-icon-svg path, .ai-icon-svg circle, .ai-icon-svg polyline, .ai-icon-svg line {
-        stroke: url(#aiGrad);
+      .feature-card-icon.utility {
+        background: rgba(255, 149, 0, 0.11);
+        color: #c76b00;
       }
 
       .feature-card-title {
@@ -480,21 +462,6 @@
         color: var(--text-secondary);
         line-height: 1.6;
         flex: 1;
-      }
-
-      .ai-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        margin-top: 20px;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        padding: 4px 10px;
-        border-radius: 980px;
-        background: linear-gradient(90deg, rgba(191,90,242,0.12), rgba(255,105,97,0.1));
-        color: #bf5af2;
-        width: fit-content;
       }
 
       /* ─────────────────────────────
@@ -788,17 +755,6 @@
     </style>
   </head>
   <body>
-    <!-- Hidden SVG defs for AI gradient -->
-    <svg width="0" height="0" style="position:absolute">
-      <defs>
-        <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stop-color="#bf5af2" />
-          <stop offset="50%"  stop-color="#ff6961" />
-          <stop offset="100%" stop-color="#ffd60a" />
-        </linearGradient>
-      </defs>
-    </svg>
-
     <!-- Nav -->
     <nav id="nav">
       <a class="nav-brand" href="#">
@@ -866,12 +822,12 @@
         <p class="section-label">What it does</p>
         <h2 class="section-title">One shortcut. Any action.</h2>
         <p class="section-desc">
-          Two simple modes — just the right tool for every workflow.
+          Launch apps, run scripts, and keep everyday Mac tools one shortcut away.
         </p>
       </div>
 
       <div class="feature-cards-grid">
-        <!-- Application Shortcut -->
+        <!-- Application launcher -->
         <div class="feature-card reveal" style="transition-delay: 0.1s">
           <div class="feature-card-icon blue">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -881,10 +837,10 @@
               <rect x="14" y="14" width="7" height="7" rx="1.5" />
             </svg>
           </div>
-          <h3 class="feature-card-title">Application Shortcut</h3>
+          <h3 class="feature-card-title">Application launcher</h3>
           <p class="feature-card-desc">
-            Jump to any app instantly. TapTick brings the window to focus —
-            or launches it if not running — using only native macOS APIs.
+            Jump to any app instantly. TapTick focuses it if running, or
+            launches it if not.
           </p>
         </div>
 
@@ -903,24 +859,23 @@
           </p>
         </div>
 
-        <!-- AI Generator -->
-        <div class="feature-card ai-card- reveal" style="transition-delay: 0.3s">
-          <div class="feature-card-icon ai">
-            <svg class="ai-icon-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 0 6h-1v1a4 4 0 0 1-8 0v-1H7a3 3 0 0 1 0-6h1V6a4 4 0 0 1 4-4z" />
-              <circle cx="12" cy="12" r="2" />
+        <!-- Built-in Utilities -->
+        <div class="feature-card reveal" style="transition-delay: 0.3s">
+          <div class="feature-card-icon utility">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <circle cx="9" cy="6" r="2" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <circle cx="15" cy="12" r="2" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+              <circle cx="11" cy="18" r="2" />
             </svg>
           </div>
-          <h3 class="feature-card-title">AI Script Generator</h3>
+          <h3 class="feature-card-title">Built-in Utilities</h3>
           <p class="feature-card-desc">
-            Describe your automation in plain language. TapTick generates the script—powered by Apple Intelligence, on-device and private.
+            Capture and annotate screenshots, present large text or QR codes,
+            and show keystrokes on screen. Window management is on the way.
           </p>
-          <span class="ai-badge">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>
-            Apple Intelligence
-          </span>
         </div>
       </div>
     </section>
@@ -950,7 +905,7 @@
                 </svg>
               </span>
               <span class="preview-tab-text">
-                <span class="preview-tab-title">Application Shortcut</span>
+                <span class="preview-tab-title">Application launcher</span>
                 <span class="preview-tab-desc">Instant app switching with hotkeys</span>
               </span>
             </button>
@@ -967,6 +922,36 @@
                 <span class="preview-tab-desc">Trigger shell scripts from anywhere</span>
               </span>
             </button>
+
+            <button class="preview-tab" data-target="menubar" role="tab" aria-selected="false">
+              <span class="preview-tab-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                </svg>
+              </span>
+              <span class="preview-tab-text">
+                <span class="preview-tab-title">Menu Bar</span>
+                <span class="preview-tab-desc">Live script output at a glance</span>
+              </span>
+            </button>
+
+            <button class="preview-tab" data-target="utilities" role="tab" aria-selected="false">
+              <span class="preview-tab-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="4" y1="6" x2="20" y2="6" />
+                  <circle cx="9" cy="6" r="2" />
+                  <line x1="4" y1="12" x2="20" y2="12" />
+                  <circle cx="15" cy="12" r="2" />
+                  <line x1="4" y1="18" x2="20" y2="18" />
+                  <circle cx="11" cy="18" r="2" />
+                </svg>
+              </span>
+              <span class="preview-tab-text">
+                <span class="preview-tab-title">Utilities</span>
+                <span class="preview-tab-desc">Focused tools, one shortcut away</span>
+              </span>
+            </button>
           </div>
         </div>
 
@@ -975,10 +960,16 @@
           <div class="screenshot-stage" id="screenshotStage">
             <div class="screenshot-placeholder"></div>
             <div class="screenshot-slide active" id="slide-apps">
-              <img src="screenshot-apps.png" alt="Application Shortcut screenshot" />
+              <img src="screenshots/settings-applications.png" alt="TapTick Applications settings" />
             </div>
             <div class="screenshot-slide" id="slide-scripts">
-              <img src="screenshot-scripts.png" alt="Script Runner screenshot" />
+              <img src="screenshots/settings-scripts.png" alt="TapTick Scripts settings" />
+            </div>
+            <div class="screenshot-slide" id="slide-menubar">
+              <img src="screenshots/settings-menubar.png" alt="TapTick Menu Bar settings" />
+            </div>
+            <div class="screenshot-slide" id="slide-utilities">
+              <img src="screenshots/settings-utilities.png" alt="TapTick Utilities settings" />
             </div>
           </div>
         </div>
