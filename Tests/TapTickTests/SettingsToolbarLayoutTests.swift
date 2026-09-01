@@ -22,50 +22,83 @@ struct SettingsToolbarLayoutTests {
         window.orderFront(nil)
         defer { window.close() }
 
-        try await settleLayout()
-        try assertSeparatorAlignment(in: window)
+        let expandedLayout = try await waitForSeparatorAlignment(in: window)
 
         model.visibility = .doubleColumn
-        try await settleLayout()
-        try assertSeparatorAlignment(in: window)
-    }
-
-    private func settleLayout() async throws {
-        try await Task.sleep(for: .milliseconds(250))
+        _ = try await waitForSeparatorAlignment(
+            in: window,
+            differingFrom: expandedLayout.dividerX
+        )
     }
 
     /// Public toolbar APIs expose the tracking item but not its rendered frame, so this
     /// regression test compares the AppKit separator and split-divider views directly.
-    private func assertSeparatorAlignment(in window: NSWindow) throws {
-        let themeFrame = try #require(window.contentView?.superview)
-        let descendants = descendants(of: themeFrame)
-        let separator = try #require(
-            descendants
-                .filter { String(describing: type(of: $0)) == "NSSeparatorToolbarItemView" }
-                .max { left, right in
-                    left.convert(left.bounds, to: nil).midX
-                        < right.convert(right.bounds, to: nil).midX
-                }
-        )
-        let contentDivider = try #require(
-            descendants
-                .filter {
-                    String(describing: type(of: $0)) == "NSSplitDividerView"
-                        && $0.frame.width >= 4
-                }
-                .max { left, right in
-                    left.convert(left.bounds, to: nil).midX
-                        < right.convert(right.bounds, to: nil).midX
-                }
-        )
+    private func waitForSeparatorAlignment(
+        in window: NSWindow,
+        differingFrom previousDividerX: CGFloat? = nil
+    ) async throws -> SeparatorLayout {
+        // SwiftUI can publish the split-view state across several AppKit layout passes,
+        // especially while the rest of the test bundle is running in parallel.
+        for _ in 0..<200 {
+            try await Task.sleep(for: .milliseconds(10))
+            window.contentView?.superview?.layoutSubtreeIfNeeded()
 
-        let separatorX = separator.convert(separator.bounds, to: nil).midX
-        let dividerX = contentDivider.convert(contentDivider.bounds, to: nil).midX
-        #expect(abs(separatorX - dividerX) <= 0.5)
+            if let layout = separatorLayout(in: window),
+                layout.isAligned,
+                previousDividerX.map({ abs(layout.dividerX - $0) > 0.5 }) ?? true
+            {
+                return layout
+            }
+        }
+
+        let layout = try #require(separatorLayout(in: window))
+        if let previousDividerX {
+            #expect(abs(layout.dividerX - previousDividerX) > 0.5)
+        }
+        #expect(layout.isAligned)
+        return layout
+    }
+
+    private func separatorLayout(in window: NSWindow) -> SeparatorLayout? {
+        guard let themeFrame = window.contentView?.superview else { return nil }
+        let descendants = descendants(of: themeFrame)
+        let separators = descendants.filter {
+            String(describing: type(of: $0)) == "NSSeparatorToolbarItemView"
+        }
+        let contentDividers = descendants.filter {
+            String(describing: type(of: $0)) == "NSSplitDividerView"
+                && $0.frame.width >= 4
+        }
+        guard let separator = separators.max(by: { separatorX(for: $0) < separatorX(for: $1) }),
+            let contentDivider = contentDividers.max(
+                by: { separatorX(for: $0) < separatorX(for: $1) }
+            )
+        else {
+            return nil
+        }
+
+        let layout = SeparatorLayout(
+            separatorX: separatorX(for: separator),
+            dividerX: separatorX(for: contentDivider)
+        )
+        return layout.separatorX > 0 && layout.dividerX > 0 ? layout : nil
+    }
+
+    private func separatorX(for view: NSView) -> CGFloat {
+        view.convert(view.bounds, to: nil).midX
     }
 
     private func descendants(of view: NSView) -> [NSView] {
         view.subviews.flatMap { [$0] + descendants(of: $0) }
+    }
+}
+
+private struct SeparatorLayout {
+    let separatorX: CGFloat
+    let dividerX: CGFloat
+
+    var isAligned: Bool {
+        abs(separatorX - dividerX) <= 0.5
     }
 }
 
