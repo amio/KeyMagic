@@ -53,7 +53,7 @@ jobs:
     runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.revision || github.sha }}
 
@@ -67,6 +67,12 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+
+      - name: Remove unused AWS Homebrew tap
+        run: |
+          if brew tap | grep -Fxq aws/tap; then
+            brew untap aws/tap
+          fi
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -101,7 +107,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.revision || github.sha }}
 
@@ -109,6 +115,12 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app
 
       # ---- Install toolchain ------------------------------------------------
+
+      - name: Remove unused AWS Homebrew tap
+        run: |
+          if brew tap | grep -Fxq aws/tap; then
+            brew untap aws/tap
+          fi
 
       - name: Install XcodeGen
         run: brew install xcodegen
