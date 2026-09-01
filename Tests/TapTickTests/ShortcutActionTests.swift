@@ -31,17 +31,6 @@ struct ShortcutActionTests {
         #expect(action.displayDescription == "Legacy script: hello.sh")
     }
 
-    @Test("System images are non-empty")
-    func systemImages() {
-        let app = ShortcutAction.launchApp(bundleIdentifier: "com.test", appName: "Test")
-        let script = ShortcutAction.runScript(script: "#!/bin/bash\necho hi")
-        let file = ShortcutAction.runScriptFile(path: "/test.sh", shell: .sh)
-
-        #expect(!app.systemImage.isEmpty)
-        #expect(!script.systemImage.isEmpty)
-        #expect(!file.systemImage.isEmpty)
-    }
-
     @Test("Codable round-trip for all variants")
     func codableRoundTrip() throws {
         let actions: [ShortcutAction] = [

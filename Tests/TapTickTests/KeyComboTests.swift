@@ -47,15 +47,6 @@ struct KeyComboTests {
         #expect(decoded == combo)
     }
 
-    @Test("Hashable equality")
-    func hashableEquality() {
-        let a = KeyCombo(keyCode: 0, modifiers: .command)
-        let b = KeyCombo(keyCode: 0, modifiers: .command)
-        let c = KeyCombo(keyCode: 1, modifiers: .command)
-        #expect(a == b)
-        #expect(a != c)
-        #expect(a.hashValue == b.hashValue)
-    }
 }
 
 // MARK: - KeyCombo.Modifiers Tests

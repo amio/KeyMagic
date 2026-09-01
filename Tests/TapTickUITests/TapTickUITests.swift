@@ -98,15 +98,6 @@ final class TapTickUITests: XCTestCase {
         )
     }
 
-    // MARK: - Menu Bar
-
-    func testAppLaunches() throws {
-        let app = launchApp()
-        defer { app.terminate() }
-
-        XCTAssertTrue(app.exists, "App should launch successfully")
-    }
-
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += [

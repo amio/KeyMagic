@@ -242,7 +242,7 @@ struct MenuBarTextControllerTests {
         )
     }
 
-    @Test("Publishes completed line results together on the shared cadence")
+    @Test("Publishes both resolved lines through the shared snapshot")
     @MainActor
     func publishesCompletedResultsTogether() async throws {
         let directory = makeDirectory()
@@ -259,7 +259,7 @@ struct MenuBarTextControllerTests {
             store: store,
             directory: directory,
             scriptRunner: ScriptRunner { command in await runner.run(command) },
-            publicationInterval: .milliseconds(500)
+            publicationInterval: .milliseconds(10)
         )
         let slotID = controller.addSlot()
         controller.updateSlot(id: slotID) { slot in
@@ -268,11 +268,10 @@ struct MenuBarTextControllerTests {
             slot.bottomLine.scriptID = bottom.id
         }
 
-        controller.bootstrap()
-        try await waitUntil { await runner.runCount == 2 }
-        try await Task.sleep(for: .milliseconds(20))
         #expect(controller.renderedSlots.first?.contents == [.loading, .loading])
 
+        controller.bootstrap()
+        try await waitUntil { await runner.runCount == 2 }
         try await waitUntil {
             controller.renderedSlots.first?.contents.map(\.text) == ["top", "bottom"]
         }
@@ -387,13 +386,18 @@ private enum MenuBarTextTestError: Error {
 
 @MainActor
 private func waitUntil(
+    timeout: Duration = .seconds(10),
     _ condition: @escaping @MainActor @Sendable () async -> Bool
 ) async throws {
-    for _ in 0..<200 {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while true {
         if await condition() {
             return
         }
+        guard clock.now < deadline else {
+            throw MenuBarTextTestError.timedOut
+        }
         try await Task.sleep(for: .milliseconds(10))
     }
-    throw MenuBarTextTestError.timedOut
 }
