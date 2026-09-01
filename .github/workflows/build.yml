@@ -4,7 +4,7 @@
 # Triggers:
 #   • pull request       → unit tests only
 #   • push of v* tag     → tests + full distribution pipeline
-#   • workflow_dispatch  → tests + manually triggered distribution build
+#   • workflow_dispatch  → tests for a selected revision; distribution is opt-in
 # Plain pushes to main intentionally do not run this workflow.
 #
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
@@ -26,6 +26,19 @@ on:
   pull_request:
     # branches: [main]
   workflow_dispatch:
+    inputs:
+      revision:
+        description: Full commit SHA, branch, or tag to test (blank uses the selected branch)
+        required: false
+        type: string
+      build_distribution:
+        description: Also build a signed and notarized DMG artifact
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
 
 env:
   SCHEME:    TapTick
@@ -41,6 +54,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.revision || github.sha }}
+
+      - name: Show tested revision
+        run: git show --no-patch --format='Testing commit %H%n%s'
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
@@ -60,13 +78,14 @@ jobs:
         run: make test
 
   # ---------------------------------------------------------------------------
-  # Job 2: Build, sign, notarize, package as DMG — runs on tag push or manual
+  # Job 2: Build, sign, notarize, package as DMG — tag push or explicit manual opt-in
   # ---------------------------------------------------------------------------
   distribute:
     name: Build & Distribute
     runs-on: macos-26
-    # Only run for version tags or manual dispatch; not on plain branch pushes
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.build_distribution)
     needs: test
     permissions:
       contents: write
@@ -74,6 +93,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.revision || github.sha }}
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
@@ -139,7 +160,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
             case "$GITHUB_REF_NAME" in
               "v${MARKETING_VERSION}")
                 VERSION="$MARKETING_VERSION"
@@ -250,7 +271,7 @@ jobs:
       # ---- Publish GitHub Release (tag pushes only) -------------------------
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -266,7 +287,7 @@ jobs:
       # to sign the update archive.
 
       - name: Generate Sparkle appcast
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
@@ -318,7 +339,7 @@ jobs:
       # ---- Update Landing Page ----------------------------------------------
 
       - name: Update landing page
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         run: |
           DOWNLOAD_URL="https://github.com/amio/TapTick/releases/download/${GITHUB_REF_NAME}/${{ env.DMG_NAME }}.dmg"
 
@@ -328,7 +349,7 @@ jobs:
       # ---- Deploy to GitHub Pages -------------------------------------------
 
       - name: Deploy to GitHub Pages
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
