@@ -1,0 +1,76 @@
+# =============================================================================
+# TapTick — Landing Page
+#
+# Deploys the landing page when its source files change on main. The release
+# workflow also calls this workflow after publishing the new Sparkle appcast.
+# =============================================================================
+
+name: Deploy Landing Page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "public/**"
+      - ".github/workflows/pages.yml"
+  workflow_call:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    name: Deploy Landing Page
+    runs-on: ubuntu-latest
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Preserve Sparkle appcast
+        run: |
+          git fetch --depth=1 origin gh-pages
+          if git show FETCH_HEAD:appcast.xml > "$RUNNER_TEMP/appcast.xml"; then
+            cp "$RUNNER_TEMP/appcast.xml" public/appcast.xml
+          else
+            echo "No existing appcast found"
+          fi
+
+      - name: Resolve latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest")"
+          TAG_NAME="$(jq -r '.tag_name // empty' <<< "$RELEASE")"
+          DOWNLOAD_URL="$(
+            jq -r '[
+              .assets[]
+              | select(.name | startswith("TapTick-"))
+              | select(.name | endswith(".dmg"))
+            ][0].browser_download_url // empty' <<< "$RELEASE"
+          )"
+
+          if [[ "$TAG_NAME" != v* || -z "$DOWNLOAD_URL" ]]; then
+            echo "Latest release does not contain the expected TapTick DMG"
+            exit 1
+          fi
+
+          VERSION="${TAG_NAME#v}"
+          sed -i \
+            -e "s|{{DOWNLOAD_URL}}|$DOWNLOAD_URL|g" \
+            -e "s|{{VERSION}}|$VERSION|g" \
+            public/index.html
+
+          if grep -Eq '\{\{(DOWNLOAD_URL|VERSION)\}\}' public/index.html; then
+            echo "Landing-page release placeholders were not fully resolved"
+            exit 1
+          fi
+
+      - name: Deploy landing page
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public

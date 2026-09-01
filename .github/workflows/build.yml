@@ -352,29 +352,22 @@ jobs:
             --link "https://amio.github.io/TapTick/" \
             "$UPDATES_DIR"
 
-          # --- Copy appcast into public/ for GitHub Pages deployment ---
-          cp "$UPDATES_DIR/appcast.xml" public/appcast.xml
+          # --- Stage only the appcast for publication ---
+          # pages.yml owns landing-page deployment for both main changes and releases.
+          PAGES_DIR="$RUNNER_TEMP/sparkle-pages"
+          mkdir -p "$PAGES_DIR"
+          cp "$UPDATES_DIR/appcast.xml" "$PAGES_DIR/appcast.xml"
           echo "--- Appcast generated ---"
-          cat public/appcast.xml
+          cat "$PAGES_DIR/appcast.xml"
 
-      # ---- Update Landing Page ----------------------------------------------
-
-      - name: Update landing page
+      - name: Upload Sparkle appcast
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        run: |
-          DOWNLOAD_URL="https://github.com/amio/TapTick/releases/download/${GITHUB_REF_NAME}/${{ env.DMG_NAME }}.dmg"
-
-          sed -i '' "s|{{DOWNLOAD_URL}}|$DOWNLOAD_URL|g" public/index.html
-          sed -i '' "s|{{VERSION}}|${{ env.VERSION }}|g" public/index.html
-
-      # ---- Deploy to GitHub Pages -------------------------------------------
-
-      - name: Deploy to GitHub Pages
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        uses: peaceiris/actions-gh-pages@v4
+        uses: actions/upload-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
+          name: sparkle-appcast
+          path: ${{ runner.temp }}/sparkle-pages/appcast.xml
+          if-no-files-found: error
+          retention-days: 1
 
       # ---- Cleanup keychain -------------------------------------------------
 
@@ -382,3 +375,42 @@ jobs:
         if: always()
         run: |
           security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Publish the release feed without touching landing-page files
+  # ---------------------------------------------------------------------------
+  publish-appcast:
+    name: Publish Sparkle Appcast
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: distribute
+    permissions:
+      contents: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+
+    steps:
+      - name: Download Sparkle appcast
+        uses: actions/download-artifact@v5
+        with:
+          name: sparkle-appcast
+          path: public
+
+      - name: Publish Sparkle appcast
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          keep_files: true
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Refresh landing-page release links through the shared Pages workflow
+  # ---------------------------------------------------------------------------
+  deploy-page:
+    name: Deploy Landing Page
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: publish-appcast
+    permissions:
+      contents: write
+    uses: ./.github/workflows/pages.yml
