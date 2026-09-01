@@ -4,8 +4,8 @@ import AppKit
 struct ShellSyntaxHighlighter {
     @MainActor
     static func apply(to textView: NSTextView, dialect: ShellDialect?) {
-        let tokens = dialect.map { tokens(in: textView.string, dialect: $0) } ?? []
-        ScriptSyntaxHighlighter.apply(tokens, to: textView)
+        let syntaxTokens = dialect.map { Self.tokens(in: textView.string, dialect: $0) } ?? []
+        ScriptSyntaxHighlighter.apply(syntaxTokens, to: textView)
     }
 
     static func tokens(in text: String, dialect: ShellDialect) -> [ScriptSyntaxToken] {

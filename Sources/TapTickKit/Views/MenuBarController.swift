@@ -276,9 +276,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func applyImage(_ image: NSImage?, to item: NSMenuItem) {
         item.image = image
-        if #available(macOS 27.0, *) {
-            item.preferredImageVisibility = .visible
-        }
+
+        // Release builds use the stable Xcode toolchain, where the macOS 27 SDK API is absent.
+        #if compiler(>=6.4)
+            if #available(macOS 27.0, *) {
+                item.preferredImageVisibility = .visible
+            }
+        #endif
     }
 
     /// Resolve an appropriately-sized icon for the shortcut's action type.
