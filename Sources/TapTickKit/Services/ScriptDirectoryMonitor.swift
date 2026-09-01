@@ -1,26 +1,48 @@
 import CoreServices
 import Foundation
 
+private final class ScriptDirectoryMonitorCallbackContext: @unchecked Sendable {
+    private let onChange: @MainActor @Sendable () -> Void
+
+    init(onChange: @escaping @MainActor @Sendable () -> Void) {
+        self.onChange = onChange
+    }
+
+    func directoryDidChange() {
+        Task { @MainActor [onChange] in
+            onChange()
+        }
+    }
+}
+
 /// Observes one directory tree; the store intentionally reconciles only its first-level files.
 final class ScriptDirectoryMonitor: @unchecked Sendable {
-    private let onChange: @MainActor @Sendable () -> Void
     private let queue = DispatchQueue(label: "com.taptick.script-directory-monitor")
     private var stream: FSEventStreamRef?
 
     init(directoryURL: URL, onChange: @escaping @MainActor @Sendable () -> Void) {
-        self.onChange = onChange
+        let callbackContext = ScriptDirectoryMonitorCallbackContext(onChange: onChange)
 
         var context = FSEventStreamContext(
             version: 0,
-            info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil,
-            release: nil,
+            info: Unmanaged.passUnretained(callbackContext).toOpaque(),
+            retain: { info in
+                guard let info else { return nil }
+                _ = Unmanaged<ScriptDirectoryMonitorCallbackContext>.fromOpaque(info).retain()
+                return info
+            },
+            release: { info in
+                guard let info else { return }
+                Unmanaged<ScriptDirectoryMonitorCallbackContext>.fromOpaque(info).release()
+            },
             copyDescription: nil
         )
         let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
             guard let info else { return }
-            let monitor = Unmanaged<ScriptDirectoryMonitor>.fromOpaque(info).takeUnretainedValue()
-            monitor.directoryDidChange()
+            let context = Unmanaged<ScriptDirectoryMonitorCallbackContext>
+                .fromOpaque(info)
+                .takeUnretainedValue()
+            context.directoryDidChange()
         }
         let flags =
             FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents)
@@ -48,11 +70,5 @@ final class ScriptDirectoryMonitor: @unchecked Sendable {
         FSEventStreamStop(stream)
         FSEventStreamInvalidate(stream)
         FSEventStreamRelease(stream)
-    }
-
-    private func directoryDidChange() {
-        Task { @MainActor [onChange] in
-            onChange()
-        }
     }
 }
