@@ -1,17 +1,28 @@
 # TapTick
 
-An application launcher, script runner, and native utility hub for macOS.
+An app launcher, script runner, menu bar customizer, and utilities hub. The swiss army knife for Mac.
 
-TapTick currently covers four shortcut and status surfaces:
+TapTick brings four essential Mac workflows together:
 
-- application launchers
-- shell scripts with autosave, native find, and undo/redo
-- one-line or two-line menu bar text with independently scheduled script output per line; empty output collapses its slot smoothly
-- built-in utilities such as the keystroke subtitle overlay
+- **Applications:** Launch, focus, or hide any app with a global shortcut.
 
-Some built-in utilities may require additional macOS permissions. The keystroke overlay uses Input Monitoring so it can observe global keyboard input and render an on-screen HUD, and its permission action will deep-link to the relevant System Settings pane when macOS no longer shows the one-shot prompt.
+  ![Applications settings](./public/screenshots/settings-applications.png)
 
-![](./public/screenshot-apps.png)
+- **Scripts:** Write scripts then run them globally or display result in menu bar.
+
+  ![Scripts settings](./public/screenshots/settings-scripts.png)
+
+- **Menu Bar:** Show live script output in customizable one-line or two-line slots.
+
+  ![Menu Bar settings](./public/screenshots/settings-menubar.png)
+
+- **Utilities:** Keep focused Mac tools one shortcut away.
+  - **Capture & Mark:** Capture a screen region to the clipboard, with optional line and rectangle annotations.
+  - **Large Type:** Display text full-screen or turn it into a QR code.
+  - **Keystroke Overlay:** Show key combinations in a customizable overlay for demos and recordings.
+  - **Window Manager (planned):** Snap, resize, and reposition windows with keyboard shortcuts.
+
+  ![Utilities settings](./public/screenshots/settings-utilities.png)
 
 Install from [GitHub Releases](https://github.com/amio/TapTick/releases)
 
