@@ -341,7 +341,7 @@
         ───────────────────────────── */
       .section {
         padding: 100px 24px;
-        max-width: 1100px;
+        max-width: 1200px;
         margin: 0 auto;
       }
 
@@ -645,7 +645,7 @@
         height: 100%;
         object-fit: contain;
         border-radius: var(--radius-xl);
-        /*box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.04);*/
+        box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.04);
         user-select: none;
         -webkit-user-drag: none;
       }
@@ -696,6 +696,58 @@
 
       footer a:hover {
         color: var(--text-primary);
+      }
+
+      /* ─────────────────────────────
+           Compact screenshot navigation
+        ───────────────────────────── */
+      @media (max-width: 1023px) {
+        .preview-left {
+          order: 2;
+        }
+
+        .preview-right {
+          order: 1;
+        }
+
+        .preview-tabs {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .preview-tab {
+          flex-direction: column;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 8px;
+          min-width: 0;
+          padding: 12px 8px 14px;
+          text-align: center;
+        }
+
+        .preview-tab::before {
+          inset: auto 12px 0;
+          width: auto;
+          height: 3px;
+          transform: scaleX(0);
+        }
+
+        .preview-tab.active::before,
+        .preview-tab:hover::before {
+          transform: scaleX(1);
+        }
+
+        .preview-tab-text {
+          align-items: center;
+          min-width: 0;
+          padding-top: 0;
+        }
+
+        .preview-tab-title {
+          font-size: 13px;
+          line-height: 1.25;
+        }
       }
 
       /* ─────────────────────────────
@@ -752,6 +804,12 @@
 
         footer { padding: 20px; }
       }
+
+      @media (max-width: 639px) {
+        .preview-tab-desc {
+          display: none;
+        }
+      }
     </style>
   </head>
   <body>
@@ -788,11 +846,12 @@
       <div class="hero-vignette"></div>
 
       <div class="hero-content">
-        <span class="hero-eyebrow">macOS Global Hotkeys</span>
+        <span class="hero-eyebrow">The Swiss Army Knife for Mac</span>
         <h1 class="hero-title">TapTick</h1>
         <p class="hero-subtitle">
-          Bind keyboard shortcuts to app launches and shell scripts. <br />
-          Do things, ASAP.
+          Launch apps, run scripts, customize your menu bar, and keep useful
+          tools one shortcut away.<br />
+          All in a native Mac app under 5 MB.
         </p>
         <div class="hero-cta">
           <a class="btn-download-main" href="https://github.com/amio/TapTick/releases/download/v1.5.5/TapTick-1.5.5.dmg">
