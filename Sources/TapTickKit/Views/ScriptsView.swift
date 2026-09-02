@@ -326,9 +326,7 @@ struct ScriptDetailView: View {
                 onSave: { updated in
                     try store.updateScript(updated)
                 },
-                onRun: {
-                    run(shortcutID: shortcut.id)
-                },
+                onRun: runSelectedShortcut,
                 onShowLog: {
                     showLogs(for: shortcut.id)
                 },
@@ -353,7 +351,10 @@ struct ScriptDetailView: View {
         logsPresentation = ScriptLogsPresentation(shortcutID: shortcutID)
     }
 
-    private func run(shortcutID: UUID) {
+    /// Resolve the target when the command fires because SwiftUI can retain the prior
+    /// detail button's keyboard action during a NavigationSplitView selection update.
+    private func runSelectedShortcut() {
+        guard let shortcutID = selectedShortcut?.id else { return }
         guard let runID = shortcutExecutor.execute(shortcutID: shortcutID) else { return }
         editorRunIDs[shortcutID] = runID
     }
