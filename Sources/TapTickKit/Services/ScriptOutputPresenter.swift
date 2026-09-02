@@ -166,8 +166,11 @@ public final class ScriptOutputPresenter {
             }
 
             guard await wait(for: ScriptOutputToastTiming.appearanceDuration) else { return }
-            animateBody(from: 0, to: 1, duration: ScriptOutputToastTiming.expansionDuration)
-            guard await wait(for: ScriptOutputToastTiming.expansionDuration) else { return }
+            let bodyDuration = ScriptOutputToastTiming.bodyDuration(
+                forTextWidth: model.currentItem.textWidth
+            )
+            animateBody(from: 0, to: 1, duration: bodyDuration)
+            guard await wait(for: bodyDuration) else { return }
             bodyAnimator.cancel()
             applyBodyProgress(1)
             model.phase = .revealed
@@ -245,9 +248,12 @@ public final class ScriptOutputPresenter {
 
     private func dismissToast() async {
         if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let bodyDuration = ScriptOutputToastTiming.bodyDuration(
+                forTextWidth: model.currentItem.textWidth
+            )
             model.phase = .compact
-            animateBody(from: 1, to: 0, duration: ScriptOutputToastTiming.collapseDuration)
-            guard await wait(for: ScriptOutputToastTiming.collapseDuration) else { return }
+            animateBody(from: 1, to: 0, duration: bodyDuration)
+            guard await wait(for: bodyDuration) else { return }
             bodyAnimator.cancel()
             applyBodyProgress(0)
 
@@ -430,11 +436,19 @@ private final class ScriptOutputPresentationModel {
 
 // MARK: - Toast View
 
+@MainActor
 private enum ScriptOutputToastTiming {
     static let appearanceDuration: TimeInterval = 0.18
-    static let expansionDuration: TimeInterval = 0.46
-    static let collapseDuration = expansionDuration
     static let contentSwapDuration: TimeInterval = 0.32
+    private static let maximumBodyDuration: TimeInterval = 0.48
+
+    static func bodyDuration(forTextWidth textWidth: CGFloat) -> TimeInterval {
+        let normalizedWidth = Double(
+            min(max(textWidth / ScriptOutputToastMetrics.maximumTextWidth, 0), 1)
+        )
+        let minimumDuration = maximumBodyDuration / 2
+        return minimumDuration + (maximumBodyDuration - minimumDuration) * normalizedWidth
+    }
 
     static func smootherstep(_ progress: CGFloat) -> CGFloat {
         let t = min(max(progress, 0), 1)
@@ -516,7 +530,7 @@ private enum ScriptOutputToastMetrics {
     static let contentSpacing: CGFloat = 13
     static let statusSymbolSize: CGFloat = 34
     static let statusGlyphSize: CGFloat = 18
-    static let maximumTextWidth: CGFloat = 600
+    static let maximumTextWidth: CGFloat = 720
 
     private static let textFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .medium)
 
