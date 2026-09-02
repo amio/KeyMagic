@@ -559,6 +559,8 @@ private enum ScriptOutputToastMetrics {
     static let statusSymbolSize: CGFloat = 34
     static let statusGlyphSize: CGFloat = 18
     static let maximumTextWidth: CGFloat = 720
+    private static let minimumTrailingStabilizationPadding: CGFloat = 3
+    private static let widthQuantum: CGFloat = 2
 
     private static let textFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .medium)
 
@@ -577,9 +579,28 @@ private enum ScriptOutputToastMetrics {
 
     static func contentSize(forTextWidth textWidth: CGFloat) -> NSSize {
         NSSize(
-            width: horizontalPadding * 2 + statusSymbolSize + contentSpacing + textWidth,
+            width: stabilizedContentWidth(forTextWidth: textWidth),
             height: collapsedDiameter
         )
+    }
+
+    /// Keeps every row on the same whole-point center phase as its animated viewport.
+    static func trailingStabilizationPadding(forTextWidth textWidth: CGFloat) -> CGFloat {
+        stabilizedContentWidth(forTextWidth: textWidth)
+            - naturalContentWidth(
+                forTextWidth: textWidth
+            )
+    }
+
+    private static func naturalContentWidth(forTextWidth textWidth: CGFloat) -> CGFloat {
+        horizontalPadding * 2 + statusSymbolSize + contentSpacing + textWidth
+    }
+
+    private static func stabilizedContentWidth(forTextWidth textWidth: CGFloat) -> CGFloat {
+        let paddedWidth =
+            naturalContentWidth(forTextWidth: textWidth)
+            + minimumTrailingStabilizationPadding
+        return ceil(paddedWidth / widthQuantum) * widthQuantum
     }
 }
 
@@ -658,6 +679,12 @@ private struct ScriptOutputToastContentView: View {
                         width: item.textWidth
                     )
                 }
+                .padding(
+                    .trailing,
+                    ScriptOutputToastMetrics.trailingStabilizationPadding(
+                        forTextWidth: item.textWidth
+                    )
+                )
         }
         .padding(.horizontal, ScriptOutputToastMetrics.horizontalPadding)
         .padding(.vertical, 12)
