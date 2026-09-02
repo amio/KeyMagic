@@ -2,6 +2,23 @@ import AppKit
 import QuartzCore
 import SwiftUI
 
+private extension CGPoint {
+    func centeredRect(for size: CGSize) -> CGRect {
+        CGRect(
+            x: x - size.width / 2,
+            y: y - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
+    }
+}
+
+private extension CGRect {
+    var center: CGPoint {
+        CGPoint(x: midX, y: midY)
+    }
+}
+
 /// Displays script output in a transient Liquid Glass toast at the center of the screen.
 @MainActor
 public final class ScriptOutputPresenter {
@@ -17,6 +34,9 @@ public final class ScriptOutputPresenter {
         view.onHoverChanged = { [weak self] isHovering in
             self?.handleHoverChange(isHovering)
         }
+        view.onDragEnded = { [weak self] in
+            self?.handleDragEnd()
+        }
         return view
     }()
     private lazy var panel: NSPanel = makePanel()
@@ -29,6 +49,8 @@ public final class ScriptOutputPresenter {
     private var remainingHoldDuration = TimeInterval.zero
     private var holdDeadline: TimeInterval?
     private var isPointerHovering = false
+    /// Stable screen-space origin. Only fresh placement or a completed drag may change it.
+    private var centerAnchor: CGPoint?
 
     /// How long the toast stays fully visible after its entrance animation.
     private let holdDuration: TimeInterval = 2
@@ -103,6 +125,11 @@ public final class ScriptOutputPresenter {
         } else {
             resumeHoldCountdown()
         }
+    }
+
+    private func handleDragEnd() {
+        centerAnchor = panel.frame.center
+        persistVerticalPosition()
     }
 
     private func pauseHoldCountdown() {
@@ -288,20 +315,16 @@ public final class ScriptOutputPresenter {
     }
 
     private func resizeExpandedPanel(textWidth: CGFloat) {
-        let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
         let contentSize = ScriptOutputToastMetrics.contentSize(forTextWidth: textWidth)
         let panelSize = ScriptOutputGlassToastView.panelSize(for: contentSize)
-        panel.setFrame(
-            NSRect(
-                x: center.x - panelSize.width / 2,
-                y: center.y - panelSize.height / 2,
-                width: panelSize.width,
-                height: panelSize.height
-            ),
-            display: true
-        )
+        applyPanelSize(panelSize)
         toastView.updateExpandedContentSize(contentSize)
         toastView.setExpansionProgress(1)
+    }
+
+    private func applyPanelSize(_ size: NSSize) {
+        guard let centerAnchor else { return }
+        panel.setFrame(centerAnchor.centeredRect(for: size), display: true)
     }
 
     private func animatePanelAlpha(
@@ -330,21 +353,22 @@ public final class ScriptOutputPresenter {
         hostingView.layoutSubtreeIfNeeded()
         let contentSize = hostingView.fittingSize
         let panelSize = ScriptOutputGlassToastView.panelSize(for: contentSize)
-        panel.setContentSize(panelSize)
-        toastView.prepare(expandedContentSize: contentSize)
 
         guard let screen = targetScreen() else { return }
 
         let frame = screen.visibleFrame
         let verticalPosition = preferredVerticalPositionFromTop()
-        let desiredOriginY =
-            frame.maxY - frame.height * verticalPosition - panelSize.height / 2
-        let maximumOriginY = max(frame.minY, frame.maxY - panelSize.height)
-        let origin = CGPoint(
-            x: frame.midX - panelSize.width / 2,
-            y: min(max(desiredOriginY, frame.minY), maximumOriginY)
+        let halfHeight = panelSize.height / 2
+        let minimumCenterY = frame.minY + halfHeight
+        let maximumCenterY = max(minimumCenterY, frame.maxY - halfHeight)
+        let desiredCenterY = frame.maxY - frame.height * verticalPosition
+        let anchor = CGPoint(
+            x: frame.midX,
+            y: min(max(desiredCenterY, minimumCenterY), maximumCenterY)
         )
-        panel.setFrameOrigin(origin)
+        centerAnchor = anchor
+        applyPanelSize(panelSize)
+        toastView.prepare(expandedContentSize: contentSize)
     }
 
     private func preferredVerticalPositionFromTop() -> CGFloat {
@@ -361,10 +385,14 @@ public final class ScriptOutputPresenter {
     }
 
     private func persistVerticalPosition() {
-        guard let screen = panel.screen, screen.visibleFrame.height > 0 else { return }
+        guard
+            let screen = panel.screen,
+            screen.visibleFrame.height > 0,
+            let centerAnchor
+        else { return }
 
         let visibleFrame = screen.visibleFrame
-        let positionFromTop = (visibleFrame.maxY - panel.frame.midY) / visibleFrame.height
+        let positionFromTop = (visibleFrame.maxY - centerAnchor.y) / visibleFrame.height
         let normalizedPosition = min(max(positionFromTop, 0), 1)
         UserDefaults.standard.set(
             Double(normalizedPosition),
@@ -572,7 +600,7 @@ private struct ScriptOutputToastContentView: View {
     let model: ScriptOutputPresentationModel
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        ZStack {
             toastContent(item: model.currentItem, phase: model.phase)
                 .offset(y: -model.contentSwapProgress * ScriptOutputToastMetrics.collapsedDiameter)
 
@@ -584,12 +612,12 @@ private struct ScriptOutputToastContentView: View {
                     )
             }
         }
+        .offset(x: compactBodyOffset)
         .frame(
             width: ScriptOutputToastMetrics.contentSize(
                 forTextWidth: model.viewportTextWidth
             ).width,
-            height: ScriptOutputToastMetrics.collapsedDiameter,
-            alignment: .leading
+            height: ScriptOutputToastMetrics.collapsedDiameter
         )
         .clipped()
         .fixedSize(horizontal: true, vertical: true)
@@ -600,6 +628,15 @@ private struct ScriptOutputToastContentView: View {
 
     private var accessibilityItem: ScriptOutputToastItem {
         model.nextItem ?? model.currentItem
+    }
+
+    /// Morphs the compact symbol anchor into the centered full-row anchor during reveal.
+    private var compactBodyOffset: CGFloat {
+        let contentWidth = ScriptOutputToastMetrics.contentSize(
+            forTextWidth: model.currentItem.textWidth
+        ).width
+        return (contentWidth - ScriptOutputToastMetrics.collapsedDiameter) / 2
+            * (1 - model.contentRevealProgress)
     }
 
     private func toastContent(
@@ -624,7 +661,7 @@ private struct ScriptOutputToastContentView: View {
         }
         .padding(.horizontal, ScriptOutputToastMetrics.horizontalPadding)
         .padding(.vertical, 12)
-        .frame(minHeight: ScriptOutputToastMetrics.collapsedDiameter, alignment: .leading)
+        .frame(minHeight: ScriptOutputToastMetrics.collapsedDiameter)
     }
 
     private func statusSymbol(
@@ -688,13 +725,10 @@ private final class ScriptOutputGlassToastView: NSView {
     private static let panelPadding: CGFloat = 24
 
     var onHoverChanged: ((Bool) -> Void)?
+    var onDragEnded: (() -> Void)?
 
     private let glassView: NSGlassEffectView
     private let glassContentView: ScriptOutputGlassContentView
-    private var expandedContentSize = NSSize(
-        width: ScriptOutputToastMetrics.collapsedDiameter,
-        height: ScriptOutputToastMetrics.collapsedDiameter
-    )
 
     init(contentView: NSView) {
         glassContentView = ScriptOutputGlassContentView(hostedView: contentView)
@@ -750,6 +784,7 @@ private final class ScriptOutputGlassToastView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.performDrag(with: event)
+        onDragEnded?()
     }
 
     func prepare(expandedContentSize: NSSize) {
@@ -758,7 +793,6 @@ private final class ScriptOutputGlassToastView: NSView {
     }
 
     func updateExpandedContentSize(_ expandedContentSize: NSSize) {
-        self.expandedContentSize = expandedContentSize
         glassContentView.expandedContentSize = expandedContentSize
     }
 
@@ -786,25 +820,17 @@ private final class ScriptOutputGlassToastView: NSView {
 
     private var compactFrame: NSRect {
         let diameter = ScriptOutputToastMetrics.collapsedDiameter
-        return NSRect(
-            x: bounds.midX - diameter / 2,
-            y: bounds.midY - diameter / 2,
-            width: diameter,
-            height: diameter
+        return bounds.center.centeredRect(
+            for: NSSize(width: diameter, height: diameter)
         )
     }
 
     private var expandedFrame: NSRect {
-        NSRect(
-            x: Self.panelPadding,
-            y: Self.panelPadding,
-            width: expandedContentSize.width,
-            height: expandedContentSize.height
-        )
+        bounds.center.centeredRect(for: glassContentView.expandedContentSize)
     }
 }
 
-/// Keeps the icon and text aligned to the moving left edge of the Glass surface.
+/// Keeps the full content viewport centered inside the animated Glass surface.
 private final class ScriptOutputGlassContentView: NSView {
     var expandedContentSize = NSSize.zero {
         didSet { needsLayout = true }
@@ -826,11 +852,6 @@ private final class ScriptOutputGlassContentView: NSView {
 
     override func layout() {
         super.layout()
-        hostedView.frame = NSRect(
-            x: 0,
-            y: (bounds.height - expandedContentSize.height) / 2,
-            width: expandedContentSize.width,
-            height: expandedContentSize.height
-        )
+        hostedView.frame = bounds.center.centeredRect(for: expandedContentSize)
     }
 }
