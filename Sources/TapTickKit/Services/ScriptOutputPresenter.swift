@@ -22,12 +22,13 @@ public final class ScriptOutputPresenter {
     private lazy var panel: NSPanel = makePanel()
     private lazy var bodyAnimator = ScriptOutputSmootherstepAnimator(view: toastView)
     private var entranceTask: Task<Void, Never>?
+    private var contentSwapTask: Task<Void, Never>?
     private var hideTask: Task<Void, Never>?
-    private var isShowing = false
+    private var lifecycle = ScriptOutputToastLifecycle.hidden
+    private var pendingItems: [ScriptOutputToastItem] = []
     private var remainingHoldDuration = TimeInterval.zero
     private var holdDeadline: TimeInterval?
     private var isPointerHovering = false
-    private var isHolding = false
 
     /// How long the toast stays fully visible after its entrance animation.
     private let holdDuration: TimeInterval = 2
@@ -37,25 +38,47 @@ public final class ScriptOutputPresenter {
         let display = subtitleText.split(whereSeparator: \.isNewline).joined(separator: " ")
         guard !display.isEmpty else { return }
 
-        if isShowing {
+        let item = ScriptOutputToastItem(
+            text: display,
+            textWidth: ScriptOutputToastMetrics.textWidth(for: display),
+            isError: !log.succeeded
+        )
+
+        switch lifecycle {
+        case .entering, .swapping:
+            pendingItems.append(item)
+        case .holding:
+            resetHoldCountdown()
+            startContentSwap(to: item)
+        case .hidden, .dismissing:
+            presentFresh(item)
+        }
+    }
+
+    private func presentFresh(_ item: ScriptOutputToastItem) {
+        if lifecycle != .hidden {
             persistVerticalPosition()
         }
+
         entranceTask?.cancel()
+        contentSwapTask?.cancel()
         bodyAnimator.cancel()
         resetHoldCountdown()
-        model.text = display
-        model.textWidth = ScriptOutputToastMetrics.textWidth(for: display)
-        model.isError = !log.succeeded
+        pendingItems.removeAll()
+        model.currentItem = item
+        model.nextItem = nil
+        model.viewportTextWidth = item.textWidth
+        model.contentSwapProgress = 0
         model.phase = .hidden
         model.contentRevealProgress = 0
         layoutPanel()
         panel.alphaValue = 0
 
-        if !isShowing {
-            isShowing = true
+        if lifecycle == .hidden {
             panel.orderFrontRegardless()
         }
 
+        lifecycle = .entering
         playEntranceAnimation()
     }
 
@@ -63,7 +86,7 @@ public final class ScriptOutputPresenter {
 
     private func beginHold() {
         remainingHoldDuration = holdDuration
-        isHolding = true
+        lifecycle = .holding
         isPointerHovering = toastView.isPointerInsideGlass
 
         if !isPointerHovering {
@@ -73,7 +96,7 @@ public final class ScriptOutputPresenter {
 
     private func handleHoverChange(_ isHovering: Bool) {
         isPointerHovering = isHovering
-        guard isHolding else { return }
+        guard lifecycle == .holding else { return }
 
         if isHovering {
             pauseHoldCountdown()
@@ -95,7 +118,7 @@ public final class ScriptOutputPresenter {
     }
 
     private func resumeHoldCountdown() {
-        guard isHolding, !isPointerHovering, hideTask == nil else { return }
+        guard lifecycle == .holding, !isPointerHovering, hideTask == nil else { return }
 
         let duration = remainingHoldDuration
         holdDeadline = ProcessInfo.processInfo.systemUptime + duration
@@ -103,11 +126,11 @@ public final class ScriptOutputPresenter {
             guard let self else { return }
 
             guard await wait(for: duration) else { return }
-            guard isHolding, !isPointerHovering else { return }
+            guard lifecycle == .holding, !isPointerHovering else { return }
 
             remainingHoldDuration = 0
             holdDeadline = nil
-            isHolding = false
+            lifecycle = .dismissing
             await dismissToast()
         }
     }
@@ -118,7 +141,6 @@ public final class ScriptOutputPresenter {
         remainingHoldDuration = holdDuration
         holdDeadline = nil
         isPointerHovering = false
-        isHolding = false
     }
 
     private func playEntranceAnimation() {
@@ -129,7 +151,8 @@ public final class ScriptOutputPresenter {
                 applyBodyProgress(1)
                 model.phase = .revealed
                 panel.alphaValue = 1
-                beginHold()
+                entranceTask = nil
+                showNextPendingItemOrBeginHold()
                 return
             }
 
@@ -148,8 +171,76 @@ public final class ScriptOutputPresenter {
             bodyAnimator.cancel()
             applyBodyProgress(1)
             model.phase = .revealed
-            beginHold()
+            entranceTask = nil
+            showNextPendingItemOrBeginHold()
         }
+    }
+
+    private func startContentSwap(to item: ScriptOutputToastItem) {
+        lifecycle = .swapping
+
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            finishContentSwap(with: item)
+            showNextPendingItemOrBeginHold()
+            return
+        }
+
+        let startWidth = model.viewportTextWidth
+        model.nextItem = item
+        model.contentSwapProgress = 0
+        contentSwapTask = Task { [weak self] in
+            guard let self else { return }
+
+            bodyAnimator.animate(
+                from: 0,
+                to: 1,
+                duration: ScriptOutputToastTiming.contentSwapDuration
+            ) { [weak self] progress in
+                self?.applyContentSwapProgress(
+                    progress,
+                    fromTextWidth: startWidth,
+                    toTextWidth: item.textWidth
+                )
+            }
+            guard await wait(for: ScriptOutputToastTiming.contentSwapDuration) else { return }
+            bodyAnimator.cancel()
+            applyContentSwapProgress(
+                1,
+                fromTextWidth: startWidth,
+                toTextWidth: item.textWidth
+            )
+            finishContentSwap(with: item)
+            contentSwapTask = nil
+            showNextPendingItemOrBeginHold()
+        }
+    }
+
+    private func applyContentSwapProgress(
+        _ progress: CGFloat,
+        fromTextWidth: CGFloat,
+        toTextWidth: CGFloat
+    ) {
+        model.contentSwapProgress = progress
+        let textWidth = fromTextWidth + (toTextWidth - fromTextWidth) * progress
+        model.viewportTextWidth = textWidth
+        resizeExpandedPanel(textWidth: textWidth)
+    }
+
+    private func finishContentSwap(with item: ScriptOutputToastItem) {
+        model.currentItem = item
+        model.nextItem = nil
+        model.viewportTextWidth = item.textWidth
+        model.contentSwapProgress = 0
+        resizeExpandedPanel(textWidth: item.textWidth)
+    }
+
+    private func showNextPendingItemOrBeginHold() {
+        guard !pendingItems.isEmpty else {
+            beginHold()
+            return
+        }
+
+        startContentSwap(to: pendingItems.removeFirst())
     }
 
     private func dismissToast() async {
@@ -174,7 +265,7 @@ public final class ScriptOutputPresenter {
         }
 
         persistVerticalPosition()
-        isShowing = false
+        lifecycle = .hidden
         isPointerHovering = false
         panel.orderOut(nil)
     }
@@ -188,6 +279,23 @@ public final class ScriptOutputPresenter {
     private func applyBodyProgress(_ progress: CGFloat) {
         toastView.setExpansionProgress(progress)
         model.contentRevealProgress = progress
+    }
+
+    private func resizeExpandedPanel(textWidth: CGFloat) {
+        let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+        let contentSize = ScriptOutputToastMetrics.contentSize(forTextWidth: textWidth)
+        let panelSize = ScriptOutputGlassToastView.panelSize(for: contentSize)
+        panel.setFrame(
+            NSRect(
+                x: center.x - panelSize.width / 2,
+                y: center.y - panelSize.height / 2,
+                width: panelSize.width,
+                height: panelSize.height
+            ),
+            display: true
+        )
+        toastView.updateExpandedContentSize(contentSize)
+        toastView.setExpansionProgress(1)
     }
 
     private func animatePanelAlpha(
@@ -293,13 +401,30 @@ public final class ScriptOutputPresenter {
 
 // MARK: - Presentation Model
 
+private enum ScriptOutputToastLifecycle {
+    case hidden
+    case entering
+    case holding
+    case swapping
+    case dismissing
+}
+
+private struct ScriptOutputToastItem {
+    static let empty = ScriptOutputToastItem(text: "", textWidth: 0, isError: false)
+
+    let text: String
+    let textWidth: CGFloat
+    let isError: Bool
+}
+
 @Observable
 @MainActor
 private final class ScriptOutputPresentationModel {
-    var text = ""
-    var textWidth = CGFloat.zero
+    var currentItem = ScriptOutputToastItem.empty
+    var nextItem: ScriptOutputToastItem?
+    var viewportTextWidth = CGFloat.zero
     var contentRevealProgress = CGFloat.zero
-    var isError = false
+    var contentSwapProgress = CGFloat.zero
     var phase = ScriptOutputToastPhase.compact
 }
 
@@ -309,6 +434,7 @@ private enum ScriptOutputToastTiming {
     static let appearanceDuration: TimeInterval = 0.18
     static let expansionDuration: TimeInterval = 0.46
     static let collapseDuration = expansionDuration
+    static let contentSwapDuration: TimeInterval = 0.32
 
     static func smootherstep(_ progress: CGFloat) -> CGFloat {
         let t = min(max(progress, 0), 1)
@@ -406,6 +532,13 @@ private enum ScriptOutputToastMetrics {
         )
         return min(maximumTextWidth, ceil(max(1, bounds.width)))
     }
+
+    static func contentSize(forTextWidth textWidth: CGFloat) -> NSSize {
+        NSSize(
+            width: horizontalPadding * 2 + statusSymbolSize + contentSpacing + textWidth,
+            height: collapsedDiameter
+        )
+    }
 }
 
 private enum ScriptOutputToastPhase {
@@ -425,27 +558,53 @@ private struct ScriptOutputToastContentView: View {
     let model: ScriptOutputPresentationModel
 
     var body: some View {
-        toastContent(for: model.phase)
-            .fixedSize(horizontal: true, vertical: true)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(model.isError ? "Script failed" : "Script completed")
-            .accessibilityValue(model.text)
+        ZStack(alignment: .leading) {
+            toastContent(item: model.currentItem, phase: model.phase)
+                .offset(y: -model.contentSwapProgress * ScriptOutputToastMetrics.collapsedDiameter)
+
+            if let nextItem = model.nextItem {
+                toastContent(item: nextItem, phase: model.phase)
+                    .offset(
+                        y: (1 - model.contentSwapProgress)
+                            * ScriptOutputToastMetrics.collapsedDiameter
+                    )
+            }
+        }
+        .frame(
+            width: ScriptOutputToastMetrics.contentSize(
+                forTextWidth: model.viewportTextWidth
+            ).width,
+            height: ScriptOutputToastMetrics.collapsedDiameter,
+            alignment: .leading
+        )
+        .clipped()
+        .fixedSize(horizontal: true, vertical: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityItem.isError ? "Script failed" : "Script completed")
+        .accessibilityValue(accessibilityItem.text)
     }
 
-    private func toastContent(for phase: ScriptOutputToastPhase) -> some View {
-        HStack(spacing: ScriptOutputToastMetrics.contentSpacing) {
-            statusSymbol(for: phase)
+    private var accessibilityItem: ScriptOutputToastItem {
+        model.nextItem ?? model.currentItem
+    }
 
-            Text(model.text)
+    private func toastContent(
+        item: ScriptOutputToastItem,
+        phase: ScriptOutputToastPhase
+    ) -> some View {
+        HStack(spacing: ScriptOutputToastMetrics.contentSpacing) {
+            statusSymbol(isError: item.isError, phase: phase)
+
+            Text(item.text)
                 .font(.system(size: 16, weight: .medium, design: .monospaced))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(width: model.textWidth, alignment: .leading)
+                .frame(width: item.textWidth, alignment: .leading)
                 .mask {
                     ScriptOutputTextRevealMask(
                         progress: model.contentRevealProgress,
-                        width: model.textWidth
+                        width: item.textWidth
                     )
                 }
         }
@@ -454,12 +613,15 @@ private struct ScriptOutputToastContentView: View {
         .frame(minHeight: ScriptOutputToastMetrics.collapsedDiameter, alignment: .leading)
     }
 
-    private func statusSymbol(for phase: ScriptOutputToastPhase) -> some View {
+    private func statusSymbol(
+        isError: Bool,
+        phase: ScriptOutputToastPhase
+    ) -> some View {
         ZStack {
             Circle()
                 .stroke(Color.primary.opacity(0.72), lineWidth: 1.5)
 
-            Image(systemName: model.isError ? "exclamationmark" : "checkmark")
+            Image(systemName: isError ? "exclamationmark" : "checkmark")
                 .font(.system(size: ScriptOutputToastMetrics.statusGlyphSize, weight: .bold))
         }
         .foregroundStyle(.primary)
@@ -577,9 +739,13 @@ private final class ScriptOutputGlassToastView: NSView {
     }
 
     func prepare(expandedContentSize: NSSize) {
+        updateExpandedContentSize(expandedContentSize)
+        showCompact()
+    }
+
+    func updateExpandedContentSize(_ expandedContentSize: NSSize) {
         self.expandedContentSize = expandedContentSize
         glassContentView.expandedContentSize = expandedContentSize
-        showCompact()
     }
 
     func showCompact() {
