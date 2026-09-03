@@ -763,6 +763,11 @@ private struct ScriptOutputTextRevealMask: View {
 /// Owns the native Glass surface at the panel boundary so AppKit can composite its hosted content.
 private final class ScriptOutputGlassToastView: NSView {
     private static let panelPadding: CGFloat = 24
+    private static let lightModeGlassTintOpacity: CGFloat = 0.2
+    private static let lightModeSurfaceScrimOpacity: CGFloat = 0.4
+    private static let lightModeShadowOpacity: Float = 0.18
+    private static let shadowRadius: CGFloat = 12
+    private static let shadowOffset = CGSize(width: 0, height: -4)
 
     var onHoverChanged: ((Bool) -> Void)?
     var onDragEnded: (() -> Void)?
@@ -779,6 +784,7 @@ private final class ScriptOutputGlassToastView: NSView {
         glassView.style = .regular
         glassView.contentView = glassContentView
         addSubview(glassView)
+        configureSurfaceAppearance()
         glassView.addTrackingArea(
             NSTrackingArea(
                 rect: .zero,
@@ -792,6 +798,11 @@ private final class ScriptOutputGlassToastView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateSurfaceAppearance()
     }
 
     static func panelSize(for contentSize: NSSize) -> NSSize {
@@ -872,9 +883,39 @@ private final class ScriptOutputGlassToastView: NSView {
             height: compactFrame.height + (expandedFrame.height - compactFrame.height) * t
         )
         glassView.frame = frame
-        glassView.cornerRadius = min(
+        let cornerRadius = min(
             ScriptOutputToastMetrics.collapsedDiameter / 2,
             frame.height / 2
+        )
+        glassView.cornerRadius = cornerRadius
+        layer?.shadowPath = CGPath(
+            roundedRect: frame,
+            cornerWidth: cornerRadius,
+            cornerHeight: cornerRadius,
+            transform: nil
+        )
+    }
+
+    private func configureSurfaceAppearance() {
+        guard let layer else { return }
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowRadius = Self.shadowRadius
+        layer.shadowOffset = Self.shadowOffset
+        updateSurfaceAppearance()
+    }
+
+    private func updateSurfaceAppearance() {
+        let isLightMode =
+            effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        layer?.shadowOpacity = isLightMode ? Self.lightModeShadowOpacity : 0
+        glassView.tintColor =
+            isLightMode
+            ? NSColor.white.withAlphaComponent(Self.lightModeGlassTintOpacity)
+            : nil
+        glassContentView.setSurfaceScrimColor(
+            isLightMode
+                ? NSColor.white.withAlphaComponent(Self.lightModeSurfaceScrimOpacity)
+                : nil
         )
     }
 
@@ -901,6 +942,7 @@ private final class ScriptOutputGlassContentView: NSView {
     init(hostedView: NSView) {
         self.hostedView = hostedView
         super.init(frame: .zero)
+        wantsLayer = true
         clipsToBounds = true
         addSubview(hostedView)
     }
@@ -913,5 +955,9 @@ private final class ScriptOutputGlassContentView: NSView {
     override func layout() {
         super.layout()
         hostedView.frame = bounds.center.centeredRect(for: expandedContentSize)
+    }
+
+    func setSurfaceScrimColor(_ color: NSColor?) {
+        layer?.backgroundColor = color?.cgColor
     }
 }
