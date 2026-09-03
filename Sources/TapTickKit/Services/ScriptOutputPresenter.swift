@@ -40,6 +40,7 @@ public final class ScriptOutputPresenter {
         return view
     }()
     private lazy var panel: NSPanel = makePanel()
+    private lazy var appearanceAnimator = ScriptOutputSmootherstepAnimator(view: toastView)
     private lazy var bodyAnimator = ScriptOutputSmootherstepAnimator(view: toastView)
     private var entranceTask: Task<Void, Never>?
     private var contentSwapTask: Task<Void, Never>?
@@ -84,6 +85,7 @@ public final class ScriptOutputPresenter {
 
         entranceTask?.cancel()
         contentSwapTask?.cancel()
+        appearanceAnimator.cancel()
         bodyAnimator.cancel()
         resetHoldCountdown()
         pendingItems.removeAll()
@@ -94,7 +96,7 @@ public final class ScriptOutputPresenter {
         model.phase = .hidden
         model.contentRevealProgress = 0
         layoutPanel()
-        panel.alphaValue = 0
+        applyAppearanceProgress(0)
 
         if lifecycle == .hidden {
             panel.orderFrontRegardless()
@@ -177,22 +179,23 @@ public final class ScriptOutputPresenter {
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 applyBodyProgress(1)
                 model.phase = .revealed
-                panel.alphaValue = 1
+                applyAppearanceProgress(1)
                 entranceTask = nil
                 showNextPendingItemOrBeginHold()
                 return
             }
 
-            animatePanelAlpha(
-                to: 1,
-                duration: ScriptOutputToastTiming.appearanceDuration,
-                timingFunction: CAMediaTimingFunction(name: .easeOut)
-            )
-            withAnimation(.easeOut(duration: ScriptOutputToastTiming.appearanceDuration)) {
+            animateAppearance(from: 0, to: 1)
+            guard await wait(for: ScriptOutputToastTiming.iconStagger) else { return }
+
+            withAnimation(.easeOut(duration: ScriptOutputToastTiming.iconDuration)) {
                 model.phase = .compact
             }
 
-            guard await wait(for: ScriptOutputToastTiming.appearanceDuration) else { return }
+            guard await wait(for: ScriptOutputToastTiming.iconDuration) else { return }
+            appearanceAnimator.cancel()
+            applyAppearanceProgress(1)
+
             let bodyDuration = ScriptOutputToastTiming.bodyDuration(
                 forTextWidth: model.currentItem.textWidth
             )
@@ -284,17 +287,17 @@ public final class ScriptOutputPresenter {
             bodyAnimator.cancel()
             applyBodyProgress(0)
 
-            animatePanelAlpha(
-                to: 0,
-                duration: ScriptOutputToastTiming.appearanceDuration,
-                timingFunction: CAMediaTimingFunction(name: .easeIn)
-            )
-            withAnimation(.easeIn(duration: ScriptOutputToastTiming.appearanceDuration)) {
+            withAnimation(.easeIn(duration: ScriptOutputToastTiming.iconDuration)) {
                 model.phase = .hidden
             }
-            guard await wait(for: ScriptOutputToastTiming.appearanceDuration) else { return }
+            guard await wait(for: ScriptOutputToastTiming.iconStagger) else { return }
+
+            animateAppearance(from: 1, to: 0)
+            guard await wait(for: ScriptOutputToastTiming.surfaceDuration) else { return }
+            appearanceAnimator.cancel()
+            applyAppearanceProgress(0)
         } else {
-            panel.alphaValue = 0
+            applyAppearanceProgress(0)
         }
 
         persistVerticalPosition()
@@ -307,6 +310,25 @@ public final class ScriptOutputPresenter {
         bodyAnimator.animate(from: start, to: end, duration: duration) { [weak self] progress in
             self?.applyBodyProgress(progress)
         }
+    }
+
+    private func animateAppearance(from start: CGFloat, to end: CGFloat) {
+        appearanceAnimator.animate(
+            from: start,
+            to: end,
+            duration: ScriptOutputToastTiming.surfaceDuration
+        ) { [weak self] progress in
+            self?.applyAppearanceProgress(progress)
+        }
+    }
+
+    private func applyAppearanceProgress(_ progress: CGFloat) {
+        let t = min(max(progress, 0), 1)
+        panel.alphaValue = t
+        toastView.setAppearanceScale(
+            ScriptOutputToastMetrics.initialAppearanceScale
+                + (1 - ScriptOutputToastMetrics.initialAppearanceScale) * t
+        )
     }
 
     private func applyBodyProgress(_ progress: CGFloat) {
@@ -325,18 +347,6 @@ public final class ScriptOutputPresenter {
     private func applyPanelSize(_ size: NSSize) {
         guard let centerAnchor else { return }
         panel.setFrame(centerAnchor.centeredRect(for: size), display: true)
-    }
-
-    private func animatePanelAlpha(
-        to alpha: CGFloat,
-        duration: TimeInterval,
-        timingFunction: CAMediaTimingFunction
-    ) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration
-            context.timingFunction = timingFunction
-            panel.animator().alphaValue = alpha
-        }
     }
 
     private func wait(for duration: TimeInterval) async -> Bool {
@@ -466,7 +476,9 @@ private final class ScriptOutputPresentationModel {
 
 @MainActor
 private enum ScriptOutputToastTiming {
-    static let appearanceDuration: TimeInterval = 0.18
+    static let surfaceDuration: TimeInterval = 0.2
+    static let iconDuration: TimeInterval = 0.2
+    static let iconStagger: TimeInterval = 0.1
     static let contentSwapDuration: TimeInterval = 0.32
     private static let maximumBodyDuration: TimeInterval = 0.48
 
@@ -554,6 +566,7 @@ private enum ScriptOutputToastPosition {
 @MainActor
 private enum ScriptOutputToastMetrics {
     static let collapsedDiameter: CGFloat = 58
+    static let initialAppearanceScale: CGFloat = 0.3
     static let horizontalPadding: CGFloat = 12
     static let contentSpacing: CGFloat = 13
     static let statusSymbolSize: CGFloat = 34
@@ -762,6 +775,7 @@ private final class ScriptOutputGlassToastView: NSView {
         glassView = NSGlassEffectView()
         super.init(frame: .zero)
 
+        wantsLayer = true
         glassView.style = .regular
         glassView.contentView = glassContentView
         addSubview(glassView)
@@ -821,6 +835,25 @@ private final class ScriptOutputGlassToastView: NSView {
 
     func updateExpandedContentSize(_ expandedContentSize: NSSize) {
         glassContentView.expandedContentSize = expandedContentSize
+    }
+
+    func setAppearanceScale(_ scale: CGFloat) {
+        guard let layer else { return }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
+        let visualCenter = CGPoint(x: 0.5, y: 0.5)
+        if layer.anchorPoint != visualCenter {
+            var position = layer.position
+            position.x += (visualCenter.x - layer.anchorPoint.x) * layer.bounds.width
+            position.y += (visualCenter.y - layer.anchorPoint.y) * layer.bounds.height
+            layer.position = position
+            layer.anchorPoint = visualCenter
+        }
+
+        layer.transform = CATransform3DMakeScale(scale, scale, 1)
+        CATransaction.commit()
     }
 
     func showCompact() {
