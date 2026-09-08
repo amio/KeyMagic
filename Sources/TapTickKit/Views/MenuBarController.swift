@@ -187,7 +187,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
 
         let appShortcuts = store.shortcuts.filter { $0.isEnabled && $0.action.isLaunchApp }
-        let scriptShortcuts = store.shortcuts.filter { $0.isEnabled && !$0.action.isLaunchApp }
+        let scriptShortcuts = store.shortcuts.filter { $0.isEnabled && !$0.action.isLaunchApp && $0.keyCombo != nil }
         let hasApps = !appShortcuts.isEmpty
         let hasScripts = !scriptShortcuts.isEmpty
 
