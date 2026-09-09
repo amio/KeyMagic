@@ -57,6 +57,36 @@ struct ScriptRunnerTests {
         #expect(result.output.utf8.count == byteCount)
     }
 
+    @Test("Timeout stops scripts that ignore TERM and preserves partial output")
+    func timesOutUnresponsiveScript() async throws {
+        let url = try makeScript("#!/bin/sh\ntrap '' TERM\nprintf partial\nwhile :; do :; done")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let result = await ScriptRunner.process(timeout: 2).run(ScriptCommand(fileURL: url))
+
+        #expect(!result.succeeded)
+        #expect(result.output.contains("partial"))
+        #expect(result.output.contains("timed out"))
+        #expect(result.duration < 5)
+        let log = ScriptExecutionLog(shortcutID: UUID(), result: result)
+        let restored = try JSONDecoder().decode(ScriptExecutionLog.self, from: JSONEncoder().encode(log))
+        #expect(restored.displayText.contains("timed out"))
+        #expect(restored.subtitleText?.contains("timed out") == true)
+    }
+
+    @Test("Timeout also covers inherited pipes after the script exits")
+    func timesOutInheritedPipe() async throws {
+        let url = try makeScript("#!/bin/sh\n/bin/sleep 30 &\nprintf started\nexit 0")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let result = await ScriptRunner.process(timeout: 2).run(ScriptCommand(fileURL: url))
+
+        #expect(!result.succeeded)
+        #expect(result.output.contains("started"))
+        #expect(result.output.contains("timed out"))
+        #expect(result.duration < 5)
+    }
+
     private func makeScript(_ source: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("TapTickRunner-\(UUID().uuidString)", isDirectory: true)

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /** A managed executable accepted by the low-level script process boundary. */
@@ -107,18 +108,26 @@ struct ScriptRunner: Sendable {
         await operation(command)
     }
 
-    static let live = ScriptRunner { command in
-        await runProcess(command)
+    static let live = process(timeout: 60)
+
+    static func process(timeout: TimeInterval) -> ScriptRunner {
+        precondition(timeout > 0 && timeout.isFinite)
+        return ScriptRunner { command in
+            await withCheckedContinuation { continuation in
+                // Blocking process IO must not occupy Swift's cooperative executor.
+                DispatchQueue.global(qos: .userInitiated).async {
+                    continuation.resume(returning: runProcess(command, timeout: timeout))
+                }
+            }
+        }
     }
 
-    private static func runProcess(_ command: ScriptCommand) async -> ScriptExecutionResult {
+    private static func runProcess(_ command: ScriptCommand, timeout: TimeInterval) -> ScriptExecutionResult {
         let startedAt = Date()
         let startedUptime = DispatchTime.now().uptimeNanoseconds
         let elapsed: () -> TimeInterval = {
             TimeInterval(DispatchTime.now().uptimeNanoseconds - startedUptime) / 1_000_000_000
         }
-        let process = Process()
-        let pipe = Pipe()
 
         guard FileManager.default.fileExists(atPath: command.fileURL.path) else {
             return failure(
@@ -145,31 +154,79 @@ struct ScriptRunner: Sendable {
             )
         }
 
-        process.executableURL = command.fileURL
-        process.currentDirectoryURL = command.fileURL.deletingLastPathComponent()
-        process.environment = ScriptExecutionEnvironment.environment
-        process.standardOutput = pipe
-        process.standardError = pipe
-
         do {
-            try process.run()
-            let outputHandle = pipe.fileHandleForReading
-            let outputTask = Task.detached(priority: .userInitiated) {
-                try outputHandle.readToEnd() ?? Data()
+            let pipe = Pipe()
+            defer {
+                try? pipe.fileHandleForReading.close()
+                try? pipe.fileHandleForWriting.close()
             }
-
-            process.waitUntilExit()
-            let data = try await outputTask.value
-            let output = String(decoding: data, as: UTF8.self)
-            let exitCode = process.terminationStatus
-
-            if exitCode != 0 {
-                print("TapTick: Script exited with code \(exitCode)")
+            let pid = try spawn(command, output: pipe)
+            var reaped = false
+            defer {
+                if !reaped {
+                    kill(-pid, SIGKILL)
+                    var status: Int32 = 0
+                    while waitpid(pid, &status, 0) == -1 && errno == EINTR {}
+                }
             }
+            try? pipe.fileHandleForWriting.close()
+            let descriptor = pipe.fileHandleForReading.fileDescriptor
+            guard fcntl(descriptor, F_SETFL, O_NONBLOCK) != -1 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            var data = Data()
+            var status: Int32 = 0
+            var exited = false
+            var reachedEOF = false
+            var timedOut = false
+            var bytes = [UInt8](repeating: 0, count: 8192)
 
+            // Keep the leader unreaped until cleanup so its process-group ID cannot be reused.
+            // The deadline covers inherited output pipes as well as the script itself.
+            while !exited || !reachedEOF {
+                if elapsed() >= timeout {
+                    timedOut = true
+                    kill(-pid, SIGKILL)
+                    break
+                }
+                let count = bytes.withUnsafeMutableBytes {
+                    Darwin.read(descriptor, $0.baseAddress, $0.count)
+                }
+                if count > 0 {
+                    data.append(contentsOf: bytes.prefix(count))
+                } else if count == 0 {
+                    reachedEOF = true
+                } else if errno != EAGAIN && errno != EINTR {
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+                var info = siginfo_t()
+                if waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) == 0 {
+                    exited = info.si_pid == pid
+                } else if errno != EINTR {
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+                if count <= 0 && (!exited || !reachedEOF) {
+                    usleep(10_000)
+                }
+            }
+            if !exited { kill(-pid, SIGKILL) }
+            while waitpid(pid, &status, 0) == -1 {
+                if errno != EINTR { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            }
+            reaped = true
+            var output = String(decoding: data, as: UTF8.self)
+            let termination: ScriptTermination
+            if timedOut {
+                let message = "Script timed out after \(timeout.formatted()) seconds."
+                output += output.isEmpty ? message : "\n\n\(message)"
+                termination = .failed(message)
+            } else {
+                let exitCode = status & 0x7f == 0 ? (status >> 8) & 0xff : 128 + (status & 0x7f)
+                termination = .exited(exitCode)
+            }
             return ScriptExecutionResult(
                 output: output,
-                termination: .exited(exitCode),
+                termination: termination,
                 startedAt: startedAt,
                 duration: elapsed()
             )
@@ -183,6 +240,44 @@ struct ScriptRunner: Sendable {
                 duration: elapsed()
             )
         }
+    }
+
+    private static func spawn(_ command: ScriptCommand, output: Pipe) throws -> pid_t {
+        let executable = command.fileURL
+        let directory = executable.deletingLastPathComponent()
+        let environment = ScriptExecutionEnvironment.environment
+        let stdin = try FileHandle(forReadingFrom: URL(fileURLWithPath: "/dev/null"))
+        defer { try? stdin.close() }
+        var actions: posix_spawn_file_actions_t?
+        var attributes: posix_spawnattr_t?
+        posix_spawn_file_actions_init(&actions)
+        posix_spawnattr_init(&attributes)
+        defer {
+            posix_spawn_file_actions_destroy(&actions)
+            posix_spawnattr_destroy(&attributes)
+        }
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT))
+        posix_spawnattr_setpgroup(&attributes, 0)
+        posix_spawn_file_actions_adddup2(&actions, stdin.fileDescriptor, STDIN_FILENO)
+        posix_spawn_file_actions_adddup2(&actions, output.fileHandleForWriting.fileDescriptor, STDOUT_FILENO)
+        posix_spawn_file_actions_adddup2(&actions, output.fileHandleForWriting.fileDescriptor, STDERR_FILENO)
+        let directoryError = posix_spawn_file_actions_addchdir(&actions, directory.path)
+        guard directoryError == 0 else { throw POSIXError(POSIXErrorCode(rawValue: directoryError) ?? .EIO) }
+
+        let argv = [executable.path].map { strdup($0) } + [nil]
+        let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer {
+            argv.forEach { free($0) }
+            envp.forEach { free($0) }
+        }
+        var pid: pid_t = 0
+        let error = argv.withUnsafeBufferPointer { argv in
+            envp.withUnsafeBufferPointer { envp in
+                posix_spawn(&pid, executable.path, &actions, &attributes, argv.baseAddress!, envp.baseAddress!)
+            }
+        }
+        guard error == 0 else { throw POSIXError(POSIXErrorCode(rawValue: error) ?? .EIO) }
+        return pid
     }
 
     private static func failure(
