@@ -1,5 +1,4 @@
 import AppKit
-import FoundationModels
 import SwiftUI
 
 private struct ScriptLogsPresentation: Identifiable {
@@ -714,11 +713,15 @@ struct ScriptEditView: View {
     @State private var saveError: String?
     @State private var savedStatusOpacity = 0.0
 
-    // AI generation state
-    @State private var isGenerating = false
-    @State private var generationError: String?
-    @State private var generationTask: Task<Void, Never>?
-    @State private var generationRequestID: UUID?
+    @State private var generation = ScriptGenerationService()
+    @State private var isPromptExpanded = false
+    @State private var generationPrompt = ScriptGenerationRequest.defaultPrompt
+    @AppStorage("scriptGenerationProvider") private var generationProviderID = ""
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var selectedProvider: ScriptGenerationProvider {
+        ScriptGenerationProvider(rawValue: generationProviderID) ?? .os
+    }
 
     init(
         shortcut: Shortcut,
@@ -775,45 +778,19 @@ struct ScriptEditView: View {
         }
     }
 
-    /// Whether the on-device Foundation Models framework is usable on this system.
-    private var isAIAvailable: Bool {
-        SystemLanguageModel.default.availability == .available
-    }
-
-    /// Human-readable reason when AI generation is unavailable.
-    private var aiUnavailableReason: String? {
-        switch SystemLanguageModel.default.availability {
-        case .available:
-            return nil
-        case .unavailable(let reason):
-            switch reason {
-            case .deviceNotEligible:
-                return "This Mac does not support Apple Intelligence"
-            case .modelNotReady:
-                return "Apple Intelligence model is not ready — check Settings"
-            case .appleIntelligenceNotEnabled:
-                return "Enable Apple Intelligence in System Settings"
-            @unknown default:
-                return "Apple Intelligence is not available"
-            }
-        @unknown default:
-            return "Apple Intelligence is not available"
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             scriptEditor
 
             // Inline error banner for AI generation failures
-            if let error = generationError {
+            if let error = generation.error {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.yellow)
                     Text(error)
                         .font(.caption)
                     Spacer()
-                    Button("Dismiss") { generationError = nil }
+                    Button("Dismiss") { generation.error = nil }
                         .font(.caption)
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
@@ -839,10 +816,25 @@ struct ScriptEditView: View {
                 deleteButton
             }
         }
+        .task {
+            await generation.refresh()
+            if generationProviderID.isEmpty,
+                let provider = ScriptGenerationProvider.allCases.first(where: { generation.status(for: $0).isAvailable }
+                )
+            {
+                generationProviderID = provider.rawValue
+            }
+        }
+        .onChange(of: generation.preview) { _, source in
+            if let source { editorController.showPreview(source) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await generation.refresh() }
+        }
         .onDisappear {
+            cancelGeneration()
             flushAutosave()
             savedStatusTask?.cancel()
-            cancelGeneration()
         }
         .onChange(of: shortcut) { _, updatedShortcut in
             receiveStoreUpdate(updatedShortcut)
@@ -883,19 +875,67 @@ struct ScriptEditView: View {
     private var scriptEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
             editorToolbar
-            ScriptTextEditor(
-                text: $draftState.draft.scriptContent,
-                language: shebangValidation.shebang?.language,
-                controller: editorController
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color(.separatorColor), lineWidth: 1)
-            )
+            GeometryReader { geometry in
+                VStack(spacing: 8) {
+                    if isPromptExpanded {
+                        promptPanel(textHeight: max(40, (geometry.size.height - 40) / 3))
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    ScriptTextEditor(
+                        text: $draftState.draft.scriptContent,
+                        language: shebangValidation.shebang?.language,
+                        controller: editorController
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color(.separatorColor), lineWidth: 1)
+                    }
+                }
+                .clipped()
+            }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private func promptPanel(textHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Prompt")
+                    .font(.caption.weight(.medium))
+                Text("{{script}} inserts the current script")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                if generation.isGenerating {
+                    ProgressView().controlSize(.small)
+                    Button("Stop", action: cancelGeneration)
+                } else {
+                    Button("Send", systemImage: "arrow.up") { sendGeneration() }
+                        .disabled(
+                            !generation.status(for: selectedProvider).isAvailable
+                                || isRunning
+                                || generationPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .controlSize(.small)
+            .frame(height: 24)
+            TextEditor(text: $generationPrompt)
+                .font(.system(.body, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(.separatorColor), lineWidth: 1)
+                }
+                .frame(height: textHeight)
+                .disabled(generation.isGenerating)
+                .accessibilityLabel("Script generation prompt")
+        }
     }
 
     private var editorToolbar: some View {
@@ -931,20 +971,45 @@ struct ScriptEditView: View {
     }
 
     private var generateButton: some View {
-        Button {
-            handleGenerate()
-        } label: {
-            ZStack {
+        HStack(spacing: 0) {
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                    isPromptExpanded.toggle()
+                }
+            } label: {
                 Label("Generate", systemImage: "sparkles")
-                    .opacity(isGenerating ? 0 : 1)
-                ProgressView()
-                    .controlSize(.small)
-                    .opacity(isGenerating ? 1 : 0)
             }
+            .disabled(generation.isGenerating)
+            .help("Show the prompt for creating or editing this script")
+
+            Menu {
+                ForEach(ScriptGenerationProvider.allCases) { provider in
+                    let status = generation.status(for: provider)
+                    Button {
+                        generationProviderID = provider.rawValue
+                        generation.error = nil
+                    } label: {
+                        if let issue = status.issue {
+                            Text("\(provider.title) — \(issue)")
+                        } else if provider == selectedProvider {
+                            Label(provider.title, systemImage: "checkmark")
+                        } else {
+                            Text(provider.title)
+                        }
+                    }
+                    .disabled(!status.isAvailable)
+                }
+                Divider()
+                Button("Refresh Providers") { Task { await generation.refresh() } }
+                    .disabled(generation.isDiscovering)
+            } label: {
+                Text(selectedProvider.title)
+            }
+            .disabled(generation.isGenerating)
+            .help(generation.status(for: selectedProvider).issue ?? "Select a script generation provider")
+            .accessibilityLabel("Script generation provider")
         }
-        .disabled(!isAIAvailable || !shebangValidation.isValid || isGenerating || isRunning)
         .controlSize(.small)
-        .help(aiUnavailableReason ?? "Generate script from comments using Apple Intelligence")
     }
 
     private var logsButton: some View {
@@ -976,7 +1041,7 @@ struct ScriptEditView: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(minHeight: 16)
             }
-            .disabled(!isValid || saveError != nil || isRunning)
+            .disabled(!isValid || saveError != nil || isRunning || generation.isGenerating)
             .keyboardShortcut(.return, modifiers: .command)
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -1011,6 +1076,7 @@ struct ScriptEditView: View {
             .tint(.orange)
             .controlSize(.small)
             .help(shebangRepairHelp)
+            .disabled(generation.isGenerating)
             .accessibilityLabel(shebangRepairLabel)
             .accessibilityHint(shebangValidation.message)
         }
@@ -1049,13 +1115,15 @@ struct ScriptEditView: View {
     }
 
     private func run() {
+        guard !generation.isGenerating else { return }
         flushAutosave()
         guard !draftState.hasUnsavedChanges, saveError == nil else { return }
         onRun()
     }
 
     private func receiveStoreUpdate(_ shortcut: Shortcut) {
-        if draftState.loadedShortcutID != shortcut.id {
+        let isChangingScript = draftState.loadedShortcutID != shortcut.id
+        if isChangingScript {
             flushAutosave()
         } else if !draftState.hasPersistedEditorChange(in: shortcut) {
             draftState.updateLoadedMetadata(shortcut)
@@ -1063,7 +1131,11 @@ struct ScriptEditView: View {
         }
 
         cancelGeneration()
-        generationError = nil
+        generation.error = nil
+        if isChangingScript {
+            generationPrompt = ScriptGenerationRequest.defaultPrompt
+            isPromptExpanded = false
+        }
         saveError = nil
         autosaveTask?.cancel()
         savedStatusTask?.cancel()
@@ -1094,70 +1166,26 @@ struct ScriptEditView: View {
 
     // MARK: - AI Generation
 
-    private func handleGenerate() {
-        generationError = nil
-        generateWithModel()
-    }
-
-    /// Calls the on-device Foundation Model to generate script code from the user's comments.
-    private func generateWithModel() {
-        generationTask?.cancel()
-
-        guard let shebang = shebangValidation.shebang else { return }
-        let input = draftState.draft.scriptContent
-        let requestID = UUID()
-        generationRequestID = requestID
-        isGenerating = true
-        generationError = nil
-
-        generationTask = Task { @MainActor in
-            defer {
-                if generationRequestID == requestID {
-                    isGenerating = false
-                    generationTask = nil
-                    generationRequestID = nil
-                }
+    private func sendGeneration() {
+        guard !isRunning, !generation.isGenerating else { return }
+        editorController.beginPreview()
+        let source = draftState.draft.scriptContent
+        let shortcutID = draftState.loadedShortcutID
+        generation.generate(
+            provider: selectedProvider,
+            request: ScriptGenerationRequest(source: source, prompt: generationPrompt)
+        ) { result in
+            guard draftState.loadedShortcutID == shortcutID, draftState.draft.scriptContent == source else {
+                editorController.endPreview()
+                return
             }
-
-            do {
-                let session = LanguageModelSession(
-                    instructions: """
-                        You are a shell script generator. The user provides comments \
-                        describing what they want the script to do. Generate ONLY the \
-                        script code. Do NOT wrap output in markdown code fences. Preserve \
-                        the user's original comments in-place and add implementation code \
-                        right after each relevant comment block. Use \(shebang.interpreterName) \
-                        syntax. Output must be valid, runnable shell code.
-                        """
-                )
-
-                let prompt = """
-                    Based on the following commented instructions, generate a complete \
-                    \(shebang.interpreterName) script:
-
-                    \(input)
-                    """
-
-                let response = try await session.respond(to: prompt)
-                try Task.checkCancellation()
-                guard draftState.draft.scriptContent == input else {
-                    generationError = "Script changed while generating. Generate again to use the latest content."
-                    return
-                }
-                editorController.replaceAll(with: response.content, actionName: "Generate Script")
-            } catch {
-                if !Task.isCancelled {
-                    generationError = error.localizedDescription
-                }
-            }
+            editorController.endPreview(with: result)
         }
     }
 
     private func cancelGeneration() {
-        generationTask?.cancel()
-        generationTask = nil
-        generationRequestID = nil
-        isGenerating = false
+        generation.cancel()
+        editorController.endPreview()
     }
 
 }

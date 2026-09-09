@@ -206,6 +206,68 @@ struct ScriptTextEditorTests {
         #expect(textView.string == "echo 你")
         #expect(text.value == "echo 你")
     }
+
+    @Test("Generation preview never writes a partial draft and commits as one undo operation")
+    func generationPreviewTransaction() {
+        let text = TextBox("#!/bin/sh\necho old")
+        let original = text.value
+        let controller = ScriptTextEditorController()
+        let editor = ScriptTextEditor(
+            text: Binding(get: { text.value }, set: { text.value = $0 }),
+            language: .shell(.sh), controller: controller
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = NSTextView()
+        textView.delegate = coordinator
+        textView.allowsUndo = true
+        textView.string = original
+        coordinator.attach(to: textView, controller: controller)
+
+        controller.beginPreview()
+        controller.showPreview("#!/bin/sh\necho par")
+        coordinator.updateTextViewFromModelIfNeeded(textView)
+        coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: textView))
+        #expect(textView.string == "#!/bin/sh\necho par")
+        #expect(text.value == original)
+        #expect(!textView.isEditable)
+        #expect(coordinator.undoManager(for: textView) == nil)
+
+        let generated = "#!/bin/sh\necho generated"
+        controller.endPreview(with: generated)
+        #expect(text.value == generated)
+        #expect(textView.isEditable)
+        controller.undo()
+        #expect(text.value == original)
+        controller.redo()
+        #expect(text.value == generated)
+    }
+
+    @Test("Cancelling preview preserves preceding edits, selection and undo history")
+    func cancelledPreviewHistory() {
+        let text = TextBox("original")
+        let controller = ScriptTextEditorController()
+        let editor = ScriptTextEditor(
+            text: Binding(get: { text.value }, set: { text.value = $0 }),
+            language: .shell(.sh), controller: controller
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = NSTextView()
+        textView.delegate = coordinator
+        textView.allowsUndo = true
+        textView.string = text.value
+        coordinator.attach(to: textView, controller: controller)
+        controller.replaceAll(with: "edited", actionName: "Edit")
+        let selection = NSRange(location: 2, length: 2)
+        textView.setSelectedRange(selection)
+        controller.beginPreview()
+        controller.showPreview("unfinished")
+        controller.endPreview()
+        #expect(textView.string == "edited")
+        #expect(textView.selectedRange() == selection)
+        #expect(text.value == "edited")
+        controller.undo()
+        #expect(text.value == "original")
+    }
 }
 
 @MainActor

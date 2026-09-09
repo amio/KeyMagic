@@ -27,17 +27,21 @@ final class ScriptEditorTextView: NSTextView {
 final class ScriptTextEditorController {
     private(set) var canUndo = false
     private(set) var canRedo = false
+    private(set) var isPreviewing = false
 
     let undoManager: UndoManager
 
     @ObservationIgnored
     private weak var textView: NSTextView?
+    @ObservationIgnored private var previewOriginal: String?
+    @ObservationIgnored private var previewSelection: NSRange?
 
     init() {
         undoManager = UndoManager()
     }
 
     func undo() {
+        guard !isPreviewing else { return }
         commitMarkedText()
         guard undoManager.canUndo else { return }
         undoManager.undo()
@@ -45,6 +49,7 @@ final class ScriptTextEditorController {
     }
 
     func redo() {
+        guard !isPreviewing else { return }
         commitMarkedText()
         guard undoManager.canRedo else { return }
         undoManager.redo()
@@ -54,7 +59,7 @@ final class ScriptTextEditorController {
     /// Applies an editor-originated whole-document change as one native undoable edit.
     @discardableResult
     func replaceAll(with replacement: String, actionName: String) -> Bool {
-        guard let textView else { return false }
+        guard let textView, !isPreviewing else { return false }
         commitMarkedText()
         guard textView.string != replacement else { return true }
 
@@ -65,7 +70,44 @@ final class ScriptTextEditorController {
         return true
     }
 
+    /// Streaming changes display only. The bound draft and pre-existing undo history stay intact
+    /// until a successful response is committed as one normal editor command.
+    func beginPreview() {
+        guard let textView, !isPreviewing else { return }
+        commitMarkedText()
+        previewOriginal = textView.string
+        previewSelection = textView.selectedRange()
+        textView.breakUndoCoalescing()
+        isPreviewing = true
+        textView.isEditable = false
+        refresh()
+    }
+
+    func showPreview(_ source: String) {
+        guard let textView, isPreviewing else { return }
+        setDisplay(source, in: textView)
+    }
+
+    func endPreview(with source: String? = nil) {
+        guard let textView, isPreviewing, let previewOriginal else { return }
+        setDisplay(previewOriginal, in: textView)
+        if let previewSelection { textView.setSelectedRange(previewSelection) }
+        self.previewOriginal = nil
+        self.previewSelection = nil
+        isPreviewing = false
+        textView.isEditable = true
+        if let source { replaceAll(with: source, actionName: "Generate Script") }
+        refresh()
+    }
+
+    private func setDisplay(_ source: String, in textView: NSTextView) {
+        undoManager.disableUndoRegistration()
+        textView.string = source
+        undoManager.enableUndoRegistration()
+    }
+
     func reset() {
+        endPreview()
         undoManager.removeAllActions()
         if let textView {
             let documentStart = NSRange(location: 0, length: 0)
@@ -76,8 +118,8 @@ final class ScriptTextEditorController {
     }
 
     func refresh() {
-        canUndo = undoManager.canUndo
-        canRedo = undoManager.canRedo
+        canUndo = !isPreviewing && undoManager.canUndo
+        canRedo = !isPreviewing && undoManager.canRedo
     }
 
     func attach(to textView: NSTextView) {
@@ -88,12 +130,14 @@ final class ScriptTextEditorController {
 
     func detach(from textView: NSTextView) {
         guard self.textView === textView else { return }
+        endPreview()
         self.textView = nil
     }
 
     private func commitMarkedText() {
         guard let textView, textView.hasMarkedText() else { return }
         textView.unmarkText()
+        textView.didChangeText()
     }
 }
 
@@ -271,6 +315,7 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         private func synchronizeText(from textView: NSTextView) {
+            guard !parent.controller.isPreviewing else { return }
             parent.controller.refresh()
             resizeDocumentView(textView)
             guard !textView.hasMarkedText() else {
@@ -284,6 +329,7 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         func updateTextViewFromModelIfNeeded(_ textView: NSTextView) {
+            guard !parent.controller.isPreviewing else { return }
             guard !textView.hasMarkedText(), textView.string != parent.text else { return }
 
             let undoManager = parent.controller.undoManager
@@ -415,7 +461,7 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         func undoManager(for view: NSTextView) -> UndoManager? {
-            parent.controller.undoManager
+            parent.controller.isPreviewing ? nil : parent.controller.undoManager
         }
     }
 }
